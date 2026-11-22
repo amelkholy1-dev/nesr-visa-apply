@@ -10,6 +10,7 @@ const mrz = require('../mrz');
 const names = require('../names');
 const ocr = require('../ocr');
 const audit = require('../audit');
+const S = require('../stages');
 
 const router = express.Router();
 const json = (v) => { try { return JSON.parse(v || '{}') || {}; } catch (e) { return {}; } };
@@ -29,6 +30,7 @@ function brief(row, profile) {
   const r = F.resolve(json(row.data), profile && profile.data, { personalPhoto: row.personal_photo, personalPhotoSize: sizeOf(row.id, row.personal_photo), passportImage: row.passport_image });
   return { id: row.id, name: row.name_ar, passportNo: row.passport_no, status: row.status, profileId: row.profile_id, profileName: profile ? profile.name : '',
     appNumber: row.app_number, hasPhoto: !!row.personal_photo, hasPassport: !!row.passport_image, issues: r.issues.length, ready: r.ready, updatedAt: row.updated_at, filledAt: row.filled_at,
+    stages: S.parse(row.stages),
     expiry: F.expiryInfo(json(row.data).expiryDate, json(row.data).expectedEntryDate || (profile && profile.data && profile.data.expectedEntryDate)) };
 }
 
@@ -50,7 +52,7 @@ router.get('/:id(\\d+)', async (req, res) => {
     if (!row) return res.status(404).json({ error: 'الشخص مش موجود' });
     const profile = await loadProfile(row.profile_id);
     const files = { personalPhoto: row.personal_photo, personalPhotoSize: sizeOf(row.id, row.personal_photo), passportImage: row.passport_image };
-    res.json({ person: { id: row.id, profileId: row.profile_id, status: row.status, appNumber: row.app_number, data: json(row.data), hasPhoto: !!row.personal_photo, hasPassport: !!row.passport_image, photoSize: files.personalPhotoSize },
+    res.json({ person: { id: row.id, profileId: row.profile_id, status: row.status, appNumber: row.app_number, data: json(row.data), hasPhoto: !!row.personal_photo, hasPassport: !!row.passport_image, photoSize: files.personalPhotoSize, stages: S.parse(row.stages) },
       profile, resolved: F.resolve(json(row.data), profile && profile.data, files) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -157,10 +159,40 @@ router.post('/:id(\\d+)/result', async (req, res) => {
     if (!status) return res.status(400).json({ error: 'حالة غير معروفة' });
     const app = b.appNumber ? String(b.appNumber).trim().toUpperCase() : null;
     if (app && !/^[A-Z]\d{6,12}$/.test(app)) return res.status(400).json({ error: 'رقم الطلب شكله غلط' });
-    await db.query(`UPDATE people SET status = ?, app_number = COALESCE(?, app_number), filled_at = IF(? IN ('filled','submitted'), NOW(), filled_at) WHERE id = ?`, [status, app, status, id]);
-    const pn = (await db.query('SELECT name_ar FROM people WHERE id = ?', [id]))[0];
+    const cur = (await db.query('SELECT name_ar, app_number, stages FROM people WHERE id = ?', [id]))[0];
+    if (!cur) return res.status(404).json({ error: 'الشخص مش موجود' });
+    const stages = S.parse(cur.stages); let stagesChanged = false;
+    if (app && cur.app_number && cur.app_number !== app) { stages.sent.history.unshift({ app: cur.app_number, at: new Date().toISOString().slice(0, 10) }); stagesChanged = true; } /* إعادة إرسال برقم طلب جديد: القديم بيتحفظ */
+    if (status === 'submitted' && stages.sent.state !== 'done') { S.patch(stages, 'sent', { state: 'done' }); stagesChanged = true; }
+    await db.query(`UPDATE people SET status = ?, app_number = COALESCE(?, app_number), filled_at = IF(? IN ('filled','submitted'), NOW(), filled_at)${stagesChanged ? ', stages = ?' : ''} WHERE id = ?`, stagesChanged ? [status, app, status, JSON.stringify(stages), id] : [status, app, status, id]);
+    const pn = cur;
     audit.log(req, status === 'filled' || status === 'submitted' ? status : 'status', id, pn ? pn.name_ar : '', app || status);
     res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* سجل الطباعة فقط (الطباعة نفسها بتتم من المتصفح) */
+router.post('/:id(\\d+)/printed', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10); const row = (await db.query('SELECT name_ar FROM people WHERE id = ?', [id]))[0];
+    if (!row) return res.status(404).json({ error: 'الشخص مش موجود' });
+    const k = { sheet: 'ورقة الطلب', undertaking: 'التعهد', letter: 'خطاب الترشيح', label: 'ليبل باركود' }[(req.body || {}).kind] || 'طباعة';
+    audit.log(req, 'print', id, row.name_ar, k); res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* مراحل الطلب: state = '' | booked | done */
+router.put('/:id(\\d+)/stages/:key', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const row = (await db.query('SELECT name_ar, stages FROM people WHERE id = ?', [id]))[0];
+    if (!row) return res.status(404).json({ error: 'الشخص مش موجود' });
+    const stages = S.parse(row.stages);
+    if (!S.patch(stages, req.params.key, req.body || {})) return res.status(400).json({ error: 'المرحلة أو الحالة مش صحيحة' });
+    await db.query('UPDATE people SET stages = ? WHERE id = ?', [JSON.stringify(stages), id]);
+    const st = S.STAGES.find((x) => x.k === req.params.key); const c = stages[req.params.key];
+    audit.log(req, 'stage', id, row.name_ar, st.label + ': ' + (c.state === 'done' ? 'تم' : c.state === 'booked' ? 'محجوز' : 'لسه') + (c.date ? ' ' + c.date : ''));
+    res.json({ ok: true, stages });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

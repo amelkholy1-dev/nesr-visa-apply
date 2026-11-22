@@ -75,6 +75,17 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     const firstId = await page.evaluate(async () => (await (await fetch('/api/people')).json()).people[0].id);
     await page.goto(base + '#/people/' + firstId); await page.waitForSelector('.split .side');
     assert.ok(await page.isVisible('.side .pv'), 'لوحة صورة الجواز ظاهرة جنب الحقول');
+    /* مراحل الطلب في صفحة الشخص + النقط في القايمة + قايمة الطباعة */
+    await page.waitForSelector('.stg[data-k="medical"]');
+    await page.selectOption('.stg[data-k="medical"] .stS', 'booked'); await page.fill('.stg[data-k="medical"] .stD', '2026-12-05'); await page.dispatchEvent('.stg[data-k="medical"] .stD', 'change');
+    await page.waitForTimeout(600);
+    assert.ok(await page.isVisible('details.menu summary'), 'قايمة الطباعة');
+    await page.goto(base + '#/people'); await page.waitForSelector('#rows .dots');
+    assert.ok((await page.locator('#rows .dot.booked').count()) >= 1, 'نقطة الفحص الطبي محجوز');
+    await page.selectOption('#sf', 'b:medical'); await page.waitForTimeout(400);
+    assert.ok((await page.locator('#rows tr.click').count()) >= 1, 'فلتر المراحل');
+    await page.selectOption('#sf', '');
+    await page.goto(base + '#/settings'); await page.waitForSelector('#sSave'); await page.fill('#sCo', 'شركة الاختبار'); await page.click('#sSave'); await page.waitForTimeout(500);
     await page.goto(base + '#/reports'); await page.waitForSelector('#rbody .card'); assert.ok((await page.textContent('#rbody')).includes('الوضع الحالي'));
     assert.ok((await page.getAttribute('#rx', 'href')).includes('/api/reports/export.csv'));
     await page.goto(base + '#/activity'); await page.waitForSelector('#arows tr'); assert.ok((await page.textContent('#arows')).includes('دخول'));

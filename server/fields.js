@@ -59,6 +59,7 @@ const PERSON_GROUPS = [
     { k: 'birthDate', label: 'تاريخ الميلاد', type: 'date', req: true },
     { k: 'birthPlace', label: 'مكان الميلاد', type: 'text', max: 20, req: true },
     { k: 'nationalId', label: 'الرقم القومي', type: 'text', max: 20, ltr: true },
+    { k: 'phone', label: 'رقم الموبايل (للفحص الطبي وتسهيل)', type: 'text', max: 20, ltr: true },
     { k: 'sex', label: 'الجنس', type: 'select', opt: 'sex', req: true }
   ] },
   { id: 'names', title: 'الأسماء (كل خانة 15 حرف بالكتير)', fields: [

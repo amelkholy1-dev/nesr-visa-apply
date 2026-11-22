@@ -107,6 +107,56 @@
     $('#u').focus();
   }
 
+  /* ===== مراحل الطلب ===== */
+  const stageDots = (st) => (st && meta.stages ? `<span class="dots">${meta.stages.map((x) => { const c = st[x.k] || {}; return `<i class="dot ${c.state || ''}" title="${e(x.label)}: ${c.state === 'done' ? 'تم' : c.state === 'booked' ? 'محجوز' + (c.date ? ' ' + c.date : '') : 'لسه'}"></i>`; }).join('')}</span>` : '');
+  const STATE_AR = { '': 'لسه', booked: 'محجوز', done: 'تم' };
+
+  /* ===== قص من صورة الجواز (للصورة الشخصية أو لمنطقة MRZ) ===== */
+  function openCropper({ src, aspect, title, hint, initial, maxSide, onDone }) {
+    const ov = document.createElement('div'); ov.className = 'cropper';
+    ov.innerHTML = `<div class="cropper-in"><div class="cropper-h"><b>${e(title)}</b><span class="muted small">${e(hint || '')}</span></div>
+      <div class="cropper-stage"><img id="crImg" alt=""><div class="crop-sel" id="crSel"><i class="h tl" data-h="tl"></i><i class="h tr" data-h="tr"></i><i class="h bl" data-h="bl"></i><i class="h br" data-h="br"></i></div></div>
+      <div class="row" style="margin-top:12px"><button class="btn pri" id="crOk">تأكيد</button><button class="btn" id="crNo">إلغاء</button></div></div>`;
+    document.body.appendChild(ov);
+    const img = ov.querySelector('#crImg'), sel = ov.querySelector('#crSel'); let b = { x: 0, y: 0, w: 0, h: 0 };
+    const close = () => { document.removeEventListener('keydown', onKey); ov.remove(); };
+    const onKey = (ev) => { if (ev.key === 'Escape') close(); }; document.addEventListener('keydown', onKey);
+    const paint = () => { sel.style.left = b.x + 'px'; sel.style.top = b.y + 'px'; sel.style.width = b.w + 'px'; sel.style.height = b.h + 'px'; };
+    const clamp = () => { const W = img.clientWidth, H = img.clientHeight; b.w = Math.max(24, Math.min(b.w, W)); b.h = Math.max(24, Math.min(b.h, H)); b.x = Math.max(0, Math.min(b.x, W - b.w)); b.y = Math.max(0, Math.min(b.y, H - b.h)); };
+    img.onload = () => {
+      const W = img.clientWidth, H = img.clientHeight; const i = initial || { x: 0.06, y: 0.25, w: 0.24, h: 0.5 };
+      b = { x: i.x * W, y: i.y * H, w: i.w * W, h: aspect ? (i.w * W) / aspect : i.h * H }; if (aspect && b.h > H) { b.h = H * 0.9; b.w = b.h * aspect; } clamp(); paint();
+    };
+    img.src = src;
+    let drag = null;
+    ov.addEventListener('pointerdown', (ev) => {
+      const h = ev.target.dataset && ev.target.dataset.h; if (!h && ev.target !== sel) return;
+      ev.preventDefault(); drag = { h, sx: ev.clientX, sy: ev.clientY, b: { ...b } }; try { ov.setPointerCapture(ev.pointerId); } catch (er) { /* مش مهم */ }
+    });
+    ov.addEventListener('pointermove', (ev) => {
+      if (!drag) return; const dx = ev.clientX - drag.sx, dy = ev.clientY - drag.sy; const o = drag.b; const W = img.clientWidth, H = img.clientHeight;
+      if (!drag.h) { b.x = Math.max(0, Math.min(o.x + dx, W - o.w)); b.y = Math.max(0, Math.min(o.y + dy, H - o.h)); paint(); return; }
+      let x1 = o.x, y1 = o.y, x2 = o.x + o.w, y2 = o.y + o.h;
+      if (drag.h.includes('l')) x1 = Math.min(o.x + dx, x2 - 24); else x2 = Math.max(o.x + o.w + dx, x1 + 24);
+      if (drag.h.includes('t')) y1 = Math.min(o.y + dy, y2 - 24); else y2 = Math.max(o.y + o.h + dy, y1 + 24);
+      x1 = Math.max(0, x1); y1 = Math.max(0, y1); x2 = Math.min(W, x2); y2 = Math.min(H, y2);
+      let w = x2 - x1, h = y2 - y1;
+      if (aspect) { h = w / aspect; if (drag.h.includes('t')) y1 = y2 - h; else y2 = y1 + h; if (y1 < 0) { y1 = 0; h = y2 - y1; w = h * aspect; if (drag.h.includes('l')) x1 = x2 - w; else x2 = x1 + w; } if (y2 > H) { y2 = H; h = y2 - y1; w = h * aspect; if (drag.h.includes('l')) x1 = x2 - w; else x2 = x1 + w; } }
+      b = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }; paint();
+    });
+    const up = () => { drag = null; }; ov.addEventListener('pointerup', up); ov.addEventListener('pointercancel', up);
+    ov.querySelector('#crNo').onclick = close;
+    ov.querySelector('#crOk').onclick = async () => {
+      try {
+        const kx = img.naturalWidth / img.clientWidth, ky = img.naturalHeight / img.clientHeight;
+        let sw = Math.round(b.w * kx), sh = Math.round(b.h * ky); const sc = maxSide ? Math.min(1, maxSide / Math.max(sw, sh)) : 1;
+        const c = document.createElement('canvas'); c.width = Math.round(sw * sc); c.height = Math.round(sh * sc);
+        const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.imageSmoothingQuality = 'high'; g.drawImage(img, Math.round(b.x * kx), Math.round(b.y * ky), sw, sh, 0, 0, c.width, c.height);
+        const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.93)); close(); await onDone(blob);
+      } catch (er) { fail(er); }
+    };
+  }
+
   async function pagePeople() {
     const [profs] = await Promise.all([api('GET', '/profiles')]);
     const state = JSON.parse(sessionStorage.getItem('peopleFilter') || '{}');
@@ -116,23 +166,39 @@
         <select id="st" style="padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">كل الحالات</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${state.st === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select>
         <select id="pf" style="padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">كل ملفات الضبط</option>${profs.profiles.map((p) => `<option value="${p.id}"${String(state.pf) === String(p.id) ? ' selected' : ''}>${e(p.name)}</option>`).join('')}</select>
         <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exOnly"${state.ex ? ' checked' : ''}> جوازات قريبة الانتهاء</label>
+        <select id="sf" style="padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">كل المراحل</option>${(meta.stages || []).map((x) => `<option value="p:${x.k}"${state.sf === 'p:' + x.k ? ' selected' : ''}>لسه: ${e(x.label)}</option>${x.booking ? `<option value="b:${x.k}"${state.sf === 'b:' + x.k ? ' selected' : ''}>محجوز: ${e(x.label)}</option>` : ''}<option value="d:${x.k}"${state.sf === 'd:' + x.k ? ' selected' : ''}>تم: ${e(x.label)}</option>`).join('')}</select>
+        <button class="btn" id="tashBtn" title="ملف Excel لموقع تسهيل (للمحدّدين، أو كل المعروضين)">تصدير لتسهيل</button>
+        <button class="btn" id="lblBtn" title="ليبلات باركود للمحدّدين" hidden>طباعة ليبلات</button>
         <button class="btn pri" id="queueBtn" hidden>املى المحدّدين بالتتابع</button>
         <a href="#/people/new" class="btn pri" style="margin-inline-start:auto;text-decoration:none">+ شخص جديد</a></div></div>
-      <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th style="width:30px"><input type="checkbox" id="selAll" title="تحديد الكل"></th><th>الاسم</th><th>الجواز</th><th>ملف الضبط</th><th>الحالة</th><th>النواقص</th><th>رقم الطلب</th><th></th></tr></thead><tbody id="rows"><tr><td colspan="7" class="muted">جاري التحميل…</td></tr></tbody></table></div>`;
+      <div id="upc"></div>
+      <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th style="width:30px"><input type="checkbox" id="selAll" title="تحديد الكل"></th><th>الاسم</th><th>الجواز</th><th>ملف الضبط</th><th>الحالة</th><th>النواقص</th><th>المراحل</th><th>رقم الطلب</th><th></th></tr></thead><tbody id="rows"><tr><td colspan="7" class="muted">جاري التحميل…</td></tr></tbody></table></div>`;
     let shown = [];
     const selectedIds = () => [...view.querySelectorAll('.sel:checked')].map((c) => c.dataset.id);
-    const syncQueue = () => { const n = selectedIds().length; const b = $('#queueBtn'); if (!b) return; b.hidden = n === 0; b.textContent = `املى المحدّدين بالتتابع (${n})`; };
+    const syncQueue = () => { const n = selectedIds().length; const b = $('#queueBtn'); if (!b) return; b.hidden = n === 0; b.textContent = `املى المحدّدين بالتتابع (${n})`; const l = $('#lblBtn'); if (l) { l.hidden = n === 0; l.textContent = `طباعة ليبلات (${n})`; } const t = $('#tashBtn'); if (t) t.textContent = n ? `تصدير لتسهيل (${n})` : 'تصدير لتسهيل'; };
     const load = async () => {
-      const st = { q: $('#q').value, st: $('#st').value, pf: $('#pf').value, ex: $('#exOnly').checked }; sessionStorage.setItem('peopleFilter', JSON.stringify(st));
+      const st = { q: $('#q').value, st: $('#st').value, pf: $('#pf').value, ex: $('#exOnly').checked, sf: $('#sf').value }; sessionStorage.setItem('peopleFilter', JSON.stringify(st));
       const r = await api('GET', `/people?q=${encodeURIComponent(st.q)}&status=${st.st}&profile=${st.pf}`);
       shown = r.people.filter((p) => !st.ex || (p.expiry && (p.expiry.short || p.expiry.expired)));
+      if (st.sf) { const [mode, key] = st.sf.split(':'); shown = shown.filter((p) => { const c = (p.stages || {})[key] || {}; return mode === 'p' ? !c.state : mode === 'b' ? c.state === 'booked' : c.state === 'done'; }); }
       $('#selAll').checked = false; syncQueue();
       $('#rows').innerHTML = shown.map((p) => `<tr class="click" data-id="${p.id}"><td><input type="checkbox" class="sel" data-id="${p.id}"></td><td><b>${e(p.name || '—')}</b></td><td dir="ltr" style="text-align:right">${e(p.passportNo)}</td><td>${e(p.profileName || '—')}</td>
         <td><span class="pill ${STATUS[p.status] ? STATUS[p.status][1] : ''}">${e((STATUS[p.status] || [p.status])[0])}</span></td>
         <td>${p.ready ? '<span class="pill ok">كامل</span>' : `<span class="pill bad">${p.issues} ناقص</span>`} ${p.expiry && p.expiry.expired ? '<span class="pill bad">جواز منتهي</span>' : p.expiry && p.expiry.short ? `<span class="pill warn" title="أقل من 6 شهور من تاريخ الدخول">ينتهي بعد ${p.expiry.days} يوم</span>` : ''} ${p.hasPhoto ? '📷' : '<span class="muted" title="مفيش صورة شخصية">—</span>'}</td>
-        <td dir="ltr" style="text-align:right">${e(p.appNumber || '')}</td><td><button class="btn small pri fill" data-id="${p.id}">املى الطلب</button></td></tr>`).join('') || '<tr><td colspan="8" class="muted">مفيش أشخاص.</td></tr>';
+        <td>${stageDots(p.stages)}</td>
+        <td dir="ltr" style="text-align:right">${e(p.appNumber || '')}</td><td><button class="btn small pri fill" data-id="${p.id}">املى الطلب</button></td></tr>`).join('') || '<tr><td colspan="9" class="muted">مفيش أشخاص.</td></tr>';
     };
-    ['q', 'st', 'pf', 'exOnly'].forEach((i) => { $('#' + i).oninput = () => load().catch(fail); });
+    ['q', 'st', 'pf', 'exOnly', 'sf'].forEach((i) => { $('#' + i).oninput = () => load().catch(fail); });
+    $('#tashBtn').onclick = () => { const ids = selectedIds().length ? selectedIds() : shown.map((p) => p.id); if (!ids.length) return toast('مفيش أشخاص للتصدير', 'err'); window.location.href = `/api/export/tasheel.xlsx?ids=${ids.slice(0, 1500).join(',')}`; toast('بينزّل ملف تسهيل (' + ids.length + ' شخص)', 'ok'); };
+    $('#lblBtn').onclick = async () => {
+      const ids = selectedIds(); if (!ids.length) return; const w = window.open('', '_blank'); if (!w) return toast('المتصفح منع نافذة الطباعة', 'err');
+      try {
+        const st = await api('GET', '/settings/print'); const items = [];
+        for (const id of ids.slice(0, 200)) { const r = await api('GET', `/people/${id}`); const m = (r.resolved && r.resolved.mofa) || {}; items.push({ name: [m.EFIRSTNAME, m.EFAMILY].filter(Boolean).join(' ') || r.person.data.nameAr || '', code: r.person.appNumber || m.PASSPORTnumber || '' }); }
+        w.document.open(); w.document.write(window.VaPrint.labels(items, st)); w.document.close(); w.focus();
+      } catch (er) { w.close(); fail(er); }
+    };
+    api('GET', '/reports/summary').then((r) => { const u = (r.upcoming || []).slice(0, 6); const box = $('#upc'); if (box && u.length) box.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8"><b>📅 مواعيد خلال 7 أيام:</b> ${u.map((x) => `<a href="#/people/${x.personId}">${e(x.name || '#' + x.personId)}</a> — ${e(x.stage)} ${e(x.date)}`).join(' · ')}</div>`; }).catch(() => {});
     $('#selAll').onchange = () => { view.querySelectorAll('.sel').forEach((c) => { c.checked = $('#selAll').checked; }); syncQueue(); };
     $('#queueBtn').onclick = async () => {
       const ids = selectedIds(); if (!ids.length) return;
@@ -157,6 +223,13 @@
     if (!isNew) { const r = await api('GET', `/people/${id}`); person = r.person; data = r.person.data; profileId = r.person.profileId || ''; resolved = r.resolved; }
     const profileData = () => (profs.profiles.find((p) => String(p.id) === String(profileId)) || { data: {} }).data;
     const stamp = Date.now(); const pv = { z: 1 };
+    const stagesHtml = () => {
+      if (isNew || !meta.stages) return '';
+      const st = person.stages || {};
+      return `<div class="card"><h2>مراحل الطلب</h2><div class="stages">${meta.stages.map((x) => { const c = st[x.k] || { state: '', date: '', note: '' };
+        return `<div class="stg" data-k="${x.k}"><b>${e(x.label)}</b><select class="stS">${['', ...(x.booking ? ['booked'] : []), 'done'].map((v) => `<option value="${v}"${c.state === v ? ' selected' : ''}>${STATE_AR[v]}</option>`).join('')}</select><input type="date" class="stD" value="${e(c.date || '')}"><input class="stN" placeholder="ملاحظة (مكان / رقم / …)" value="${e(c.note || '')}">
+          ${x.k === 'sent' ? `<div class="stX small">رقم الطلب: <b dir="ltr">${e(person.appNumber || '—')}</b> <input id="appNo" placeholder="E123456789" dir="ltr"> <button class="btn small" id="appNoBtn">سجّل رقم الطلب</button>${(c.history || []).length ? `<div class="muted">أرقام سابقة (قبل إعادة الإرسال): ${c.history.map((h) => `<span dir="ltr">${e(h.app)}</span>`).join('، ')}</div>` : ''}</div>` : ''}</div>`; }).join('')}</div></div>`;
+    };
     const sideHtml = () => {
       const src = pending.passport ? { url: objUrl(pending.passport), pdf: pending.passport.type === 'application/pdf' } : (!isNew && person.hasPassport ? { url: `/api/people/${id}/file/passport?t=${stamp}`, pdf: false } : null);
       const photoSrc = pending.photo ? objUrl(pending.photo) : (!isNew && person.hasPhoto ? `/api/people/${id}/file/photo?t=${stamp}` : '');
@@ -164,6 +237,7 @@
         ? (src.pdf ? `<div class="pv-empty">صورة الجواز ملف PDF — <a href="${src.url}" target="_blank" rel="noopener">افتحه في تبويب جديد</a></div>`
           : `<div class="pv-bar"><button class="btn small" id="pvOut" title="تصغير">−</button><button class="btn small" id="pvIn" title="تكبير">+</button><button class="btn small" id="pvFit" title="ملاءمة العرض">ملاءمة</button><a class="btn small" href="${src.url}" target="_blank" rel="noopener" style="text-decoration:none">فتح بحجم كامل</a><span class="zl" id="pvZl"></span></div>
           <div class="pv-box" id="pvBox"><img id="pvImg" src="${src.url}" alt="صورة الجواز"></div><div class="pv-empty" id="pvErr" hidden>الملف مش صورة (ممكن PDF) — <a href="${src.url}" target="_blank" rel="noopener">افتحه</a></div>
+          <div class="row" style="margin-top:8px"><button class="btn small" id="cropPhoto" title="اختار وش الشخص من صورة الجواز">قص الصورة الشخصية من الجواز</button><button class="btn small" id="cropMrz" title="لو القراءة التلقائية ضعيفة">تحديد سطري MRZ يدوياً</button></div>
           <div class="small muted" style="margin-top:6px">دوس على الصورة للتكبير. قارن الأرقام والتواريخ والاسم بالحقول اللي جنبها.</div>`)
         : '<div class="pv-empty">ارفع صورة الجواز (من المربع على اليمين) وهتظهر هنا جنب الحقول للمراجعة.</div>';
       return `<div class="card pv"><h2>صورة الجواز للمراجعة</h2>${viewer}</div>${photoSrc ? `<div class="card"><div class="row" style="align-items:flex-start"><img class="photo" src="${photoSrc}" alt="الصورة الشخصية"><div class="small muted">الصورة الشخصية اللي هتتبعت للمنصة.</div></div></div>` : ''}`;
@@ -189,6 +263,7 @@
         ${isNew ? '' : `<label class="f" style="min-width:200px">الحالة
         <select id="stSel">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${person.status === k ? ' selected' : ''}>${e(v[0])}</option>`).join('')}</select></label>`}
         <a href="#/profiles" class="small">إدارة ملفات الضبط</a></div></div>
+      ${stagesHtml()}
       <div class="card"><h2>صورة الجواز وقراءة MRZ</h2><div class="row" style="align-items:flex-start">
         <div style="min-width:240px"><input type="file" id="pasF" accept="image/jpeg,image/png,application/pdf">
           <div class="small muted" style="margin-top:6px">${isNew ? 'اختار صورة الجواز (بتترفع أول ما تحفظ).' : 'صورة الجواز للتوثيق والقراءة (مش بتتبعت للمنصة).'}</div>
@@ -202,7 +277,7 @@
         <div><input type="file" id="phF" accept="image/jpeg,image/png"><div class="small muted" style="margin-top:6px">${isNew ? 'بتترفع أول ما تحفظ.' : ''} بتتصغّر تلقائي لو أكبر من الحد. المنصة بتفحص مواصفات الصورة (خلفية فاتحة ووش واضح).</div>${!isNew && person.hasPhoto ? '<button class="btn small danger" id="phDel" style="margin-top:6px">حذف الصورة</button>' : ''}</div></div></div>
       <div class="card"><label class="f">ملاحظات<input data-k="notes" value="${e(data.notes || '')}"></label></div>
       ${resolved ? `<div class="card"><h2>الجاهزية</h2>${resolved.ready ? '<span class="pill ok">كل البيانات المطلوبة موجودة</span>' : `<ul class="list issues">${resolved.issues.map((x) => `<li>${e(x)}</li>`).join('')}</ul>`}${resolved.warns.length ? `<ul class="list warns">${resolved.warns.map((x) => `<li>${e(x)}</li>`).join('')}</ul>` : ''}</div>` : ''}
-      <div class="row actions"><button class="btn pri" id="save">حفظ</button>${!isNew ? '<button class="btn pri" id="fill">املى الطلب في المنصة</button><button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>
+      <div class="row actions"><button class="btn pri" id="save">حفظ</button>${!isNew ? '<button class="btn pri" id="fill">املى الطلب في المنصة</button><details class="menu"><summary class="btn">طباعة ▾</summary><div class="menu-box"><button class="btn small" data-pr="sheet">ورقة بيانات الطلب</button><button class="btn small" data-pr="undertaking">التعهد</button><button class="btn small" data-pr="letter">خطاب الترشيح</button><button class="btn small" data-pr="label">ليبل باركود</button></div></details><button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>
       </div><aside class="side">${sideHtml()}</aside></div>`;
       wire();
       wirePv();
@@ -226,6 +301,18 @@
         toast('اتحفظ', 'ok'); location.hash = '#/people/' + r.id; return r.id;
       }
       await api('PUT', `/people/${id}`, body); toast('اتحفظ', 'ok'); return id;
+    };
+    const doPrint = async (kind) => {
+      const w = window.open('', '_blank'); if (!w) return toast('المتصفح منع نافذة الطباعة', 'err');
+      try {
+        const [pr, st] = await Promise.all([api('GET', `/people/${id}`), api('GET', '/settings/print')]);
+        const o = { person: pr.person, resolved: pr.resolved, profile: pr.profile, settings: st, optText, photoUrl: pr.person.hasPhoto ? location.origin + `/api/people/${id}/file/photo` : '' };
+        let html;
+        if (kind === 'sheet') html = window.VaPrint.sheet(o); else if (kind === 'undertaking') html = window.VaPrint.undertaking(o); else if (kind === 'letter') html = window.VaPrint.letter(o);
+        else { const m = (pr.resolved && pr.resolved.mofa) || {}; html = window.VaPrint.labels([{ name: [m.EFIRSTNAME, m.EFAMILY].filter(Boolean).join(' ') || pr.person.data.nameAr || '', code: pr.person.appNumber || m.PASSPORTnumber || '' }], st); }
+        w.document.open(); w.document.write(html); w.document.close(); w.focus();
+        api('POST', `/people/${id}/printed`, { kind }).catch(() => {});
+      } catch (er) { w.close(); fail(er); }
     };
     const wire = () => {
       $('#prof').onchange = () => { data = { ...data, ...collect(view) }; profileId = $('#prof').value; draw(); };
@@ -268,6 +355,30 @@
         } catch (er) { btn.disabled = false; toast('قراءة Gemini فشلت (' + er.message + ') — بجرّب القراءة المحلية', 'err'); await runLocalOcr(); } finally { btn.disabled = false; }
       };
       $('#ocrLocal').onclick = runRead;
+      const mrzFromBlob = async (blob) => {
+        const msg = $('#mrzMsg'); msg.textContent = 'بيجهّز محرك القراءة…';
+        const texts = await window.MrzOcr.read(blob, (m) => { if (m.status === 'recognizing text' && typeof m.progress === 'number') msg.textContent = 'بيقرا… ' + Math.round(m.progress * 100) + '%'; }, { cropped: true });
+        let best = null; const rank = { high: 3, medium: 2, low: 1 };
+        for (const t of texts) { try { const r = await api('POST', '/people/mrz', { text: t }); if (!best || rank[r.confidence] > rank[best.confidence]) best = r; if (r.confidence === 'high') break; } catch (er) { /* مفيش MRZ في النص ده */ } }
+        if (!best) { msg.textContent = ''; return toast('ما قدرتش أقرا السطرين من المنطقة دي. ظبط المربع على السطرين بالظبط أو الصقهم.', 'err'); }
+        applyMrz(best, 'من المنطقة المحددة — ');
+      };
+      const srcUrl = () => (pending.passport ? objUrl(pending.passport) : `/api/people/${id}/file/passport?t=${stamp}`);
+      const cp = $('#cropPhoto'); if (cp) cp.onclick = () => openCropper({ src: srcUrl(), aspect: 0.78, title: 'قص الصورة الشخصية', hint: 'حرّك المربع على وش الشخص، وكبّره أو صغّره من الأركان', initial: { x: 0.05, y: 0.24, w: 0.27 }, maxSide: 1000,
+        onDone: async (blob) => {
+          const f = await compress(new File([blob], 'photo.jpg', { type: 'image/jpeg' }), 1048576, 900);
+          if (isNew) { pending.photo = f; data = { ...data, ...collect(view) }; draw(); return toast('اتحطّت كصورة شخصية (بتترفع أول ما تحفظ)', 'ok'); }
+          const fd = new FormData(); fd.append('file', f); await api('POST', `/people/${id}/files/photo`, fd); toast('اتحفظت كصورة شخصية', 'ok'); data = { ...data, ...collect(view) }; pagePerson(id);
+        } });
+      const cm = $('#cropMrz'); if (cm) cm.onclick = () => openCropper({ src: srcUrl(), aspect: 0, title: 'حدّد سطري MRZ', hint: 'اسحب المربع على السطرين اللي في آخر صفحة البيانات (اللي فيهم < < <)', initial: { x: 0.02, y: 0.74, w: 0.96, h: 0.24 }, onDone: (blob) => mrzFromBlob(blob).catch(fail) });
+      view.querySelectorAll('.stg').forEach((row) => {
+        const k = row.dataset.k;
+        const send = async () => { try { const r = await api('PUT', `/people/${id}/stages/${k}`, { state: row.querySelector('.stS').value, date: row.querySelector('.stD').value, note: row.querySelector('.stN').value }); person.stages = r.stages; row.querySelector('.stD').value = r.stages[k].date; toast('اتحفظت المرحلة', 'ok'); } catch (er) { fail(er); } };
+        ['.stS', '.stD', '.stN'].forEach((c) => { row.querySelector(c).onchange = send; });
+      });
+      const an = $('#appNoBtn'); if (an) an.onclick = async () => { const v = $('#appNo').value.trim().toUpperCase(); if (!/^[A-Z]\d{6,12}$/.test(v)) return toast('رقم الطلب شكله غلط (حرف + أرقام، زي E123456789)', 'err'); try { await api('POST', `/people/${id}/result`, { status: 'submitted', appNumber: v }); toast('اتسجّل رقم الطلب', 'ok'); pagePerson(id); } catch (er) { fail(er); } };
+      view.querySelectorAll('[data-pr]').forEach((b) => { b.onclick = () => { b.closest('details').open = false; doPrint(b.dataset.pr); }; });
+
       $('#mrzBtn').onclick = async () => {
         try {
           if (!$('#mrz').value.trim()) return runRead();
@@ -372,8 +483,11 @@
       $('#rx').href = `/api/reports/export.csv?from=${f}&to=${t}${$('#rs').value ? '&status=' + $('#rs').value : ''}`;
       const max = Math.max(1, ...r.daily.map((d) => Math.max(d.created, d.filled, d.submitted)));
       const bar = (n, c) => `<div style="display:inline-block;height:10px;width:${Math.round((n / max) * 120)}px;background:${c};border-radius:3px;vertical-align:middle"></div> ${n}`;
+      const stagesCard = r.stages ? `<div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>المرحلة</th><th>لسه</th><th>محجوز</th><th>تم</th></tr></thead><tbody>${Object.values(r.stages).map((x) => `<tr><td>${e(x.label)}</td><td>${x.pending}</td><td>${x.booked}</td><td>${x.done}</td></tr>`).join('')}</tbody></table></div>` : '';
+      const upcomingCard = (r.upcoming || []).length ? `<div class="card"><h2>مواعيد خلال 7 أيام</h2><ul class="list">${r.upcoming.map((x) => `<li><a href="#/people/${x.personId}">${e(x.name || '#' + x.personId)}</a> — ${e(x.stage)}: ${e(x.date)}</li>`).join('')}</ul></div>` : '';
       $('#rbody').innerHTML = `<div class="card"><h2>الوضع الحالي (${r.total} شخص)</h2><div class="row">${Object.entries(STATUS).map(([k, v]) => `<span class="pill ${v[1]}">${e(v[0])}: ${r.byStatus[k] || 0}</span>`).join('')}
         ${r.expiring ? `<span class="pill warn">جوازات قريبة الانتهاء: ${r.expiring}</span>` : ''}${r.expired ? `<span class="pill bad">جوازات منتهية: ${r.expired}</span>` : ''}</div></div>
+        ${upcomingCard}${stagesCard}
         <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>اليوم</th><th>اتسجّلوا</th><th>اتملوا في المنصة</th><th>اتبعتوا</th></tr></thead><tbody>${r.daily.map((d) => `<tr><td>${e(d.day)}</td><td>${bar(d.created, '#2f6f6f')}</td><td>${bar(d.filled, '#d49b1f')}</td><td>${bar(d.submitted, '#2b8a4a')}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">مفيش نشاط في الفترة دي (السجل بيبدأ من أول تحديث).</td></tr>'}</tbody></table></div>
         <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>الموظف</th><th>سجّل</th><th>ملا الفورم</th><th>بعت</th></tr></thead><tbody>${r.users.map((u) => `<tr><td>${e(u.user)}</td><td>${u.created}</td><td>${u.filled}</td><td>${u.submitted}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">—</td></tr>'}</tbody></table></div>`;
     };
@@ -394,6 +508,18 @@
     draw();
     const reload = async () => { const o = { user: $('#au').value, action: $('#aa').value }; sessionStorage.setItem('actFilter', JSON.stringify(o)); r = await api('GET', q(o)); draw(); };
     $('#au').onchange = () => reload().catch(fail); $('#aa').onchange = () => reload().catch(fail);
+  }
+
+  async function pageSettings() {
+    const st = await api('GET', '/settings/print');
+    view.innerHTML = `<h1>إعدادات الطباعة والتصدير</h1>
+      <div class="card"><div class="grid wide"><label class="f">اسم الشركة (أعلى الورقة)<input id="sCo" value="${e(st.company)}"></label><label class="f">سطر تاني (عنوان / تليفون)<input id="sL2" value="${e(st.line2)}"></label>
+        <label class="f">شكل التاريخ في ملف تسهيل<select id="sDf">${[['DD/MM/YYYY', '22/05/1984'], ['DD-Mon-YYYY', '22-May-1984'], ['YYYY-MM-DD', '1984-05-22'], ['MM/DD/YYYY', '05/22/1984']].map(([v, t]) => `<option value="${v}"${st.dateFormat === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label></div></div>
+      <div class="card"><h2>نص التعهد</h2><label class="f"><textarea id="sUn" rows="6">${e(st.undertaking)}</textarea></label>
+        <h2 style="margin-top:14px">نص خطاب الترشيح</h2><label class="f"><textarea id="sLe" rows="7">${e(st.letter)}</textarea></label>
+        <p class="muted small">تقدر تكتب في النصوص: <code dir="ltr">{{name}}</code> الاسم · <code dir="ltr">{{passport}}</code> رقم الجواز · <code dir="ltr">{{app}}</code> رقم الطلب · <code dir="ltr">{{date}}</code> التاريخ · <code dir="ltr">{{company}}</code> الشركة · <code dir="ltr">{{sponsor}}</code> جهة العمل. النصوص دي أمثلة، عدّلها زي نموذجك المعتمد.</p>
+        <button class="btn pri" id="sSave">حفظ</button></div>`;
+    $('#sSave').onclick = async () => { try { await api('PUT', '/settings/print', { company: $('#sCo').value, line2: $('#sL2').value, dateFormat: $('#sDf').value, undertaking: $('#sUn').value, letter: $('#sLe').value }); toast('اتحفظت الإعدادات', 'ok'); } catch (er) { fail(er); } };
   }
 
   async function pageProfiles() {
@@ -445,7 +571,7 @@
   }
 
   /* ===== التوجيه ===== */
-  const NAV = [['#/people', 'الأشخاص'], ['#/bulk', 'رفع جماعي'], ['#/profiles', 'ملفات الضبط'], ['#/reports', 'التقارير'], ['#/activity', 'السجل', 'admin'], ['#/users', 'المستخدمين', 'admin'], ['#/extension', 'الإضافة']];
+  const NAV = [['#/people', 'الأشخاص'], ['#/bulk', 'رفع جماعي'], ['#/profiles', 'ملفات الضبط'], ['#/reports', 'التقارير'], ['#/activity', 'السجل', 'admin'], ['#/settings', 'إعدادات الطباعة', 'admin'], ['#/users', 'المستخدمين', 'admin'], ['#/extension', 'الإضافة']];
   async function render() {
     const h = location.hash || '#/people';
     if (!me) { try { me = (await api('GET', '/me')).user; } catch (er) { /* مش داخل */ } }
@@ -460,6 +586,7 @@
       else if (h.startsWith('#/bulk')) await pageBulk();
       else if (h.startsWith('#/reports')) await pageReports();
       else if (h.startsWith('#/activity')) await pageActivity();
+      else if (h.startsWith('#/settings')) await pageSettings();
       else if (h.startsWith('#/profiles')) await pageProfiles();
       else if (h.startsWith('#/users')) await pageUsers();
       else if (h.startsWith('#/extension')) await pageExtension();

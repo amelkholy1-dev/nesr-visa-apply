@@ -35,6 +35,17 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     const got = { no: await page.inputValue('[data-k=passportNo]'), birth: await page.inputValue('[data-k=birthDate]'), exp: await page.inputValue('[data-k=expiryDate]'), fam: await page.inputValue('[data-k=nameEnFamily]'), first: await page.inputValue('[data-k=nameEnFirst]'), sex: await page.inputValue('[data-k=sex]') };
     console.log(got);
     assert.strictEqual(got.no, 'A45449365'); assert.strictEqual(got.birth, '1989-11-01'); assert.strictEqual(got.exp, '2033-06-23'); assert.strictEqual(got.fam, 'ELSHAWY'); assert.strictEqual(got.first, 'ATEF'); assert.strictEqual(got.sex, '1');
+    /* أداة القص: الصورة الشخصية من الجواز + تحديد منطقة MRZ يدوياً */
+    await page.goto(`http://127.0.0.1:${PORT}/#/people/new`); await page.waitForSelector('#pasF');
+    await page.setInputFiles('#pasF', IMG); await page.waitForSelector('#cropPhoto');
+    await page.click('#cropPhoto'); await page.waitForSelector('.cropper #crSel'); await page.waitForTimeout(300);
+    const box = await page.locator('#crSel').boundingBox(); assert.ok(box.width > 20 && box.height > 20, 'مربع القص ظاهر');
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down(); await page.mouse.move(box.x + box.width / 2 + 25, box.y + box.height / 2 + 15, { steps: 4 }); await page.mouse.up();
+    const box2 = await page.locator('#crSel').boundingBox(); assert.ok(Math.abs(box2.x - box.x) > 10, 'المربع اتحرّك بالسحب');
+    await page.click('#crOk'); await page.waitForSelector('.side img.photo', { timeout: 20000 });
+    await page.click('#cropMrz'); await page.waitForSelector('.cropper #crSel'); await page.waitForTimeout(300);
+    await page.click('#crOk'); await page.waitForFunction(() => document.querySelector('#mrzMsg .pill'), null, { timeout: 150000 });
+    assert.strictEqual(await page.inputValue('[data-k=passportNo]'), 'A45449365', 'قراءة من المنطقة المحددة');
     /* رفع جماعي: صورتين (نفس الصورة مرتين ← التانية مكررة) */
     await page.goto(`http://127.0.0.1:${PORT}/#/bulk`); await page.waitForSelector('#bf');
     await page.setInputFiles('#bf', [IMG, IMG]);

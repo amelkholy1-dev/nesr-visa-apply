@@ -4,6 +4,7 @@ const express = require('express');
 const db = require('../db');
 const F = require('../fields');
 const audit = require('../audit');
+const S = require('../stages');
 
 const router = express.Router();
 const json = (v) => { try { return JSON.parse(v || '{}') || {}; } catch (e) { return {}; } };
@@ -23,11 +24,18 @@ router.get('/reports/summary', async (req, res) => {
       `SELECT user_name, action, COUNT(*) AS n FROM activity WHERE action IN ('create','bulk','filled','submitted') AND created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY) GROUP BY user_name, action`, [from, to]);
     const users = new Map();
     for (const r of userRows) { const o = users.get(r.user_name) || { user: r.user_name || '—', created: 0, filled: 0, submitted: 0 }; if (r.action === 'create' || r.action === 'bulk') o.created += Number(r.n); else if (r.action === 'filled') o.filled += Number(r.n); else o.submitted += Number(r.n); users.set(r.user_name, o); }
-    const people = await db.query('SELECT status, data, profile_id FROM people');
+    const people = await db.query('SELECT id, name_ar, status, data, profile_id, stages FROM people');
     const profs = new Map((await db.query('SELECT id, data FROM profiles')).map((p) => [p.id, json(p.data)]));
     let expiring = 0, expired = 0;
     for (const p of people) { if (p.status === 'submitted') continue; const d = json(p.data); const ex = F.expiryInfo(d.expiryDate, d.expectedEntryDate || (profs.get(p.profile_id) || {}).expectedEntryDate); if (ex.expired) expired++; else if (ex.short) expiring++; }
-    res.json({ from, to, total: people.length, byStatus, expiring, expired, daily: [...daily.values()], users: [...users.values()] });
+    const stageCounts = Object.fromEntries(S.STAGES.map((x) => [x.k, { label: x.label, done: 0, booked: 0, pending: 0 }])); const upcoming = [];
+    const today = isoDay(new Date()); const in7 = isoDay(new Date(Date.now() + 7 * 86400000));
+    for (const p of people) {
+      const st = S.parse(p.stages);
+      for (const x of S.STAGES) { const c = st[x.k]; if (c.state === 'done') stageCounts[x.k].done++; else if (c.state === 'booked') { stageCounts[x.k].booked++; if (c.date && c.date >= today && c.date <= in7) upcoming.push({ personId: p.id, name: p.name_ar, stage: x.label, date: c.date }); } else stageCounts[x.k].pending++; }
+    }
+    upcoming.sort((a, b) => a.date.localeCompare(b.date));
+    res.json({ from, to, total: people.length, byStatus, expiring, expired, stages: stageCounts, upcoming, daily: [...daily.values()], users: [...users.values()] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

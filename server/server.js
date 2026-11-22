@@ -38,6 +38,7 @@ app.use('/api', require('./routes/session'));        // الدخول + المس�
 app.use('/api/people', require('./routes/people'));
 app.use('/api', require('./routes/misc'));
 app.use('/api', require('./routes/reports'));
+app.use('/api', require('./routes/extras'));
 app.use('/api', (req, res) => res.status(404).json({ error: 'مش موجود' }));
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   const status = err.status || (err.code === 'LIMIT_FILE_SIZE' ? 413 : 500);

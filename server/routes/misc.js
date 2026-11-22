@@ -6,12 +6,13 @@ const archiver = require('archiver');
 const db = require('../db');
 const F = require('../fields');
 const config = require('../config');
+const S = require('../stages');
 
 const router = express.Router();
 const json = (v) => { try { return JSON.parse(v || '{}') || {}; } catch (e) { return {}; } };
 const admin = (req, res, next) => (req.user.role === 'admin' ? next() : res.status(403).json({ error: 'ده للمدير بس' }));
 
-router.get('/meta', (req, res) => res.json({ ...F.meta(), ocr: !!config.geminiKey }));
+router.get('/meta', (req, res) => res.json({ ...F.meta(), ocr: !!config.geminiKey, stages: S.STAGES }));
 
 /* ملفات الضبط (الدفعات): قيم مشتركة بتتطبّق على الأشخاص */
 router.get('/profiles', async (req, res) => {

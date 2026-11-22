@@ -11,6 +11,6 @@ function log(req, action, personId, personName, detail) {
 }
 const LABELS = {
   login: 'دخول', create: 'إضافة شخص', update: 'تعديل بيانات', delete: 'حذف شخص', photo: 'رفع صورة شخصية', passport: 'رفع صورة جواز', 'del-file': 'حذف صورة',
-  fill: 'ملا الطلب في المنصة', filled: 'الفورم اتملى', submitted: 'الطلب اتبعت', status: 'تغيير حالة', bulk: 'رفع جماعي'
+  fill: 'ملا الطلب في المنصة', filled: 'الفورم اتملى', submitted: 'الطلب اتبعت', status: 'تغيير حالة', bulk: 'رفع جماعي', stage: 'تحديث مرحلة', export: 'تصدير', print: 'طباعة'
 };
 module.exports = { log, LABELS };

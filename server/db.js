@@ -59,6 +59,11 @@ const TABLES = [
     detail VARCHAR(500) NOT NULL DEFAULT '',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY ix_act_time (created_at), KEY ix_act_user (user_id), KEY ix_act_person (person_id), KEY ix_act_action (action)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS settings (
+    k VARCHAR(60) PRIMARY KEY,
+    v LONGTEXT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
 ];
 
@@ -70,6 +75,9 @@ async function init() {
   }
   await pool.query('SELECT 1');
   for (const t of TABLES) await pool.query(t);
+  /* أعمدة اتضافت بعد أول إصدار (الجداول القديمة بتتحدّث لوحدها) */
+  const hasCol = (await query("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'people' AND column_name = 'stages'"))[0].n;
+  if (!hasCol) await pool.query('ALTER TABLE people ADD COLUMN stages LONGTEXT NULL');
   const n = (await query('SELECT COUNT(*) AS n FROM users'))[0].n;
   if (!n) {
     const pass = config.adminPassword;

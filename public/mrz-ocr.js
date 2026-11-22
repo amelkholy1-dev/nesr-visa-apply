@@ -42,12 +42,13 @@
   }
 
   /* بيرجّع كل النصوص المقروءة (من أكتر من قصّة) عشان السيرفر يختار أحسن واحد */
-  async function read(blob, onProgress) {
+  async function read(blob, onProgress, opts) {
     if (!blob || /pdf/i.test(blob.type)) throw new Error('القراءة من الصورة بتشتغل مع JPG/PNG بس (مش PDF).');
     const w = await getWorker(onProgress);
     const img = await toImage(blob);
     const texts = [];
-    for (const [frac, width] of [[0.22, 1800], [0.30, 1800], [0.42, 2000], [0.16, 1600]]) {
+    const plans = opts && opts.cropped ? [[1, 1800], [1, 2400], [1, 1400]] : [[0.22, 1800], [0.30, 1800], [0.42, 2000], [0.16, 1600]]; /* cropped: المستخدم حدّد منطقة MRZ بنفسه */
+    for (const [frac, width] of plans) {
       if (onProgress) onProgress({ status: 'reading', crop: frac });
       const { data } = await w.recognize(cropCanvas(img, frac, width));
       if (data && data.text && data.text.replace(/[^A-Z0-9<]/g, '').length > 40) texts.push(data.text);
