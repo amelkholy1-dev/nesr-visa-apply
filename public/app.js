@@ -179,14 +179,13 @@
         <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exOnly"${state.ex ? ' checked' : ''}> جوازات قريبة الانتهاء</label>
         <select id="sf" style="padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">كل المراحل</option>${(meta.stages || []).map((x) => `<option value="p:${x.k}"${state.sf === 'p:' + x.k ? ' selected' : ''}>لسه: ${e(x.label)}</option>${x.booking ? `<option value="b:${x.k}"${state.sf === 'b:' + x.k ? ' selected' : ''}>محجوز: ${e(x.label)}</option>` : ''}<option value="d:${x.k}"${state.sf === 'd:' + x.k ? ' selected' : ''}>تم: ${e(x.label)}</option>`).join('')}</select>
         <button class="btn" id="tashBtn" title="ملف Excel لموقع تسهيل (للمحدّدين، أو كل المعروضين)">تصدير لتسهيل</button>
-        <button class="btn" id="lblBtn" title="ليبلات باركود للمحدّدين" hidden>طباعة ليبلات</button>
         <button class="btn pri" id="queueBtn" hidden>املى المحدّدين بالتتابع</button>
         <a href="#/people/new" class="btn pri" style="margin-inline-start:auto;text-decoration:none">+ شخص جديد</a></div></div>
       <div id="upc"></div>
       <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th style="width:30px"><input type="checkbox" id="selAll" title="تحديد الكل"></th><th>الاسم</th><th>الجواز</th><th>ملف الضبط</th><th>الحالة</th><th>النواقص</th><th>المراحل</th><th>رقم الطلب</th><th></th></tr></thead><tbody id="rows"><tr><td colspan="7" class="muted">جاري التحميل…</td></tr></tbody></table></div>`;
     let shown = [];
     const selectedIds = () => [...view.querySelectorAll('.sel:checked')].map((c) => c.dataset.id);
-    const syncQueue = () => { const n = selectedIds().length; const b = $('#queueBtn'); if (!b) return; b.hidden = n === 0; b.textContent = `املى المحدّدين بالتتابع (${n})`; const l = $('#lblBtn'); if (l) { l.hidden = n === 0; l.textContent = `طباعة ليبلات (${n})`; } const t = $('#tashBtn'); if (t) t.textContent = n ? `تصدير لتسهيل (${n})` : 'تصدير لتسهيل'; };
+    const syncQueue = () => { const n = selectedIds().length; const b = $('#queueBtn'); if (!b) return; b.hidden = n === 0; b.textContent = `املى المحدّدين بالتتابع (${n})`; const t = $('#tashBtn'); if (t) t.textContent = n ? `تصدير لتسهيل (${n})` : 'تصدير لتسهيل'; };
     const load = async () => {
       const st = { q: $('#q').value, st: $('#st').value, pf: $('#pf').value, ex: $('#exOnly').checked, sf: $('#sf').value }; sessionStorage.setItem('peopleFilter', JSON.stringify(st));
       const r = await api('GET', `/people?q=${encodeURIComponent(st.q)}&status=${st.st}&profile=${st.pf}`);
@@ -201,14 +200,6 @@
     };
     ['q', 'st', 'pf', 'exOnly', 'sf'].forEach((i) => { $('#' + i).oninput = () => load().catch(fail); });
     $('#tashBtn').onclick = () => { const ids = selectedIds().length ? selectedIds() : shown.map((p) => p.id); if (!ids.length) return toast('مفيش أشخاص للتصدير', 'err'); window.location.href = `/api/export/tasheel.xlsx?ids=${ids.slice(0, 1500).join(',')}`; toast('بينزّل ملف تسهيل (' + ids.length + ' شخص)', 'ok'); };
-    $('#lblBtn').onclick = async () => {
-      const ids = selectedIds(); if (!ids.length) return; const w = window.open('', '_blank'); if (!w) return toast('المتصفح منع نافذة الطباعة', 'err');
-      try {
-        const st = await api('GET', '/settings/print'); const items = [];
-        for (const id of ids.slice(0, 200)) { const r = await api('GET', `/people/${id}`); const m = (r.resolved && r.resolved.mofa) || {}; items.push({ name: [m.EFIRSTNAME, m.EFAMILY].filter(Boolean).join(' ') || r.person.data.nameAr || '', code: r.person.appNumber || m.PASSPORTnumber || '' }); }
-        w.document.open(); w.document.write(window.VaPrint.labels(items, st)); w.document.close(); w.focus();
-      } catch (er) { w.close(); fail(er); }
-    };
     api('GET', '/reports/summary').then((r) => { const u = (r.upcoming || []).slice(0, 6); const box = $('#upc'); if (box && u.length) box.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8"><b>📅 مواعيد خلال 7 أيام:</b> ${u.map((x) => `<a href="#/people/${x.personId}">${e(x.name || '#' + x.personId)}</a> — ${e(x.stage)} ${e(x.date)}`).join(' · ')}</div>`; }).catch(() => {});
     $('#selAll').onchange = () => { view.querySelectorAll('.sel').forEach((c) => { c.checked = $('#selAll').checked; }); syncQueue(); };
     $('#queueBtn').onclick = async () => {
@@ -288,7 +279,7 @@
         <div><input type="file" id="phF" accept="image/jpeg,image/png"><div class="small muted" style="margin-top:6px">${isNew ? 'بتترفع أول ما تحفظ.' : ''} بتتصغّر تلقائي لو أكبر من الحد. المنصة بتفحص مواصفات الصورة (خلفية فاتحة ووش واضح).</div>${!isNew && person.hasPhoto ? '<button class="btn small danger" id="phDel" style="margin-top:6px">حذف الصورة</button>' : ''}</div></div></div>
       <div class="card"><label class="f">ملاحظات<input data-k="notes" value="${e(data.notes || '')}"></label></div>
       ${resolved ? `<div class="card"><h2>الجاهزية</h2>${resolved.ready ? '<span class="pill ok">كل البيانات المطلوبة موجودة</span>' : `<ul class="list issues">${resolved.issues.map((x) => `<li>${e(x)}</li>`).join('')}</ul>`}${resolved.warns.length ? `<ul class="list warns">${resolved.warns.map((x) => `<li>${e(x)}</li>`).join('')}</ul>` : ''}</div>` : ''}
-      <div class="row actions"><button class="btn pri" id="save">حفظ</button>${!isNew ? '<button class="btn pri" id="fill">املى الطلب في المنصة</button><button class="btn" id="wafid" title="بيفتح موقع وافد ويملا فورم حجز الفحص الطبي">احجز الفحص الطبي (وافد)</button><details class="menu"><summary class="btn">طباعة ▾</summary><div class="menu-box"><button class="btn small" data-pr="sheet">طلب التأشيرة (ورقة الطباعة)</button><button class="btn small" data-pr="label">ليبل باركود</button></div></details><button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>
+      <div class="row actions"><button class="btn pri" id="save">حفظ</button>${!isNew ? '<button class="btn pri" id="fill">املى الطلب في المنصة</button><button class="btn" id="wafid" title="بيفتح موقع وافد ويملا فورم حجز الفحص الطبي">احجز الفحص الطبي (وافد)</button><button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>
       </div><aside class="side">${sideHtml()}</aside></div>`;
       wire();
       wirePv();
@@ -312,18 +303,6 @@
         toast('اتحفظ', 'ok'); location.hash = '#/people/' + r.id; return r.id;
       }
       await api('PUT', `/people/${id}`, body); toast('اتحفظ', 'ok'); return id;
-    };
-    const doPrint = async (kind) => {
-      const w = window.open('', '_blank'); if (!w) return toast('المتصفح منع نافذة الطباعة', 'err');
-      try {
-        const [pr, st] = await Promise.all([api('GET', `/people/${id}`), api('GET', '/settings/print')]);
-        const o = { person: pr.person, resolved: pr.resolved, profile: pr.profile, settings: st, optText, photoUrl: pr.person.hasPhoto ? location.origin + `/api/people/${id}/file/photo` : '' };
-        let html;
-        if (kind === 'sheet') html = window.VaPrint.sheet(o);
-        else { const m = (pr.resolved && pr.resolved.mofa) || {}; html = window.VaPrint.labels([{ name: [m.EFIRSTNAME, m.EFAMILY].filter(Boolean).join(' ') || pr.person.data.nameAr || '', code: pr.person.appNumber || m.PASSPORTnumber || '' }], st); }
-        w.document.open(); w.document.write(html); w.document.close(); w.focus();
-        api('POST', `/people/${id}/printed`, { kind }).catch(() => {});
-      } catch (er) { w.close(); fail(er); }
     };
     const wire = () => {
       $('#prof').onchange = () => { data = { ...data, ...collect(view) }; profileId = $('#prof').value; draw(); };
@@ -388,7 +367,6 @@
         ['.stS', '.stD', '.stN'].forEach((c) => { row.querySelector(c).onchange = send; });
       });
       const an = $('#appNoBtn'); if (an) an.onclick = async () => { const v = $('#appNo').value.trim().toUpperCase(); if (!/^[A-Z]\d{6,12}$/.test(v)) return toast('رقم الطلب شكله غلط (حرف + أرقام، زي E123456789)', 'err'); try { await api('POST', `/people/${id}/result`, { status: 'submitted', appNumber: v }); toast('اتسجّل رقم الطلب', 'ok'); pagePerson(id); } catch (er) { fail(er); } };
-      view.querySelectorAll('[data-pr]').forEach((b) => { b.onclick = () => { b.closest('details').open = false; doPrint(b.dataset.pr); }; });
 
       $('#mrzBtn').onclick = async () => {
         try {
@@ -524,12 +502,11 @@
 
   async function pageSettings() {
     const st = await api('GET', '/settings/print');
-    view.innerHTML = `<h1>إعدادات الطباعة والتصدير</h1>
-      <div class="card"><div class="grid wide"><label class="f">اسم الشركة (أعلى الورقة)<input id="sCo" value="${e(st.company)}"></label><label class="f">سطر تاني (عنوان / تليفون)<input id="sL2" value="${e(st.line2)}"></label>
-        <label class="f">شكل التاريخ في ملف تسهيل<select id="sDf">${[['DD/MM/YYYY', '22/05/1984'], ['DD-Mon-YYYY', '22-May-1984'], ['YYYY-MM-DD', '1984-05-22'], ['MM/DD/YYYY', '05/22/1984']].map(([v, t]) => `<option value="${v}"${st.dateFormat === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label></div></div>
-      <p class="muted small">ورقة «طلب التأشيرة» بتتطبع على نفس ترتيب نموذج منصة التأشيرات (الحقول + نص الإقرار + الاسم والتوقيع والتاريخ). اسم الشركة بيظهر أعلاها.</p>
-      <button class="btn pri" id="sSave">حفظ</button>`;
-    $('#sSave').onclick = async () => { try { await api('PUT', '/settings/print', { company: $('#sCo').value, line2: $('#sL2').value, dateFormat: $('#sDf').value }); toast('اتحفظت الإعدادات', 'ok'); } catch (er) { fail(er); } };
+    view.innerHTML = `<h1>إعدادات التصدير</h1>
+      <div class="card"><div class="grid wide">
+        <label class="f">شكل التاريخ في ملف تسهيل (Excel)<select id="sDf">${[['DD/MM/YYYY', '22/05/1984'], ['DD-Mon-YYYY', '22-May-1984'], ['YYYY-MM-DD', '1984-05-22'], ['MM/DD/YYYY', '05/22/1984']].map(([v, t]) => `<option value="${v}"${st.dateFormat === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label></div>
+        <div style="margin-top:12px"><button class="btn pri" id="sSave">حفظ</button></div></div>`;
+    $('#sSave').onclick = async () => { try { await api('PUT', '/settings/print', { dateFormat: $('#sDf').value }); toast('اتحفظت الإعدادات', 'ok'); } catch (er) { fail(er); } };
   }
 
   async function pageProfiles() {
@@ -581,7 +558,7 @@
   }
 
   /* ===== التوجيه ===== */
-  const NAV = [['#/people', 'الأشخاص'], ['#/bulk', 'رفع جماعي'], ['#/profiles', 'ملفات الضبط'], ['#/reports', 'التقارير'], ['#/activity', 'السجل', 'admin'], ['#/settings', 'إعدادات الطباعة', 'admin'], ['#/users', 'المستخدمين', 'admin'], ['#/extension', 'الإضافة']];
+  const NAV = [['#/people', 'الأشخاص'], ['#/bulk', 'رفع جماعي'], ['#/profiles', 'ملفات الضبط'], ['#/reports', 'التقارير'], ['#/activity', 'السجل', 'admin'], ['#/settings', 'إعدادات التصدير', 'admin'], ['#/users', 'المستخدمين', 'admin'], ['#/extension', 'الإضافة']];
   async function render() {
     const h = location.hash || '#/people';
     if (!me) { try { me = (await api('GET', '/me')).user; } catch (er) { /* مش داخل */ } }

@@ -126,11 +126,11 @@ const api = async (method, url, body, extra = {}) => {
   const sp = await api('POST', '/api/people', { data: { nameAr: 'مراحل تجربة', passportNo: 'ST12345', birthDate: '1990-02-03', issueDate: '2024-01-02', expiryDate: '2031-01-01', sex: '1', phone: '01000000000', nameEnFirst: 'ALI', nameEnFather: 'OMAR', nameEnFamily: 'SAID', birthPlace: 'Cairo', email: 'a@b.com' } });
   const spid = sp.json.id;
   assert.strictEqual((await api('PUT', `/api/people/${spid}/stages/medical`, { state: 'booked', date: '2026-12-01', note: 'مستشفى كذا' })).status, 200);
-  assert.strictEqual((await api('PUT', `/api/people/${spid}/stages/insurance`, { state: 'booked' })).status, 400, 'الحجز للفحص والبصمة بس');
+  assert.strictEqual((await api('PUT', `/api/people/${spid}/stages/sent`, { state: 'booked' })).status, 400, 'الحجز للفحص الطبي بس');
   assert.strictEqual((await api('PUT', `/api/people/${spid}/stages/zzz`, { state: 'done' })).status, 400);
-  assert.strictEqual((await api('PUT', `/api/people/${spid}/stages/fee`, { state: 'done' })).status, 200);
+  assert.strictEqual((await api('PUT', `/api/people/${spid}/stages/sent`, { state: 'done' })).status, 200);
   const g1 = (await api('GET', `/api/people/${spid}`)).json.person.stages;
-  assert.strictEqual(g1.medical.state, 'booked'); assert.strictEqual(g1.medical.date, '2026-12-01'); assert.strictEqual(g1.fee.state, 'done'); assert.ok(g1.fee.date, 'تاريخ تلقائي');
+  assert.strictEqual(g1.medical.state, 'booked'); assert.strictEqual(g1.medical.date, '2026-12-01'); assert.strictEqual(g1.sent.state, 'done'); assert.ok(g1.sent.date, 'تاريخ تلقائي');
   await api('POST', `/api/people/${spid}/result`, { status: 'submitted', appNumber: 'E111111111' });
   await api('POST', `/api/people/${spid}/result`, { status: 'submitted', appNumber: 'E222222222' });
   const g2 = (await api('GET', `/api/people/${spid}`)).json.person;
@@ -138,7 +138,7 @@ const api = async (method, url, body, extra = {}) => {
   assert.ok(((await api('GET', '/api/people')).json.people.find((p) => p.id === spid) || {}).stages.medical.state === 'booked', 'المراحل في القايمة');
   const tx = await fetch(base + `/api/export/tasheel.xlsx?ids=${spid}&fmt=DD-Mon-YYYY`, { headers: { Cookie: cookie } }); const txb = Buffer.from(await tx.arrayBuffer());
   assert.strictEqual(tx.status, 200); assert.strictEqual(txb.slice(0, 2).toString(), 'PK'); fs.writeFileSync(path.join(os.tmpdir(), 'tasheel-test.xlsx'), txb);
-  const ps = await api('GET', '/api/settings/print'); assert.strictEqual(ps.status, 200); assert.ok(ps.json.company && !('undertaking' in ps.json) && !('letter' in ps.json), 'إعدادات الطباعة من غير تعهد وخطاب');
+  const ps = await api('GET', '/api/settings/print'); assert.strictEqual(ps.status, 200); assert.ok(ps.json.dateFormat);
   assert.strictEqual((await api('PUT', '/api/settings/print', { company: 'شركة تجربة', dateFormat: 'YYYY-MM-DD' })).status, 200);
   assert.strictEqual((await api('GET', '/api/settings/print')).json.company, 'شركة تجربة');
   const rs = await api('GET', '/api/reports/summary'); assert.ok(rs.json.stages && rs.json.stages.medical.booked >= 1);

@@ -184,16 +184,6 @@ router.get('/:id(\\d+)/wafid', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-/* سجل الطباعة فقط (الطباعة نفسها بتتم من المتصفح) */
-router.post('/:id(\\d+)/printed', async (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10); const row = (await db.query('SELECT name_ar FROM people WHERE id = ?', [id]))[0];
-    if (!row) return res.status(404).json({ error: 'الشخص مش موجود' });
-    const k = { sheet: 'ورقة الطلب', undertaking: 'التعهد', letter: 'خطاب الترشيح', label: 'ليبل باركود' }[(req.body || {}).kind] || 'طباعة';
-    audit.log(req, 'print', id, row.name_ar, k); res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 /* مراحل الطلب: state = '' | booked | done */
 router.put('/:id(\\d+)/stages/:key', async (req, res) => {
   try {
