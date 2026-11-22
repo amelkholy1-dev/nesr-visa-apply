@@ -133,6 +133,8 @@
     const isNew = id === 'new';
     const [profs] = await Promise.all([api('GET', '/profiles')]);
     let data = {}, profileId = (profs.profiles.find((p) => p.isDefault) || profs.profiles[0] || {}).id || '', resolved = null, person = null;
+    const pending = { passport: null, photo: null }; /* صور مختارة لشخص لسه ما اتحفظش */
+    const objUrl = (f) => (f ? URL.createObjectURL(f) : '');
     if (!isNew) { const r = await api('GET', `/people/${id}`); person = r.person; data = r.person.data; profileId = r.person.profileId || ''; resolved = r.resolved; }
     const profileData = () => (profs.profiles.find((p) => String(p.id) === String(profileId)) || { data: {} }).data;
     const draw = () => {
@@ -144,15 +146,17 @@
         <select id="prof"><option value="">— من غير —</option>${profs.profiles.map((p) => `<option value="${p.id}"${String(p.id) === String(profileId) ? ' selected' : ''}>${e(p.name)}</option>`).join('')}</select></label>
         <a href="#/profiles" class="small">إدارة ملفات الضبط</a></div></div>
       <div class="card"><h2>صورة الجواز وقراءة MRZ</h2><div class="row" style="align-items:flex-start">
-        <div style="min-width:240px"><input type="file" id="pasF" accept="image/jpeg,image/png,application/pdf">${!isNew && person.hasPassport ? `<div style="margin-top:8px"><img class="thumb" src="/api/people/${id}/file/passport?t=${Date.now()}" onerror="this.style.display='none'"></div>` : ''}
-          <div class="small muted" style="margin-top:6px">${isNew ? 'احفظ الشخص الأول وبعدها ارفع الصور.' : 'صورة الجواز للتوثيق والقراءة (مش بتتبعت للمنصة).'}</div>${!isNew ? '<button class="btn small" id="ocrBtn" style="margin-top:6px">قراءة تلقائية من الصورة</button>' : ''}</div>
-        <div style="flex:1;min-width:280px"><label class="f">سطري MRZ (آخر سطرين في صفحة بيانات الجواز)<textarea id="mrz" class="mrz" placeholder="P&lt;EGY....&#10;A12345678...."></textarea></label>
+        <div style="min-width:240px"><input type="file" id="pasF" accept="image/jpeg,image/png,application/pdf">
+          ${pending.passport ? `<div style="margin-top:8px"><img class="thumb" src="${objUrl(pending.passport)}"></div>` : (!isNew && person.hasPassport ? `<div style="margin-top:8px"><img class="thumb" src="/api/people/${id}/file/passport?t=${Date.now()}" onerror="this.style.display='none'"></div>` : '')}
+          <div class="small muted" style="margin-top:6px">${isNew ? 'اختار صورة الجواز (بتترفع أول ما تحفظ).' : 'صورة الجواز للتوثيق والقراءة (مش بتتبعت للمنصة).'}</div>
+          <div class="row" style="margin-top:6px"><button class="btn small pri" id="ocrLocal">قراءة MRZ من الصورة</button>${meta.ocr && !isNew ? '<button class="btn small" id="ocrBtn">قراءة بـ Gemini</button>' : ''}</div></div>
+        <div style="flex:1;min-width:280px"><label class="f">سطري MRZ (آخر سطرين في صفحة بيانات الجواز) — اتملوا لوحدهم من «قراءة MRZ من الصورة»، أو الصقهم هنا<textarea id="mrz" class="mrz" placeholder="P&lt;EGY....&#10;A12345678...."></textarea></label>
           <div class="row" style="margin-top:6px"><button class="btn" id="mrzBtn">حلّل MRZ واملى البيانات</button><span id="mrzMsg" class="small"></span></div></div></div></div>
       ${personFields}
       <div class="card"><h2>بيانات بتتورّث من ملف الضبط (اكتب هنا لو الشخص ده مختلف)</h2><div class="grid">${inherit.map((f) => fieldHtml(f, data[f.k], pd[f.k] ? (f.type === 'select' ? pd[f.k] : pd[f.k]) : '')).join('')}</div></div>
       <div class="card"><h2>الصورة الشخصية (لازم أقل من 1 ميجا)</h2><div class="row" style="align-items:flex-start">
-        <div>${!isNew && person.hasPhoto ? `<img class="photo" src="/api/people/${id}/file/photo?t=${Date.now()}">` : '<div class="photo"></div>'}</div>
-        <div><input type="file" id="phF" accept="image/jpeg,image/png" ${isNew ? 'disabled' : ''}><div class="small muted" style="margin-top:6px">${isNew ? 'احفظ الشخص الأول.' : 'بتتصغّر تلقائي لو أكبر من الحد. المنصة بتفحص مواصفات الصورة (خلفية فاتحة ووش واضح).'}</div>${!isNew && person.hasPhoto ? '<button class="btn small danger" id="phDel" style="margin-top:6px">حذف الصورة</button>' : ''}</div></div></div>
+        <div>${pending.photo ? `<img class="photo" src="${objUrl(pending.photo)}">` : (!isNew && person.hasPhoto ? `<img class="photo" src="/api/people/${id}/file/photo?t=${Date.now()}">` : '<div class="photo"></div>')}</div>
+        <div><input type="file" id="phF" accept="image/jpeg,image/png"><div class="small muted" style="margin-top:6px">${isNew ? 'بتترفع أول ما تحفظ.' : ''} بتتصغّر تلقائي لو أكبر من الحد. المنصة بتفحص مواصفات الصورة (خلفية فاتحة ووش واضح).</div>${!isNew && person.hasPhoto ? '<button class="btn small danger" id="phDel" style="margin-top:6px">حذف الصورة</button>' : ''}</div></div></div>
       <div class="card"><label class="f">ملاحظات<input data-k="notes" value="${e(data.notes || '')}"></label></div>
       ${resolved ? `<div class="card"><h2>الجاهزية</h2>${resolved.ready ? '<span class="pill ok">كل البيانات المطلوبة موجودة</span>' : `<ul class="list issues">${resolved.issues.map((x) => `<li>${e(x)}</li>`).join('')}</ul>`}${resolved.warns.length ? `<ul class="list warns">${resolved.warns.map((x) => `<li>${e(x)}</li>`).join('')}</ul>` : ''}</div>` : ''}
       <div class="row"><button class="btn pri" id="save">حفظ</button>${!isNew ? '<button class="btn pri" id="fill">املى الطلب في المنصة</button><button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>`;
@@ -170,24 +174,61 @@
     const save = async () => {
       data = { ...data, ...collect(view) }; profileId = $('#prof').value;
       const body = { profileId: profileId || null, data };
-      if (isNew) { const r = await api('POST', '/people', body); toast('اتحفظ', 'ok'); location.hash = '#/people/' + r.id; return r.id; }
+      if (isNew) {
+        const r = await api('POST', '/people', body);
+        for (const [kind, f] of [['passport', pending.passport], ['photo', pending.photo]]) { if (f) { const fd = new FormData(); fd.append('file', f); await api('POST', `/people/${r.id}/files/${kind}`, fd).catch((er) => toast('الصورة ما اترفعتش: ' + er.message, 'err')); } }
+        toast('اتحفظ', 'ok'); location.hash = '#/people/' + r.id; return r.id;
+      }
       await api('PUT', `/people/${id}`, body); toast('اتحفظ', 'ok'); return id;
     };
     const wire = () => {
       $('#prof').onchange = () => { data = { ...data, ...collect(view) }; profileId = $('#prof').value; draw(); };
       $('#save').onclick = () => save().then(() => { if (!isNew) pagePerson(id); }).catch((er) => { if (er.data && er.data.duplicateId && confirm(er.message + '\nتفتحه؟')) location.hash = '#/people/' + er.data.duplicateId; else fail(er); });
+      const applyMrz = (r, how) => {
+        data = { ...collect(view), ...Object.fromEntries(Object.entries(r.suggest).filter(([, v]) => v)) }; const keep = r.lines.join('\n'); draw();
+        $('#mrz').value = keep;
+        $('#mrzMsg').innerHTML = `<span class="pill ${r.confidence === 'high' ? 'ok' : r.confidence === 'medium' ? 'warn' : 'bad'}">${how || ''}دقة ${r.confidence === 'high' ? 'عالية (الأرقام سليمة)' : r.confidence === 'medium' ? 'متوسطة: راجع' : 'ضعيفة: راجع كل حاجة'}</span> ${r.warnings.map(e).join(' · ')}`;
+        const re = $('#mrzMsg'); if (re) re.scrollIntoView({ block: 'nearest' });
+      };
+      const passportBlob = async () => {
+        if (pending.passport) return pending.passport;
+        if (!isNew && person.hasPassport) { const src = await fetch(`/api/people/${id}/file/passport`, { credentials: 'same-origin' }); if (src.ok) return src.blob(); }
+        return null;
+      };
+      /* قراءة MRZ من الصورة جوه المتصفح */
+      const runLocalOcr = async () => {
+        const btn = $('#ocrLocal'), msg = $('#mrzMsg');
+        try {
+          const blob = await passportBlob(); if (!blob) return toast('اختار صورة الجواز الأول', 'err');
+          btn.disabled = true; msg.textContent = 'بيجهّز محرك القراءة (أول مرة بياخد دقيقة)…';
+          const texts = await window.MrzOcr.read(blob, (m) => { if (m.status === 'recognizing text' && typeof m.progress === 'number') msg.textContent = 'بيقرا… ' + Math.round(m.progress * 100) + '%'; else if (m.status === 'reading') msg.textContent = 'بيقرا الصورة…'; });
+          let best = null; const rank = { high: 3, medium: 2, low: 1 };
+          for (const t of texts) { try { const r = await api('POST', '/people/mrz', { text: t }); if (!best || rank[r.confidence] > rank[best.confidence]) best = r; if (r.confidence === 'high') break; } catch (er) { /* القصّة دي ما فيهاش MRZ */ } }
+          if (!best) { msg.textContent = ''; return toast('ما قدرتش أقرا MRZ من الصورة. جرّب صورة أوضح (مسطّحة وإضاءة كويسة) أو الصق السطرين.', 'err'); }
+          applyMrz(best, 'من الصورة — ');
+        } catch (er) { fail(er); msg.textContent = ''; } finally { btn.disabled = false; }
+      };
+      $('#ocrLocal').onclick = runLocalOcr;
       $('#mrzBtn').onclick = async () => {
         try {
-          const r = await api('POST', '/people/mrz', { text: $('#mrz').value });
-          Object.entries(r.suggest).forEach(([k, v]) => { if (v) data[k] = v; });
-          data = { ...collect(view), ...Object.fromEntries(Object.entries(r.suggest).filter(([, v]) => v)) }; draw();
-          $('#mrz').value = r.lines.join('\n');
-          $('#mrzMsg').innerHTML = `<span class="pill ${r.confidence === 'high' ? 'ok' : r.confidence === 'medium' ? 'warn' : 'bad'}">دقة ${r.confidence === 'high' ? 'عالية (الأرقام سليمة)' : r.confidence === 'medium' ? 'متوسطة: راجع' : 'ضعيفة: راجع كل حاجة'}</span> ${r.warnings.map(e).join(' · ')}`;
-          const re = $('#mrzMsg'); if (re) re.scrollIntoView({ block: 'nearest' });
+          if (!$('#mrz').value.trim()) return runLocalOcr();
+          applyMrz(await api('POST', '/people/mrz', { text: $('#mrz').value }));
         } catch (er) { fail(er); }
       };
-      const pas = $('#pasF'); if (pas) pas.onchange = async () => { if (isNew) { pas.value = ''; return toast('احفظ الشخص الأول', 'err'); } try { const f = await compress(pas.files[0], 3.5 * 1048576, 2200); const fd = new FormData(); fd.append('file', f); await api('POST', `/people/${id}/files/passport`, fd); toast('اترفعت صورة الجواز', 'ok'); data = { ...data, ...collect(view) }; pagePerson(id); } catch (er) { fail(er); } };
-      const ph = $('#phF'); if (ph) ph.onchange = async () => { try { const f = await compress(ph.files[0], 1048576, 900); const fd = new FormData(); fd.append('file', f); await api('POST', `/people/${id}/files/photo`, fd); toast('اترفعت الصورة (' + Math.round(f.size / 1024) + ' ك.ب)', 'ok'); data = { ...data, ...collect(view) }; pagePerson(id); } catch (er) { fail(er); } };
+      const pas = $('#pasF'); if (pas) pas.onchange = async () => {
+        try {
+          const f = await compress(pas.files[0], 3.5 * 1048576, 2200);
+          if (isNew) { pending.passport = f; data = { ...data, ...collect(view) }; draw(); return; }
+          const fd = new FormData(); fd.append('file', f); await api('POST', `/people/${id}/files/passport`, fd); toast('اترفعت صورة الجواز', 'ok'); data = { ...data, ...collect(view) }; pagePerson(id);
+        } catch (er) { fail(er); }
+      };
+      const ph = $('#phF'); if (ph) ph.onchange = async () => {
+        try {
+          const f = await compress(ph.files[0], 1048576, 900);
+          if (isNew) { pending.photo = f; data = { ...data, ...collect(view) }; draw(); return; }
+          const fd = new FormData(); fd.append('file', f); await api('POST', `/people/${id}/files/photo`, fd); toast('اترفعت الصورة (' + Math.round(f.size / 1024) + ' ك.ب)', 'ok'); data = { ...data, ...collect(view) }; pagePerson(id);
+        } catch (er) { fail(er); }
+      };
       const pd = $('#phDel'); if (pd) pd.onclick = async () => { if (!confirm('تحذف الصورة؟')) return; await api('DELETE', `/people/${id}/files/photo`).catch(fail); pagePerson(id); };
       const oc = $('#ocrBtn'); if (oc) oc.onclick = async () => {
         try {
