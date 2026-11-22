@@ -156,11 +156,34 @@
     const objUrl = (f) => (f ? URL.createObjectURL(f) : '');
     if (!isNew) { const r = await api('GET', `/people/${id}`); person = r.person; data = r.person.data; profileId = r.person.profileId || ''; resolved = r.resolved; }
     const profileData = () => (profs.profiles.find((p) => String(p.id) === String(profileId)) || { data: {} }).data;
+    const stamp = Date.now(); const pv = { z: 1 };
+    const sideHtml = () => {
+      const src = pending.passport ? { url: objUrl(pending.passport), pdf: pending.passport.type === 'application/pdf' } : (!isNew && person.hasPassport ? { url: `/api/people/${id}/file/passport?t=${stamp}`, pdf: false } : null);
+      const photoSrc = pending.photo ? objUrl(pending.photo) : (!isNew && person.hasPhoto ? `/api/people/${id}/file/photo?t=${stamp}` : '');
+      const viewer = src
+        ? (src.pdf ? `<div class="pv-empty">صورة الجواز ملف PDF — <a href="${src.url}" target="_blank" rel="noopener">افتحه في تبويب جديد</a></div>`
+          : `<div class="pv-bar"><button class="btn small" id="pvOut" title="تصغير">−</button><button class="btn small" id="pvIn" title="تكبير">+</button><button class="btn small" id="pvFit" title="ملاءمة العرض">ملاءمة</button><a class="btn small" href="${src.url}" target="_blank" rel="noopener" style="text-decoration:none">فتح بحجم كامل</a><span class="zl" id="pvZl"></span></div>
+          <div class="pv-box" id="pvBox"><img id="pvImg" src="${src.url}" alt="صورة الجواز"></div><div class="pv-empty" id="pvErr" hidden>الملف مش صورة (ممكن PDF) — <a href="${src.url}" target="_blank" rel="noopener">افتحه</a></div>
+          <div class="small muted" style="margin-top:6px">دوس على الصورة للتكبير. قارن الأرقام والتواريخ والاسم بالحقول اللي جنبها.</div>`)
+        : '<div class="pv-empty">ارفع صورة الجواز (من المربع على اليمين) وهتظهر هنا جنب الحقول للمراجعة.</div>';
+      return `<div class="card pv"><h2>صورة الجواز للمراجعة</h2>${viewer}</div>${photoSrc ? `<div class="card"><div class="row" style="align-items:flex-start"><img class="photo" src="${photoSrc}" alt="الصورة الشخصية"><div class="small muted">الصورة الشخصية اللي هتتبعت للمنصة.</div></div></div>` : ''}`;
+    };
+    const wirePv = () => {
+      const img = $('#pvImg'); const box = $('#pvBox'); if (!img || !box) return;
+      const apply = () => { img.style.width = Math.round(pv.z * 100) + '%'; box.classList.toggle('zoomed', pv.z > 1); const zl = $('#pvZl'); if (zl) zl.textContent = Math.round(pv.z * 100) + '%'; };
+      img.onerror = () => { box.hidden = true; const bar = $('.pv-bar'); if (bar) bar.hidden = true; $('#pvErr').hidden = false; };
+      $('#pvIn').onclick = () => { pv.z = Math.min(4, +(pv.z + 0.5).toFixed(2)); apply(); };
+      $('#pvOut').onclick = () => { pv.z = Math.max(1, +(pv.z - 0.5).toFixed(2)); apply(); };
+      $('#pvFit').onclick = () => { pv.z = 1; apply(); box.scrollTo(0, 0); };
+      img.onclick = (ev) => { const r = img.getBoundingClientRect(); const fx = (ev.clientX - r.left) / r.width, fy = (ev.clientY - r.top) / r.height; pv.z = pv.z > 1 ? 1 : 2.5; apply(); if (pv.z > 1) { const maxL = Math.max(0, img.clientWidth - box.clientWidth); const left = Math.max(0, Math.min(maxL, fx * img.clientWidth - box.clientWidth / 2)); box.scrollLeft = getComputedStyle(box).direction === 'rtl' ? left - maxL : left; box.scrollTop = fy * img.clientHeight - box.clientHeight / 2; } };
+      apply();
+    };
     const draw = () => {
       const pd = profileData();
       const personFields = meta.personGroups.map((g) => `<div class="card"><h2>${e(g.title)}</h2><div class="grid">${g.fields.map((f) => fieldHtml(f, data[f.k], f.k.startsWith('nameAr') && f.k !== 'nameAr' ? (splitArabic(data.nameAr)[{ nameArFirst: 'first', nameArFather: 'father', nameArGrand: 'grand', nameArFamily: 'family' }[f.k]] || '') : '')).join('')}</div></div>`).join('');
       const inherit = meta.groups.flatMap((g) => g.fields).filter((f) => f.scope === 'both');
       view.innerHTML = `<h1>${isNew ? 'شخص جديد' : e(data.nameAr || 'شخص') + ' <span class="pill ' + ((STATUS[person.status] || [0, ''])[1]) + '">' + e((STATUS[person.status] || [person.status])[0]) + '</span>'}</h1>
+      <div class="split"><div class="main">
       <div class="card"><div class="row"><label class="f" style="min-width:260px">ملف الضبط (جهة العمل ونوع التأشيرة…)
         <select id="prof"><option value="">— من غير —</option>${profs.profiles.map((p) => `<option value="${p.id}"${String(p.id) === String(profileId) ? ' selected' : ''}>${e(p.name)}</option>`).join('')}</select></label>
         ${isNew ? '' : `<label class="f" style="min-width:200px">الحالة
@@ -168,7 +191,6 @@
         <a href="#/profiles" class="small">إدارة ملفات الضبط</a></div></div>
       <div class="card"><h2>صورة الجواز وقراءة MRZ</h2><div class="row" style="align-items:flex-start">
         <div style="min-width:240px"><input type="file" id="pasF" accept="image/jpeg,image/png,application/pdf">
-          ${pending.passport ? `<div style="margin-top:8px"><img class="thumb" src="${objUrl(pending.passport)}"></div>` : (!isNew && person.hasPassport ? `<div style="margin-top:8px"><img class="thumb" src="/api/people/${id}/file/passport?t=${Date.now()}" onerror="this.style.display='none'"></div>` : '')}
           <div class="small muted" style="margin-top:6px">${isNew ? 'اختار صورة الجواز (بتترفع أول ما تحفظ).' : 'صورة الجواز للتوثيق والقراءة (مش بتتبعت للمنصة).'}</div>
           <div class="row" style="margin-top:6px"><button class="btn small pri" id="ocrLocal">قراءة MRZ من الصورة</button></div></div>
         <div style="flex:1;min-width:280px"><label class="f">سطري MRZ (آخر سطرين في صفحة بيانات الجواز) — اتملوا لوحدهم من «قراءة MRZ من الصورة»، أو الصقهم هنا<textarea id="mrz" class="mrz" placeholder="P&lt;EGY....&#10;A12345678...."></textarea></label>
@@ -180,8 +202,10 @@
         <div><input type="file" id="phF" accept="image/jpeg,image/png"><div class="small muted" style="margin-top:6px">${isNew ? 'بتترفع أول ما تحفظ.' : ''} بتتصغّر تلقائي لو أكبر من الحد. المنصة بتفحص مواصفات الصورة (خلفية فاتحة ووش واضح).</div>${!isNew && person.hasPhoto ? '<button class="btn small danger" id="phDel" style="margin-top:6px">حذف الصورة</button>' : ''}</div></div></div>
       <div class="card"><label class="f">ملاحظات<input data-k="notes" value="${e(data.notes || '')}"></label></div>
       ${resolved ? `<div class="card"><h2>الجاهزية</h2>${resolved.ready ? '<span class="pill ok">كل البيانات المطلوبة موجودة</span>' : `<ul class="list issues">${resolved.issues.map((x) => `<li>${e(x)}</li>`).join('')}</ul>`}${resolved.warns.length ? `<ul class="list warns">${resolved.warns.map((x) => `<li>${e(x)}</li>`).join('')}</ul>` : ''}</div>` : ''}
-      <div class="row"><button class="btn pri" id="save">حفظ</button>${!isNew ? '<button class="btn pri" id="fill">املى الطلب في المنصة</button><button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>`;
+      <div class="row actions"><button class="btn pri" id="save">حفظ</button>${!isNew ? '<button class="btn pri" id="fill">املى الطلب في المنصة</button><button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>
+      </div><aside class="side">${sideHtml()}</aside></div>`;
       wire();
+      wirePv();
       overCheck();
     };
     const overCheck = () => {

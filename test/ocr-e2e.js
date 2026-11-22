@@ -25,7 +25,7 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.fill('#u', 'admin'); await page.fill('#p', 'Admin#12345'); await page.click('#go'); await page.waitForSelector('#rows');
     await page.goto(`http://127.0.0.1:${PORT}/#/people/new`); await page.waitForSelector('#pasF');
     await page.setInputFiles('#pasF', IMG);
-    await page.waitForSelector('img.thumb');
+    await page.waitForSelector('#pvImg');
     const t0 = Date.now();
     await page.click('#ocrLocal');
     await page.waitForFunction(() => document.querySelector('#mrzMsg .pill'), null, { timeout: 150000 });

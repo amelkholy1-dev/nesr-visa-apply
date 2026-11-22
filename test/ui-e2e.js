@@ -71,6 +71,10 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.goto(base + '#/people'); await page.waitForSelector('#rows .sel');
     assert.ok(await page.isHidden('#queueBtn'), 'زرار الطابور مخفي من غير تحديد');
     await page.check('#rows .sel'); assert.ok(await page.isVisible('#queueBtn'), 'زرار الطابور ظهر بعد التحديد');
+    /* صفحة الشخص: لوحة صورة الجواز جنب الحقول */
+    const firstId = await page.evaluate(async () => (await (await fetch('/api/people')).json()).people[0].id);
+    await page.goto(base + '#/people/' + firstId); await page.waitForSelector('.split .side');
+    assert.ok(await page.isVisible('.side .pv'), 'لوحة صورة الجواز ظاهرة جنب الحقول');
     await page.goto(base + '#/reports'); await page.waitForSelector('#rbody .card'); assert.ok((await page.textContent('#rbody')).includes('الوضع الحالي'));
     assert.ok((await page.getAttribute('#rx', 'href')).includes('/api/reports/export.csv'));
     await page.goto(base + '#/activity'); await page.waitForSelector('#arows tr'); assert.ok((await page.textContent('#arows')).includes('دخول'));
