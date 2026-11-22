@@ -73,7 +73,15 @@
     setStatus('نوع التأشيرة…');
     await sleep(600);
     await step('نوع التأشيرة', () => setSelect('id_visa_type', w.visa, 'نوع التأشيرة', { timeout: 6000 }));
-    for (const id of ['id_appointment_date', 'id_confirm']) { const el = byId(id); if (el) mark(el.type === 'checkbox' ? (el.closest('.checkbox') || el) : el); }
+    /* نوع الموعد: لو اختيار واحد بس ظاهر (الموعد العادي) بنضغط عليه عشان الموقع يسجّله (ساعات بيبان متعلّم وهو مش متسجّل). لو فيه أكتر من اختيار (فيه فرق سعر) بنسيبهم ليك */
+    await step('نوع الموعد', async () => {
+      const radios = [...document.querySelectorAll('input[name="appointment_type"]')]; const vis = radios.filter((r) => { const c = r.closest('.card'); return c && c.offsetParent !== null; });
+      if (vis.length === 1) { const r = vis[0]; if (!r.checked) { (r.closest('.card') || r).click(); await sleep(300); if (!r.checked) { r.checked = true; fire(r); } } note('نوع الموعد', 'ok', 'الموعد العادي'); }
+      else if (vis.length > 1) { note('نوع الموعد', 'manual', 'فيه أكتر من اختيار (بسعر مختلف): اختار بإيدك'); radios.forEach((r) => mark(r.closest('.card'))); }
+    });
+    /* الإقرار بصحة المعلومات: بإيدك (مش بنعلّمه تلقائياً هنا) */
+    const conf = byId('id_confirm'); if (conf) mark(conf.closest('.checkbox') || conf);
+    mark(byId('id_appointment_date'));
   }
 
   (async function run() {
