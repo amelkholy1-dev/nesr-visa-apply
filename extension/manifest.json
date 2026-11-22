@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "نسر الخليج — تعبئة طلب التأشيرة",
+  "description": "بيملا فورم «طلب تأشيرة» في منصة التأشيرات من نظام طلبات التأشيرات (بيانات الجواز والصورة الشخصية). الكابتشا والإقرارات والحفظ بتتم بإيدك.",
+  "version": "1.0.0",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://visa.mofa.gov.sa/*",
+    "https://*.nisrelkhaleeg.com/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://visa.mofa.gov.sa/SmartForm/*"],
+      "js": ["content-mofa.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.nisrelkhaleeg.com/*"],
+      "js": ["content-app.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

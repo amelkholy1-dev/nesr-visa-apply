@@ -1,0 +1,25 @@
+'use strict';
+/* بيشتغل جوه نظام طلبات التأشيرات: بيسمع زرار «املى الطلب» ويبعت البيانات للوسيط، وبيرجّع نتيجة الملء/رقم الطلب للصفحة. */
+(function () {
+  const VERSION = chrome.runtime.getManifest().version;
+  const post = (type, data) => window.postMessage({ source: 'nesr-visaapply-ext', type, data, version: VERSION }, window.location.origin);
+
+  window.addEventListener('message', (e) => {
+    if (e.source !== window || e.origin !== window.location.origin) return;
+    const m = e.data;
+    if (!m || m.source !== 'nesr-visaapply') return;
+    if (m.type === 'VA_PING') { post('VA_READY'); return; }
+    if (m.type === 'VA_FILL' && m.data && m.data.mofa) {
+      try {
+        chrome.runtime.sendMessage({ kind: 'open-fill', payload: { personId: String(m.data.personId || ''), name: String(m.data.name || '').slice(0, 120), mofa: m.data.mofa, issues: m.data.issues || [], warns: m.data.warns || [], photo: typeof m.data.photo === 'string' && m.data.photo.startsWith('data:image/') ? m.data.photo : '' } }, (r) => {
+          if (chrome.runtime.lastError || !r || !r.ok) post('VA_ERROR', { message: 'الإضافة اتحدّثت أو اتقفلت. اعمل تحديث للصفحة (F5) وجرّب تاني.' });
+          else post('VA_ACK', {});
+        });
+      } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
+    }
+  });
+  chrome.runtime.onMessage.addListener((msg) => { if (msg && msg.kind === 'va-result') post('VA_RESULT', msg.data); });
+  const ready = () => { post('VA_READY'); chrome.runtime.sendMessage({ kind: 'app-ready' }, (r) => { if (r && r.pending) setTimeout(() => post('VA_RESULT', r.pending), 800); }); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready); else ready();
+  setTimeout(() => post('VA_READY'), 1500); setTimeout(() => post('VA_READY'), 4000);
+})();
