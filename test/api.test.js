@@ -88,6 +88,8 @@ const api = async (method, url, body, extra = {}) => {
   // نتيجة الإضافة
   assert.strictEqual((await api('POST', `/api/people/${id}/result`, { status: 'submitted', appNumber: 'e828935966' })).status, 200);
   assert.strictEqual((await api('POST', `/api/people/${id}/result`, { status: 'submitted', appNumber: 'zzz' })).status, 400);
+  assert.strictEqual((await api('POST', `/api/people/${id}/result`, { status: 'waiting' })).status, 200);
+  assert.ok(((await api('GET', '/api/people?status=waiting')).json.people || []).some((p) => p.id === id), 'فلتر مستني تأمين الجواز');
   const list = (await api('GET', '/api/people?status=submitted')).json.people; assert.strictEqual(list.length, 1); assert.strictEqual(list[0].appNumber, 'E828935966');
   assert.strictEqual((await api('GET', '/api/stats')).json.byStatus.submitted, 1);
 

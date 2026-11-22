@@ -146,7 +146,7 @@ router.get('/:id(\\d+)/payload', async (req, res) => {
 router.post('/:id(\\d+)/result', async (req, res) => {
   try {
     const b = req.body || {}; const id = parseInt(req.params.id, 10);
-    const status = ['filled', 'submitted', 'ready', 'draft'].includes(b.status) ? b.status : null;
+    const status = ['filled', 'submitted', 'ready', 'draft', 'waiting'].includes(b.status) ? b.status : null;
     if (!status) return res.status(400).json({ error: 'حالة غير معروفة' });
     const app = b.appNumber ? String(b.appNumber).trim().toUpperCase() : null;
     if (app && !/^[A-Z]\d{6,12}$/.test(app)) return res.status(400).json({ error: 'رقم الطلب شكله غلط' });

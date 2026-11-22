@@ -5,7 +5,7 @@
   const view = $('#view');
   const e = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let me = null, meta = null, extReady = false;
-  const STATUS = { draft: ['مسودة', ''], ready: ['جاهز', 'acc'], filled: ['اتملى في المنصة', 'warn'], submitted: ['اتبعت', 'ok'] };
+  const STATUS = { draft: ['مسودة', ''], ready: ['جاهز', 'acc'], waiting: ['مستني تأمين الجواز', 'bad'], filled: ['اتملى في المنصة', 'warn'], submitted: ['اتبعت', 'ok'] };
 
   /* ===== شبكة وتنبيهات ===== */
   async function api(method, url, body) {
@@ -144,6 +144,8 @@
       view.innerHTML = `<h1>${isNew ? 'شخص جديد' : e(data.nameAr || 'شخص') + ' <span class="pill ' + ((STATUS[person.status] || [0, ''])[1]) + '">' + e((STATUS[person.status] || [person.status])[0]) + '</span>'}</h1>
       <div class="card"><div class="row"><label class="f" style="min-width:260px">ملف الضبط (جهة العمل ونوع التأشيرة…)
         <select id="prof"><option value="">— من غير —</option>${profs.profiles.map((p) => `<option value="${p.id}"${String(p.id) === String(profileId) ? ' selected' : ''}>${e(p.name)}</option>`).join('')}</select></label>
+        ${isNew ? '' : `<label class="f" style="min-width:200px">الحالة
+        <select id="stSel">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${person.status === k ? ' selected' : ''}>${e(v[0])}</option>`).join('')}</select></label>`}
         <a href="#/profiles" class="small">إدارة ملفات الضبط</a></div></div>
       <div class="card"><h2>صورة الجواز وقراءة MRZ</h2><div class="row" style="align-items:flex-start">
         <div style="min-width:240px"><input type="file" id="pasF" accept="image/jpeg,image/png,application/pdf">
@@ -171,6 +173,7 @@
         el.addEventListener('input', check); check();
       });
     };
+    const stSel = $('#stSel'); if (stSel) stSel.onchange = async () => { try { await api('POST', `/people/${id}/result`, { status: stSel.value }); person.status = stSel.value; toast('اتغيّرت الحالة', 'ok'); } catch (er) { fail(er); } };
     const save = async () => {
       data = { ...data, ...collect(view) }; profileId = $('#prof').value;
       const body = { profileId: profileId || null, data };
