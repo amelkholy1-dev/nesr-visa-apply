@@ -31,7 +31,7 @@
   const sample = (sel) => realOptions(sel).slice(0, 6).map((o) => o.textContent.trim()).join('، ');
   const chosen = {};
 
-  const report = { ok: [], manual: [], failed: [] };
+  const report = { ok: [], manual: [], failed: [], changed: [] };
   const note = (label, status, detail) => { (status === 'ok' ? report.ok : status === 'manual' ? report.manual : report.failed).push(detail ? label + ' (' + detail + ')' : label); };
   const mark = (el) => { try { if (el) { el.style.outline = '3px solid #f2a31b'; el.style.outlineOffset = '2px'; } } catch (e) { /* مش مهم */ } };
 
@@ -100,15 +100,20 @@
     let status = 0, list = [];
     try { const r = await fetch(url + '?' + new URLSearchParams(params), { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } }); status = r.status; if (r.ok) list = (await r.json()) || []; } catch (e) { /* نكتب السبب تحت */ }
     const w = String(want == null ? '' : want).trim();
-    const item = list.find((x) => String(x.Value) === w) || (!w ? list[0] : null);
+    const real = list.filter((x) => String(x.Value == null ? '' : x.Value).trim() !== '');
+    let item = real.find((x) => String(x.Value) === w) || (!w ? real[0] : null); let swapped = false;
+    /* المطلوب مش متاح والمنصة بتعرض اختيار واحد بس: بنختاره (هو الاختيار الوحيد الصالح) وبنقولك بوضوح إنه اتغيّر عن ملف الضبط */
+    if (!item && w && real.length === 1) { item = real[0]; swapped = true; }
     if (!item) {
-      const have = list.slice(0, 5).map((x) => x.Value).join('، ');
-      return note(label, 'failed', w ? 'المنصة رجّعت ' + list.length + ' اختيار' + (have ? ' (' + have + ')' : '') + ' ومفيهاش «' + w + '»' + (status && status !== 200 ? ' [رد ' + status + ']' : '') + ' — اختارها بإيدك' : 'المنصة ما رجّعتش اختيارات — اختارها بإيدك'), mark(el), false;
+      const have = real.slice(0, 6).map((x) => x.Value).join('، ');
+      return note(label, 'failed', w ? 'المنصة بتعرض ' + (have ? '«' + have + '»' : 'مفيش اختيارات') + ' ومفيهاش «' + w + '»' + (status && status !== 200 ? ' [رد ' + status + ']' : '') + ' — اختارها بإيدك' : 'المنصة ما رجّعتش اختيارات — اختارها بإيدك'), mark(el), false;
     }
     if (![...el.options].some((o) => String(o.value) === String(item.Value))) { const op = document.createElement('option'); op.value = String(item.Value); op.textContent = text(item); el.appendChild(op); }
     el.value = String(item.Value); fire(el); await sleep(700);
     if (String(el.value) !== String(item.Value)) return note(label, 'failed', 'المنصة رجّعت القيمة فاضية — اختارها بإيدك'), mark(el), false;
-    chosen[name] = String(item.Value); note(label, 'ok', 'اتحمّلت من المنصة مباشرة'); return true;
+    chosen[name] = String(item.Value); note(label, 'ok', 'اتحمّلت من المنصة مباشرة');
+    if (swapped) { report.changed.push(label + ': المطلوب «' + w + '» والمنصة بتعرض «' + item.Value + '» بس — اتختار، راجعه'); mark(el); }
+    return true;
   }
 
   /* المهنة: القايمة بتتحمّل حسب «التصنيف المهني». لو المهنة مش في التصنيف المختار بندوّر عليها في كل التصنيفات (نفس رابط المنصة) ونغيّر التصنيف */
@@ -252,7 +257,7 @@
   async function onForm(ctx) {
     const flagKey = 'va_filled_' + ctx.personId + '_' + ctx.at;
     const run = async () => {
-      report.ok = []; report.manual = []; report.failed = [];
+      report.ok = []; report.manual = []; report.failed = []; report.changed = [];
       const status = (t) => bar('<span>🦅 ' + esc(ctx.name || '') + ' — ' + esc(t) + '</span>', 'info');
       status('بيملا الفورم…');
       try { await fillAll(ctx, status); } catch (e) { report.failed.push('حصل خطأ غير متوقع: ' + String(e && e.message || e)); }
@@ -263,6 +268,7 @@
       const b = bar('<div><b>' + (bad ? '⚠️' : '✅') + ' اتملى ' + report.ok.length + ' خانة' + (report.failed.length ? ' · ' + report.failed.length + ' محتاجة راجعة' : '') + '</b> — دلوقتي:</div>' +
         '<ol style="margin:4px 18px;padding:0"><li>راجع الخانات اللي حواليها إطار برتقالي</li><li>' + (ctx.declared ? 'الإقرارات اتعلّمت. اكتب الكابتشا' : 'علّم على الإقرارات واكتب الكابتشا') + '</li><li>دوس «حفظ»</li></ol>' +
         (ctx.issues.length ? '<div>⛔ في النظام:</div>' + list(ctx.issues) : '') + (report.failed.length ? '<div>❌ مش اتملى:</div>' + list(report.failed) : '') +
+        (report.changed.length ? '<div>⚠️ اتغيّر عن ملف الضبط (راجعه):</div>' + list(report.changed) : '') +
         (report.manual.length ? '<div>✋ فاضي في النظام (اكتبه بإيدك):</div>' + list(report.manual) : '') + (ctx.warns.length ? '<div>ℹ️</div>' + list(ctx.warns) : '') +
         queueHtml(ctx) + '<div style="margin-top:6px"><button id="nesr-va-again" style="background:#fff;color:#1d4486;border:0;border-radius:8px;padding:6px 12px;font:700 12px Tahoma;cursor:pointer">املى تاني</button> <button id="nesr-va-hide" style="background:#ffffff33;color:#fff;border:1px solid #fff6;border-radius:8px;padding:6px 12px;font:700 12px Tahoma;cursor:pointer">إخفاء</button></div>', bad ? 'warn' : 'ok');
       wireNext(b);

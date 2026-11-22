@@ -58,7 +58,7 @@ const MOFA = {
   let loggedIn = true;
   await ctx.route('https://visa.mofa.gov.sa/**', (r) => {
     const rq = r.request();
-    if (/\/Base\/GetEntryDurations/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ Value: 365, Text: '365' }]) });
+    if (/\/Base\/GetEntryDurations/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(global.__only90 ? [{ Value: '', Text: '' }, { Value: 90, Text: '90' }] : [{ Value: 365, Text: '365' }]) });
     if (/\/Base\/GetResidenceDurations/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ Value: 90, Text: '90' }]) });
     if (/GetOccupationsByClassificationId/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(/jobClassificationId=832/.test(rq.url()) ? [{ Value: 8321, Text: 'سائق سيارة' }, { Value: 8322, Text: 'سائق حافلة' }] : [{ Value: 1431, Text: 'مدير فندق' }]) });
     const html = (b) => r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body>' + b + '</body>' });
@@ -142,6 +142,13 @@ const MOFA = {
   await tab.waitForFunction(() => { const b = document.getElementById('nesr-va-bar'); return b && /اتملى \d+ خانة/.test(b.innerText) && !!document.getElementById('nesr-va-again'); }, null, { timeout: 150000 }).catch(async (e) => { console.log('BAR:', await tab.evaluate(() => (document.getElementById('nesr-va-bar') || {}).innerText)); throw e; });
   const s5 = await tab.evaluate(() => ({ Days: document.querySelector('[name="Number_Entry_Day"]').value, Res: document.querySelector('[name="RESIDENCY_IN_KSA"]').value }));
   assert.deepStrictEqual([s5.Days, s5.Res], ['365', '90'], 'اتحمّلوا من المنصة مباشرة: ' + JSON.stringify(s5));
+  /* سيناريو 6: المنصة بتعرض 90 يوم بس (مش 365) ← الإضافة تختار الاختيار الوحيد وتنبّه إنه اتغيّر */
+  global.__only90 = true;
+  await app.evaluate((d) => window.fill(d), { personId: '14', name: 'تجربة 90', mofa: MOFA, issues: [], warns: [], photo: PHOTO });
+  await tab.waitForTimeout(3000);
+  await tab.waitForFunction(() => { const b = document.getElementById('nesr-va-bar'); return b && /اتملى \d+ خانة/.test(b.innerText) && !!document.getElementById('nesr-va-again'); }, null, { timeout: 150000 });
+  const s6 = await tab.evaluate(() => ({ Days: document.querySelector('[name="Number_Entry_Day"]').value, bar: document.getElementById('nesr-va-bar').innerText.replace(/\s+/g, ' ') }));
+  assert.strictEqual(s6.Days, '90'); assert.ok(s6.bar.includes('اتغيّر عن ملف الضبط') && s6.bar.includes('«365»'), 'التنبيه: ' + s6.bar);
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });
