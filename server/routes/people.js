@@ -9,6 +9,7 @@ const F = require('../fields');
 const mrz = require('../mrz');
 const names = require('../names');
 const ocr = require('../ocr');
+const audit = require('../audit');
 
 const router = express.Router();
 const json = (v) => { try { return JSON.parse(v || '{}') || {}; } catch (e) { return {}; } };
@@ -27,7 +28,8 @@ async function loadProfile(id) {
 function brief(row, profile) {
   const r = F.resolve(json(row.data), profile && profile.data, { personalPhoto: row.personal_photo, personalPhotoSize: sizeOf(row.id, row.personal_photo), passportImage: row.passport_image });
   return { id: row.id, name: row.name_ar, passportNo: row.passport_no, status: row.status, profileId: row.profile_id, profileName: profile ? profile.name : '',
-    appNumber: row.app_number, hasPhoto: !!row.personal_photo, hasPassport: !!row.passport_image, issues: r.issues.length, ready: r.ready, updatedAt: row.updated_at, filledAt: row.filled_at };
+    appNumber: row.app_number, hasPhoto: !!row.personal_photo, hasPassport: !!row.passport_image, issues: r.issues.length, ready: r.ready, updatedAt: row.updated_at, filledAt: row.filled_at,
+    expiry: F.expiryInfo(json(row.data).expiryDate, json(row.data).expectedEntryDate || (profile && profile.data && profile.data.expectedEntryDate)) };
 }
 
 router.get('/', async (req, res) => {
@@ -63,6 +65,7 @@ async function save(req, res, id) {
     data.passportNo = passportNo || data.passportNo;
     if (id) {
       await db.query('UPDATE people SET profile_id = ?, name_ar = ?, passport_no = ?, data = ? WHERE id = ?', [profileId, nameAr, passportNo, JSON.stringify(data), id]);
+      audit.log(req, 'update', id, nameAr, passportNo);
       return res.json({ ok: true, id });
     }
     if (passportNo) {
@@ -70,6 +73,7 @@ async function save(req, res, id) {
       if (dup && !b.allowDuplicate) return res.status(409).json({ error: `رقم الجواز ده متسجّل قبل كده (${dup.name_ar || '#' + dup.id})`, duplicateId: dup.id });
     }
     const r = await db.query('INSERT INTO people (profile_id, name_ar, passport_no, data, created_by) VALUES (?, ?, ?, ?, ?)', [profileId, nameAr, passportNo, JSON.stringify(data), req.user.id]);
+    audit.log(req, b.bulk ? 'bulk' : 'create', r.insertId, nameAr, b.bulk ? 'رفع جماعي: ' + passportNo : passportNo);
     res.json({ ok: true, id: r.insertId });
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
@@ -79,10 +83,11 @@ router.put('/:id(\\d+)', (req, res) => save(req, res, parseInt(req.params.id, 10
 router.delete('/:id(\\d+)', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const row = (await db.query('SELECT id, created_by FROM people WHERE id = ?', [id]))[0];
+    const row = (await db.query('SELECT id, created_by, name_ar, passport_no FROM people WHERE id = ?', [id]))[0];
     if (!row) return res.status(404).json({ error: 'الشخص مش موجود' });
     if (req.user.role !== 'admin' && row.created_by !== req.user.id) return res.status(403).json({ error: 'الحذف للمدير أو لمن أضافه' });
     await db.query('DELETE FROM people WHERE id = ?', [id]);
+    audit.log(req, 'delete', id, row.name_ar, row.passport_no);
     fs.rmSync(peopleDir(id), { recursive: true, force: true });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -107,6 +112,7 @@ router.post('/:id(\\d+)/files/:kind(photo|passport)', upload.single('file'), asy
     const old = (await db.query(`SELECT ${col} AS f FROM people WHERE id = ?`, [id]))[0].f;
     await db.query(`UPDATE people SET ${col} = ? WHERE id = ?`, [name, id]);
     if (old && old !== name) { try { fs.unlinkSync(fullPath(id, old)); } catch (e) { /* مش مهم */ } }
+    audit.log(req, kind, id, '', name);
     res.json({ ok: true, file: name, size: f.size });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -138,6 +144,7 @@ router.get('/:id(\\d+)/payload', async (req, res) => {
     if (!row) return res.status(404).json({ error: 'الشخص مش موجود' });
     const profile = await loadProfile(row.profile_id);
     const r = F.resolve(json(row.data), profile && profile.data, { personalPhoto: row.personal_photo, personalPhotoSize: sizeOf(row.id, row.personal_photo), passportImage: row.passport_image });
+    audit.log(req, 'fill', row.id, row.name_ar, '');
     res.json({ personId: row.id, name: row.name_ar, mofa: r.mofa, issues: r.issues, warns: r.warns, ready: r.ready, hasPhoto: !!row.personal_photo });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -151,6 +158,8 @@ router.post('/:id(\\d+)/result', async (req, res) => {
     const app = b.appNumber ? String(b.appNumber).trim().toUpperCase() : null;
     if (app && !/^[A-Z]\d{6,12}$/.test(app)) return res.status(400).json({ error: 'رقم الطلب شكله غلط' });
     await db.query(`UPDATE people SET status = ?, app_number = COALESCE(?, app_number), filled_at = IF(? IN ('filled','submitted'), NOW(), filled_at) WHERE id = ?`, [status, app, status, id]);
+    const pn = (await db.query('SELECT name_ar FROM people WHERE id = ?', [id]))[0];
+    audit.log(req, status === 'filled' || status === 'submitted' ? status : 'status', id, pn ? pn.name_ar : '', app || status);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

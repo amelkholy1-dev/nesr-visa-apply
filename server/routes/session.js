@@ -2,6 +2,7 @@
 const express = require('express');
 const db = require('../db');
 const auth = require('../auth');
+const audit = require('../audit');
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.post('/login', async (req, res) => {
     if (!ok) { auth.failed(req, username); return res.status(401).json({ error: 'اسم المستخدم أو كلمة السر غلط' }); }
     auth.succeeded(req, username);
     auth.setCookie(req, res, auth.issue(u));
+    audit.log({ user: { id: u.id, name: u.display_name || u.username } }, 'login', null, '', '');
     res.json({ ok: true, user: { id: u.id, username: u.username, name: u.display_name || u.username, role: u.role } });
   } catch (e) { res.status(500).json({ error: 'تعذر الدخول: ' + e.message }); }
 });

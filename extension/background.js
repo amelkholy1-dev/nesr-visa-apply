@@ -33,6 +33,16 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       if (!t) { await chrome.storage.local.set({ pendingResult: data }); reply({ ok: true, delivered: false }); return; }
       try { await chrome.tabs.sendMessage(t.id, { kind: 'va-result', data }); reply({ ok: true, delivered: true }); }
       catch (e) { await chrome.storage.local.set({ pendingResult: data }); reply({ ok: true, delivered: false }); }
+    } else if (msg.kind === 'next') {
+      /* الطابور: الشخص التالي بيتطلب من صفحة النظام (هي اللي معاها الصلاحية تجيب بياناته) */
+      const key = 'ctx_' + (sender.tab && sender.tab.id);
+      const o = await store.get(key); const ctx = o[key] || {};
+      const queue = Array.isArray(ctx.queue) ? ctx.queue : [];
+      if (!queue.length) { reply({ ok: false, error: 'الطابور خلص' }); return; }
+      const t = await findAppTab(ctx.originTabId);
+      if (!t) { reply({ ok: false, error: 'افتح صفحة نظام طلبات التأشيرات في تبويب (visa.nisrelkhaleeg.com) وجرّب تاني' }); return; }
+      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-next', data: { personId: queue[0].id, queue: queue.slice(1), total: ctx.queueTotal || (queue.length + 1) } }); reply({ ok: true }); }
+      catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ. اعمل F5 فيها وجرّب تاني' }); }
     } else if (msg.kind === 'app-ready') {
       const o = await chrome.storage.local.get('pendingResult');
       if (o.pendingResult) { await chrome.storage.local.remove('pendingResult'); reply({ pending: o.pendingResult }); } else reply({ pending: null });

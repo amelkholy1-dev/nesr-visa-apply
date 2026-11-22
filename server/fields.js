@@ -131,6 +131,7 @@ function resolve(person, profile, files = {}) {
   if (mofa.Personal_Email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mofa.Personal_Email)) issues.push('البريد الإلكتروني غير صحيح');
   if (v.expiryDate && v.issueDate && v.expiryDate <= v.issueDate) issues.push('تاريخ الانتهاء قبل الإصدار');
   if (v.expiryDate && new Date(v.expiryDate) < new Date()) issues.push('الجواز منتهي');
+  { const ex = expiryInfo(v.expiryDate, v.expectedEntryDate); if (!ex.expired && ex.short) warns.push('الجواز ينتهي بعد ' + ex.days + ' يوم، أقل من 6 شهور من تاريخ الدخول: المنصة غالباً هترفضه'); }
   if (!files.personalPhoto) issues.push('الصورة الشخصية ناقصة');
   else if (files.personalPhotoSize && files.personalPhotoSize > 1024 * 1024) issues.push('الصورة الشخصية أكبر من 1 ميجا');
   if (!files.passportImage) warns.push('صورة الجواز مش مرفوعة (مش بتتبعت للمنصة، للتوثيق بس)');
@@ -142,4 +143,14 @@ function resolve(person, profile, files = {}) {
   return { values: v, mofa, issues, warns, ready: issues.length === 0 };
 }
 
-module.exports = { meta, resolve, sanitizeProfile, sanitizePerson, PROFILE_KEYS, PERSON_KEYS, OPT, mofaDate };
+/* الجواز لازم يكون صالح 6 شهور على الأقل وقت الدخول: بنقارن بتاريخ الدخول المتوقع (أو النهارده لو مش موجود) */
+function expiryInfo(expiryDate, entryDate, now = new Date()) {
+  if (!expiryDate) return { days: null, short: false, expired: false };
+  const exp = new Date(expiryDate + 'T00:00:00Z'); if (isNaN(exp)) return { days: null, short: false, expired: false };
+  const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  let base = today; const en = entryDate ? new Date(entryDate + 'T00:00:00Z') : null; if (en && !isNaN(en) && en > today) base = en;
+  const limit = new Date(base); limit.setUTCMonth(limit.getUTCMonth() + 6);
+  return { days: Math.round((exp - today) / 86400000), short: exp < limit, expired: exp < today };
+}
+
+module.exports = { expiryInfo, meta, resolve, sanitizeProfile, sanitizePerson, PROFILE_KEYS, PERSON_KEYS, OPT, mofaDate };

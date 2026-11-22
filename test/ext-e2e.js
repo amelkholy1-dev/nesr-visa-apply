@@ -31,9 +31,9 @@ const MOCK = `<script>
 </script>`;
 
 const appHtml = `<!doctype html><meta charset=utf-8><body><script>
-window.got=[];window.ready=false;window.acks=0;
+window.got=[];window.nexts=[];window.ready=false;window.acks=0;
 window.addEventListener('message',function(e){ if(e.source!==window)return; var m=e.data; if(!m||m.source!=='nesr-visaapply-ext')return;
- if(m.type==='VA_READY')window.ready=true; if(m.type==='VA_ACK')window.acks++; if(m.type==='VA_RESULT')window.got.push(m.data); if(m.type==='VA_ERROR')window.got.push({error:m.data.message}); });
+ if(m.type==='VA_READY')window.ready=true; if(m.type==='VA_ACK')window.acks++; if(m.type==='VA_RESULT')window.got.push(m.data); if(m.type==='VA_ERROR')window.got.push({error:m.data.message}); if(m.type==='VA_NEXT')window.nexts.push(m.data); });
 window.fill=function(d){ window.postMessage({source:'nesr-visaapply',type:'VA_FILL',data:d},location.origin); };
 window.postMessage({source:'nesr-visaapply',type:'VA_PING'},location.origin);
 </script></body>`;
@@ -121,6 +121,17 @@ const MOFA = {
   console.log(JSON.stringify(s3));
   assert.deepStrictEqual([s3.Class, s3.Job, s3.Come, s3.Port, s3.Days, s3.Res], ['832', '8322', '2', '5', '365', '90']);
   assert.ok(s3.endorse && s3.privacy, 'الإقرارين اتعلّموا بالتفعيل'); assert.strictEqual(s3.cap, '', 'الكابتشا لسه فاضية');
+  /* سيناريو 4: طابور — بعد «حفظ» يظهر زرار «الشخص التالي» والنظام يستلم طلب الشخص التالي مع باقي الطابور */
+  await app.evaluate((d) => window.fill(d), { personId: '10', name: 'أول واحد', mofa: MOFA, issues: [], warns: [], photo: PHOTO, queue: [{ id: '11', name: 'تاني واحد' }, { id: '12', name: 'تالت واحد' }], queueTotal: 3 });
+  await tab.waitForTimeout(3000);
+  await tab.waitForFunction(() => { const b = document.getElementById('nesr-va-bar'); return b && /اتملى \d+ خانة/.test(b.innerText) && b.innerText.includes('تاني واحد') && !!document.getElementById('nesr-va-next'); }, null, { timeout: 90000 });
+  assert.ok((await tab.evaluate(() => document.getElementById('nesr-va-bar').innerText)).includes('الشخص 1 من 3'), 'ترقيم الطابور');
+  await tab.evaluate(() => { window.location.href = '/SmartForm/Result'; });
+  await tab.waitForFunction(() => document.getElementById('nesr-va-bar') && document.getElementById('nesr-va-bar').innerText.includes('E123456789') && !!document.getElementById('nesr-va-next'), null, { timeout: 20000 });
+  await tab.click('#nesr-va-next');
+  await app.waitForFunction(() => window.nexts.length > 0, null, { timeout: 10000 });
+  const nx = await app.evaluate(() => window.nexts[0]);
+  assert.strictEqual(nx.personId, '11'); assert.deepStrictEqual(nx.queue.map((x) => x.id), ['12']); assert.strictEqual(nx.total, 3);
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

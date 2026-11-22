@@ -216,6 +216,17 @@
   }
   const list = (arr) => (arr.length ? '<ul style="margin:4px 18px;padding:0">' + arr.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '');
 
+  /* الطابور: بيظهر لو أنت اخترت أكتر من شخص. «الشخص التالي» بيفتح فورم جديد ويملاه */
+  const queueHtml = (ctx) => {
+    const q = Array.isArray(ctx.queue) ? ctx.queue : []; if (!q.length) return '';
+    const total = ctx.queueTotal || (q.length + 1); const idx = total - q.length;
+    return '<div style="margin-top:6px;padding:6px 8px;background:#ffffff22;border-radius:8px">📋 الشخص ' + idx + ' من ' + total + ' — التالي: <b>' + esc(q[0].name) + '</b> (باقي ' + q.length + ') <button id="nesr-va-next" style="background:#fff;color:#1d4486;border:0;border-radius:8px;padding:5px 10px;font:700 12px Tahoma;cursor:pointer;margin-inline-start:6px">الشخص التالي</button></div>';
+  };
+  const wireNext = (b) => {
+    const n = b && b.querySelector('#nesr-va-next'); if (!n) return;
+    n.addEventListener('click', async () => { n.disabled = true; n.textContent = 'بيجهّز…'; const r = await send({ kind: 'next' }); if (!r || !r.ok) { n.disabled = false; n.textContent = 'الشخص التالي'; alert((r && r.error) || 'مش قادر أفتح الشخص التالي'); } });
+  };
+
   async function onForm(ctx) {
     const flagKey = 'va_filled_' + ctx.personId + '_' + ctx.at;
     const run = async () => {
@@ -231,7 +242,8 @@
         '<ol style="margin:4px 18px;padding:0"><li>راجع الخانات اللي حواليها إطار برتقالي</li><li>' + (ctx.declared ? 'الإقرارات اتعلّمت. اكتب الكابتشا' : 'علّم على الإقرارات واكتب الكابتشا') + '</li><li>دوس «حفظ»</li></ol>' +
         (ctx.issues.length ? '<div>⛔ في النظام:</div>' + list(ctx.issues) : '') + (report.failed.length ? '<div>❌ مش اتملى:</div>' + list(report.failed) : '') +
         (report.manual.length ? '<div>✋ فاضي في النظام (اكتبه بإيدك):</div>' + list(report.manual) : '') + (ctx.warns.length ? '<div>ℹ️</div>' + list(ctx.warns) : '') +
-        '<div style="margin-top:6px"><button id="nesr-va-again" style="background:#fff;color:#1d4486;border:0;border-radius:8px;padding:6px 12px;font:700 12px Tahoma;cursor:pointer">املى تاني</button> <button id="nesr-va-hide" style="background:#ffffff33;color:#fff;border:1px solid #fff6;border-radius:8px;padding:6px 12px;font:700 12px Tahoma;cursor:pointer">إخفاء</button></div>', bad ? 'warn' : 'ok');
+        queueHtml(ctx) + '<div style="margin-top:6px"><button id="nesr-va-again" style="background:#fff;color:#1d4486;border:0;border-radius:8px;padding:6px 12px;font:700 12px Tahoma;cursor:pointer">املى تاني</button> <button id="nesr-va-hide" style="background:#ffffff33;color:#fff;border:1px solid #fff6;border-radius:8px;padding:6px 12px;font:700 12px Tahoma;cursor:pointer">إخفاء</button></div>', bad ? 'warn' : 'ok');
+      wireNext(b);
       const again = b.querySelector('#nesr-va-again'); if (again) again.addEventListener('click', () => { try { sessionStorage.removeItem(flagKey); } catch (e) { /* مش مهم */ } run(); });
       const hide = b.querySelector('#nesr-va-hide'); if (hide) hide.addEventListener('click', () => b.remove());
       send({ kind: 'result', data: { status: 'filled', filled: report.ok.length, failed: report.failed.length } });
@@ -253,7 +265,7 @@
     if (near) {
       const app = near[1].toUpperCase();
       const r = await send({ kind: 'result', data: { status: 'submitted', appNumber: app } });
-      bar('<span>✅ رقم الطلب <b dir="ltr">' + esc(app) + '</b> ' + (r && r.delivered ? 'اتبعت لنظام طلبات التأشيرات.' : 'اتحفظ وهيتبعت أول ما تفتح النظام.') + '</span>', 'ok');
+      wireNext(bar('<span>✅ رقم الطلب <b dir="ltr">' + esc(app) + '</b> ' + (r && r.delivered ? 'اتبعت لنظام طلبات التأشيرات.' : 'اتحفظ وهيتبعت أول ما تفتح النظام.') + '</span>' + queueHtml(ctx), 'ok'));
     } else {
       bar('<span>الصفحة دي مش فورم ومفيهاش رقم طلب واضح. لو الطلب اتبعت، انسخ رقم الطلب وسجّله في النظام بإيدك.</span>', 'warn');
     }

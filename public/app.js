@@ -30,6 +30,7 @@
     if (m.type === 'VA_ACK') { bridge.pending.splice(0).forEach((f) => f(true)); }
     if (m.type === 'VA_ERROR') { toast(m.data && m.data.message || 'مشكلة في الإضافة', 'err'); bridge.pending.splice(0).forEach((f) => f(false)); }
     if (m.type === 'VA_RESULT' && m.data) onResult(m.data);
+    if (m.type === 'VA_NEXT' && m.data && m.data.personId) fillRequest(m.data.personId, m.data.queue || [], m.data.total || 0, true);
   });
   const ping = () => window.postMessage({ source: 'nesr-visaapply', type: 'VA_PING' }, location.origin);
   function setExt() { const p = $('#extState'); p.className = 'pill ' + (extReady ? 'ok' : 'warn'); p.textContent = extReady ? 'الإضافة شغّالة' : 'الإضافة مش متركّبة'; }
@@ -41,15 +42,15 @@
       if (/^#\/(people)?$/.test(location.hash) || location.hash === '#/people') render();
     } catch (er) { fail(er); }
   }
-  async function fillRequest(id) {
+  async function fillRequest(id, queue, total, quiet) {
     try {
       const pl = await api('GET', `/people/${id}/payload`);
       if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
       if (!extReady) return toast('إضافة Chrome مش متركّبة. من «الإضافة» نزّلها وركّبها الأول.', 'err');
       let photo = '';
       if (pl.hasPhoto) { const blob = await (await fetch(`/api/people/${id}/file/photo`, { credentials: 'same-origin' })).blob(); photo = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(blob); }); }
-      if (pl.issues.length && !confirm('فيه نواقص:\n- ' + pl.issues.join('\n- ') + '\n\nتفتح الفورم وتملا اللي موجود؟')) return;
-      const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_FILL', data: { personId: id, name: pl.name, mofa: pl.mofa, issues: pl.issues, warns: pl.warns, photo } }, location.origin); setTimeout(() => res(false), 4000); });
+      if (!quiet && pl.issues.length && !confirm('فيه نواقص:\n- ' + pl.issues.join('\n- ') + '\n\nتفتح الفورم وتملا اللي موجود؟')) return;
+      const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_FILL', data: { personId: id, name: pl.name, mofa: pl.mofa, issues: pl.issues, warns: pl.warns, photo, queue: queue || [], queueTotal: total || 0 } }, location.origin); setTimeout(() => res(false), 4000); });
       if (!ok) toast('الإضافة ما ردّتش. اعمل F5 للصفحة وجرّب تاني (أو Reload للإضافة).', 'err'); else toast('اتفتح فورم المنصة وبيتملي…', 'ok');
     } catch (er) { fail(er); }
   }
@@ -114,18 +115,36 @@
         <input id="q" placeholder="بحث بالاسم أو رقم الجواز" value="${e(state.q || '')}" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:220px">
         <select id="st" style="padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">كل الحالات</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${state.st === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select>
         <select id="pf" style="padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">كل ملفات الضبط</option>${profs.profiles.map((p) => `<option value="${p.id}"${String(state.pf) === String(p.id) ? ' selected' : ''}>${e(p.name)}</option>`).join('')}</select>
+        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exOnly"${state.ex ? ' checked' : ''}> جوازات قريبة الانتهاء</label>
+        <button class="btn pri" id="queueBtn" hidden>املى المحدّدين بالتتابع</button>
         <a href="#/people/new" class="btn pri" style="margin-inline-start:auto;text-decoration:none">+ شخص جديد</a></div></div>
-      <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>الاسم</th><th>الجواز</th><th>ملف الضبط</th><th>الحالة</th><th>النواقص</th><th>رقم الطلب</th><th></th></tr></thead><tbody id="rows"><tr><td colspan="7" class="muted">جاري التحميل…</td></tr></tbody></table></div>`;
+      <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th style="width:30px"><input type="checkbox" id="selAll" title="تحديد الكل"></th><th>الاسم</th><th>الجواز</th><th>ملف الضبط</th><th>الحالة</th><th>النواقص</th><th>رقم الطلب</th><th></th></tr></thead><tbody id="rows"><tr><td colspan="7" class="muted">جاري التحميل…</td></tr></tbody></table></div>`;
+    let shown = [];
+    const selectedIds = () => [...view.querySelectorAll('.sel:checked')].map((c) => c.dataset.id);
+    const syncQueue = () => { const n = selectedIds().length; const b = $('#queueBtn'); if (!b) return; b.hidden = n === 0; b.textContent = `املى المحدّدين بالتتابع (${n})`; };
     const load = async () => {
-      const st = { q: $('#q').value, st: $('#st').value, pf: $('#pf').value }; sessionStorage.setItem('peopleFilter', JSON.stringify(st));
+      const st = { q: $('#q').value, st: $('#st').value, pf: $('#pf').value, ex: $('#exOnly').checked }; sessionStorage.setItem('peopleFilter', JSON.stringify(st));
       const r = await api('GET', `/people?q=${encodeURIComponent(st.q)}&status=${st.st}&profile=${st.pf}`);
-      $('#rows').innerHTML = r.people.map((p) => `<tr class="click" data-id="${p.id}"><td><b>${e(p.name || '—')}</b></td><td dir="ltr" style="text-align:right">${e(p.passportNo)}</td><td>${e(p.profileName || '—')}</td>
+      shown = r.people.filter((p) => !st.ex || (p.expiry && (p.expiry.short || p.expiry.expired)));
+      $('#selAll').checked = false; syncQueue();
+      $('#rows').innerHTML = shown.map((p) => `<tr class="click" data-id="${p.id}"><td><input type="checkbox" class="sel" data-id="${p.id}"></td><td><b>${e(p.name || '—')}</b></td><td dir="ltr" style="text-align:right">${e(p.passportNo)}</td><td>${e(p.profileName || '—')}</td>
         <td><span class="pill ${STATUS[p.status] ? STATUS[p.status][1] : ''}">${e((STATUS[p.status] || [p.status])[0])}</span></td>
-        <td>${p.ready ? '<span class="pill ok">كامل</span>' : `<span class="pill bad">${p.issues} ناقص</span>`} ${p.hasPhoto ? '📷' : '<span class="muted" title="مفيش صورة شخصية">—</span>'}</td>
-        <td dir="ltr" style="text-align:right">${e(p.appNumber || '')}</td><td><button class="btn small pri fill" data-id="${p.id}">املى الطلب</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">مفيش أشخاص.</td></tr>';
+        <td>${p.ready ? '<span class="pill ok">كامل</span>' : `<span class="pill bad">${p.issues} ناقص</span>`} ${p.expiry && p.expiry.expired ? '<span class="pill bad">جواز منتهي</span>' : p.expiry && p.expiry.short ? `<span class="pill warn" title="أقل من 6 شهور من تاريخ الدخول">ينتهي بعد ${p.expiry.days} يوم</span>` : ''} ${p.hasPhoto ? '📷' : '<span class="muted" title="مفيش صورة شخصية">—</span>'}</td>
+        <td dir="ltr" style="text-align:right">${e(p.appNumber || '')}</td><td><button class="btn small pri fill" data-id="${p.id}">املى الطلب</button></td></tr>`).join('') || '<tr><td colspan="8" class="muted">مفيش أشخاص.</td></tr>';
     };
-    ['q', 'st', 'pf'].forEach((i) => { $('#' + i).oninput = () => load().catch(fail); });
-    view.onclick = (ev) => { const b = ev.target.closest('.fill'); if (b) { ev.stopPropagation(); return fillRequest(b.dataset.id); } const tr = ev.target.closest('tr.click'); if (tr) location.hash = '#/people/' + tr.dataset.id; };
+    ['q', 'st', 'pf', 'exOnly'].forEach((i) => { $('#' + i).oninput = () => load().catch(fail); });
+    $('#selAll').onchange = () => { view.querySelectorAll('.sel').forEach((c) => { c.checked = $('#selAll').checked; }); syncQueue(); };
+    $('#queueBtn').onclick = async () => {
+      const ids = selectedIds(); if (!ids.length) return;
+      const items = ids.map((id) => { const p = shown.find((x) => String(x.id) === String(id)) || {}; return { id, name: p.name || '#' + id, ready: !!p.ready }; });
+      const notReady = items.filter((x) => !x.ready).length;
+      if (notReady && !confirm(`${notReady} من المحدّدين ناقصين بيانات (هيتملي اللي موجود بس). تكمّل؟`)) return;
+      if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
+      if (!extReady) return toast('إضافة Chrome مش متركّبة.', 'err');
+      toast(`بدأ طابور ${items.length} شخص. بعد ما تحفظ كل واحد دوس «الشخص التالي» في المنصة.`, 'ok');
+      fillRequest(items[0].id, items.slice(1).map((x) => ({ id: x.id, name: x.name })), items.length, true);
+    };
+    view.onclick = (ev) => { if (ev.target.classList.contains('sel')) { syncQueue(); return; } if (ev.target.id === 'selAll') return; const b = ev.target.closest('.fill'); if (b) { ev.stopPropagation(); return fillRequest(b.dataset.id); } const tr = ev.target.closest('tr.click'); if (tr) location.hash = '#/people/' + tr.dataset.id; };
     await load();
   }
 
@@ -260,6 +279,99 @@
     draw();
   }
 
+  /* ===== رفع جماعي لصور الجوازات ===== */
+  async function readMrzFromBlob(blob, prog) {
+    const rank = { high: 3, medium: 2, low: 1 }; let best = null; let extras = {}; let guess = {};
+    if (meta.ocr) {
+      try {
+        const fd = new FormData(); fd.append('file', blob, 'p.jpg'); const r = await api('POST', '/people/ocr', fd);
+        if (r.mrz) { extras = r.mrz.suggest || {}; guess = r.mrz.guess || {}; if (r.mrzOk) best = r.mrz; }
+      } catch (er) { /* نكمّل بالقراءة المحلية */ }
+    }
+    if (!best || best.confidence !== 'high') {
+      try {
+        const texts = await window.MrzOcr.read(blob, prog);
+        for (const t of texts) { try { const r = await api('POST', '/people/mrz', { text: t }); if (!best || rank[r.confidence] > rank[best.confidence]) { best = r; guess = r.guess || guess; } if (r.confidence === 'high') break; } catch (er) { /* مفيش MRZ في النص ده */ } }
+      } catch (er) { /* محرك القراءة فشل */ }
+    }
+    if (!best && !extras.nameAr) return null;
+    const sug = { ...extras }; Object.entries((best && best.suggest) || {}).forEach(([k, v]) => { if (v) sug[k] = v; });
+    if (!sug.issueDate && guess.issueDate) sug.issueDate = guess.issueDate;
+    return { confidence: best ? best.confidence : 'low', suggest: sug };
+  }
+
+  async function pageBulk() {
+    const profs = (await api('GET', '/profiles')).profiles;
+    view.innerHTML = `<h1>رفع جماعي لصور الجوازات</h1>
+      <p class="muted">اختار صور جوازات كتير مرة واحدة. النظام بيقرا سطري MRZ من كل صورة، ويعمل لكل واحد شخص جديد (الاسم الإنجليزي، رقم الجواز، التواريخ، الجنس) وبيحفظ صورة الجواز. الاسم العربي ومكان الميلاد والصورة الشخصية بتكمّلهم بعدين من صفحة كل شخص. مفيش حاجة بتتبعت للمنصة هنا.</p>
+      <div class="card"><div class="row">
+        <label class="f" style="min-width:260px">ملف الضبط للكل<select id="bp">${profs.map((p) => `<option value="${p.id}"${p.isDefault ? ' selected' : ''}>${e(p.name)}</option>`).join('') || '<option value="">— من غير —</option>'}</select></label>
+        <label class="f">صور الجوازات<input type="file" id="bf" accept="image/jpeg,image/png" multiple></label>
+        <button class="btn pri" id="bgo">ابدأ القراءة والتسجيل</button></div>
+        <div id="bsum" class="muted" style="margin-top:8px"></div></div>
+      <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>م</th><th>الصورة</th><th>النتيجة</th><th>الشخص</th></tr></thead><tbody id="brows"><tr><td colspan="4" class="muted">اختار الصور وادوس ابدأ.</td></tr></tbody></table></div>`;
+    let running = false;
+    $('#bgo').onclick = async () => {
+      const files = [...$('#bf').files]; if (!files.length) return toast('اختار صور الأول', 'err'); if (running) return; running = true; $('#bgo').disabled = true;
+      $('#brows').innerHTML = files.map((f, i) => `<tr id="br${i}"><td>${i + 1}</td><td dir="ltr" style="text-align:right">${e(f.name)}</td><td class="bs">في الطابور</td><td class="bl"></td></tr>`).join('');
+      let ok = 0, dup = 0, bad = 0; const set = (i, t, link, kind) => { const r = $('#br' + i); if (!r) return; r.querySelector('.bs').innerHTML = `<span class="pill ${kind || ''}">${e(t)}</span>`; if (link) r.querySelector('.bl').innerHTML = link; };
+      const sum = () => { $('#bsum').textContent = `تم: ${ok} · مكرر: ${dup} · فشل: ${bad} · الباقي: ${files.length - ok - dup - bad}`; };
+      for (let i = 0; i < files.length; i++) {
+        sum();
+        try {
+          set(i, 'بيجهّز الصورة…', '', 'warn');
+          const img = await compress(files[i], 3.5 * 1048576, 2200);
+          set(i, 'بيقرا الجواز…', '', 'warn');
+          const r = await readMrzFromBlob(img, (m) => { if (m.status === 'recognizing text' && typeof m.progress === 'number') set(i, 'بيقرا… ' + Math.round(m.progress * 100) + '%', '', 'warn'); });
+          if (!r || !r.suggest.passportNo) { bad++; set(i, 'ما اتقراش — صورة مش واضحة. ضيفه يدوي', '', 'bad'); continue; }
+          const created = await api('POST', '/people', { profileId: $('#bp').value || null, data: r.suggest, bulk: true }).catch((er) => er);
+          if (created && created.status === 409) { dup++; set(i, 'مكرر: ' + (r.suggest.passportNo || ''), `<a href="#/people/${created.data.duplicateId}">فتح الموجود</a>`, 'warn'); continue; }
+          if (created instanceof Error) throw created;
+          const fd = new FormData(); fd.append('file', img); await api('POST', `/people/${created.id}/files/passport`, fd);
+          ok++; set(i, r.confidence === 'high' ? 'اتسجّل (دقة عالية)' : 'اتسجّل — راجع البيانات (دقة ' + (r.confidence === 'medium' ? 'متوسطة' : 'ضعيفة') + ')', `<a href="#/people/${created.id}">${e(r.suggest.passportNo)} — فتح</a>`, r.confidence === 'high' ? 'ok' : 'warn');
+        } catch (er) { bad++; set(i, 'فشل: ' + (er.message || er), '', 'bad'); }
+      }
+      sum(); running = false; $('#bgo').disabled = false; toast('خلص الرفع الجماعي', 'ok');
+    };
+  }
+
+  /* ===== التقارير ===== */
+  async function pageReports() {
+    const today = new Date().toISOString().slice(0, 10); const ago = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
+    view.innerHTML = `<h1>التقارير</h1>
+      <div class="card"><div class="row"><label class="f">من<input type="date" id="rf" value="${ago}"></label><label class="f">إلى<input type="date" id="rt" value="${today}"></label>
+        <label class="f">الحالة (للتصدير)<select id="rs"><option value="">الكل</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${e(v[0])}</option>`).join('')}</select></label>
+        <button class="btn pri" id="rgo">تحديث</button><a class="btn" id="rx" href="#" style="text-decoration:none">تصدير Excel (CSV)</a></div></div>
+      <div id="rbody"></div>`;
+    const load = async () => {
+      const f = $('#rf').value, t = $('#rt').value; const r = await api('GET', `/reports/summary?from=${f}&to=${t}`);
+      $('#rx').href = `/api/reports/export.csv?from=${f}&to=${t}${$('#rs').value ? '&status=' + $('#rs').value : ''}`;
+      const max = Math.max(1, ...r.daily.map((d) => Math.max(d.created, d.filled, d.submitted)));
+      const bar = (n, c) => `<div style="display:inline-block;height:10px;width:${Math.round((n / max) * 120)}px;background:${c};border-radius:3px;vertical-align:middle"></div> ${n}`;
+      $('#rbody').innerHTML = `<div class="card"><h2>الوضع الحالي (${r.total} شخص)</h2><div class="row">${Object.entries(STATUS).map(([k, v]) => `<span class="pill ${v[1]}">${e(v[0])}: ${r.byStatus[k] || 0}</span>`).join('')}
+        ${r.expiring ? `<span class="pill warn">جوازات قريبة الانتهاء: ${r.expiring}</span>` : ''}${r.expired ? `<span class="pill bad">جوازات منتهية: ${r.expired}</span>` : ''}</div></div>
+        <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>اليوم</th><th>اتسجّلوا</th><th>اتملوا في المنصة</th><th>اتبعتوا</th></tr></thead><tbody>${r.daily.map((d) => `<tr><td>${e(d.day)}</td><td>${bar(d.created, '#2f6f6f')}</td><td>${bar(d.filled, '#d49b1f')}</td><td>${bar(d.submitted, '#2b8a4a')}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">مفيش نشاط في الفترة دي (السجل بيبدأ من أول تحديث).</td></tr>'}</tbody></table></div>
+        <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>الموظف</th><th>سجّل</th><th>ملا الفورم</th><th>بعت</th></tr></thead><tbody>${r.users.map((u) => `<tr><td>${e(u.user)}</td><td>${u.created}</td><td>${u.filled}</td><td>${u.submitted}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">—</td></tr>'}</tbody></table></div>`;
+    };
+    $('#rgo').onclick = () => load().catch(fail); $('#rs').onchange = () => load().catch(fail);
+    await load();
+  }
+
+  /* ===== سجل النشاط (للمدير) ===== */
+  async function pageActivity() {
+    const st = JSON.parse(sessionStorage.getItem('actFilter') || '{}');
+    const q = (o) => `/activity?limit=300${o.user ? '&user=' + encodeURIComponent(o.user) : ''}${o.action ? '&action=' + encodeURIComponent(o.action) : ''}`;
+    let r = await api('GET', q(st));
+    view.innerHTML = `<h1>سجل النشاط</h1><div class="card"><div class="row">
+      <select id="au"><option value="">كل الموظفين</option>${r.users.map((u) => `<option${st.user === u ? ' selected' : ''}>${e(u)}</option>`).join('')}</select>
+      <select id="aa"><option value="">كل العمليات</option>${Object.entries(r.labels).map(([k, v]) => `<option value="${k}"${st.action === k ? ' selected' : ''}>${e(v)}</option>`).join('')}</select></div></div>
+      <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>الوقت</th><th>الموظف</th><th>العملية</th><th>الشخص</th><th>تفاصيل</th></tr></thead><tbody id="arows"></tbody></table></div>`;
+    const draw = () => { $('#arows').innerHTML = r.rows.map((x) => `<tr><td>${e(fmtDate(x.at))}</td><td>${e(x.user)}</td><td>${e(x.label)}</td><td>${x.personId ? `<a href="#/people/${x.personId}">${e(x.person || '#' + x.personId)}</a>` : ''}</td><td dir="ltr" style="text-align:right">${e(x.detail)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">مفيش نشاط.</td></tr>'; };
+    draw();
+    const reload = async () => { const o = { user: $('#au').value, action: $('#aa').value }; sessionStorage.setItem('actFilter', JSON.stringify(o)); r = await api('GET', q(o)); draw(); };
+    $('#au').onchange = () => reload().catch(fail); $('#aa').onchange = () => reload().catch(fail);
+  }
+
   async function pageProfiles() {
     const r = await api('GET', '/profiles');
     view.innerHTML = `<h1>ملفات الضبط</h1><p class="muted">كل ملف = جهة عمل/دفعة: نوع التأشيرة والممثلية وبيانات الكفيل وقيم افتراضية (المؤهل، الديانة…). أي شخص بيتربط بملف، وممكن يغلب أي قيمة بقيمته.</p>
@@ -309,7 +421,7 @@
   }
 
   /* ===== التوجيه ===== */
-  const NAV = [['#/people', 'الأشخاص'], ['#/profiles', 'ملفات الضبط'], ['#/users', 'المستخدمين', 'admin'], ['#/extension', 'الإضافة']];
+  const NAV = [['#/people', 'الأشخاص'], ['#/bulk', 'رفع جماعي'], ['#/profiles', 'ملفات الضبط'], ['#/reports', 'التقارير'], ['#/activity', 'السجل', 'admin'], ['#/users', 'المستخدمين', 'admin'], ['#/extension', 'الإضافة']];
   async function render() {
     const h = location.hash || '#/people';
     if (!me) { try { me = (await api('GET', '/me')).user; } catch (er) { /* مش داخل */ } }
@@ -321,6 +433,9 @@
     try {
       let m;
       if ((m = h.match(/^#\/people\/(new|\d+)$/))) await pagePerson(m[1]);
+      else if (h.startsWith('#/bulk')) await pageBulk();
+      else if (h.startsWith('#/reports')) await pageReports();
+      else if (h.startsWith('#/activity')) await pageActivity();
       else if (h.startsWith('#/profiles')) await pageProfiles();
       else if (h.startsWith('#/users')) await pageUsers();
       else if (h.startsWith('#/extension')) await pageExtension();

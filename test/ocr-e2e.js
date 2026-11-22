@@ -35,6 +35,15 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     const got = { no: await page.inputValue('[data-k=passportNo]'), birth: await page.inputValue('[data-k=birthDate]'), exp: await page.inputValue('[data-k=expiryDate]'), fam: await page.inputValue('[data-k=nameEnFamily]'), first: await page.inputValue('[data-k=nameEnFirst]'), sex: await page.inputValue('[data-k=sex]') };
     console.log(got);
     assert.strictEqual(got.no, 'A45449365'); assert.strictEqual(got.birth, '1989-11-01'); assert.strictEqual(got.exp, '2033-06-23'); assert.strictEqual(got.fam, 'ELSHAWY'); assert.strictEqual(got.first, 'ATEF'); assert.strictEqual(got.sex, '1');
+    /* رفع جماعي: صورتين (نفس الصورة مرتين ← التانية مكررة) */
+    await page.goto(`http://127.0.0.1:${PORT}/#/bulk`); await page.waitForSelector('#bf');
+    await page.setInputFiles('#bf', [IMG, IMG]);
+    await page.click('#bgo');
+    await page.waitForFunction(() => /تم: 1 · مكرر: 1/.test((document.getElementById('bsum') || {}).textContent || ''), null, { timeout: 200000 });
+    const bulkTxt = await page.textContent('#brows');
+    console.log('bulk:', bulkTxt.replace(/\s+/g, ' ').slice(0, 200));
+    const ppl = await page.evaluate(async () => (await (await fetch('/api/people?q=A45449365')).json()).people);
+    assert.ok(ppl.length >= 1 && ppl.some((p) => p.hasPassport), 'الشخص اتعمل وصورة الجواز اتحفظت');
     assert.deepStrictEqual(errs, [], errs.join('|'));
     console.log('OCR E2E OK');
   } catch (e) { console.error('FAIL', e); await page.screenshot({ path: path.join(os.tmpdir(), 'va-ocr-fail.png') }).catch(() => {}); process.exitCode = 1; }

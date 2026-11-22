@@ -67,6 +67,14 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.goto(base + '#/people'); await page.waitForSelector('#rows tr.click');
     assert.ok((await page.textContent('#rows')).includes('بدر خليل'));
     await page.goto(base + '#/extension'); await page.waitForSelector('.steps');
+    /* الطابور والحالة والتقارير والسجل والرفع الجماعي */
+    await page.goto(base + '#/people'); await page.waitForSelector('#rows .sel');
+    assert.ok(await page.isHidden('#queueBtn'), 'زرار الطابور مخفي من غير تحديد');
+    await page.check('#rows .sel'); assert.ok(await page.isVisible('#queueBtn'), 'زرار الطابور ظهر بعد التحديد');
+    await page.goto(base + '#/reports'); await page.waitForSelector('#rbody .card'); assert.ok((await page.textContent('#rbody')).includes('الوضع الحالي'));
+    assert.ok((await page.getAttribute('#rx', 'href')).includes('/api/reports/export.csv'));
+    await page.goto(base + '#/activity'); await page.waitForSelector('#arows tr'); assert.ok((await page.textContent('#arows')).includes('دخول'));
+    await page.goto(base + '#/bulk'); await page.waitForSelector('#bgo');
     assert.deepStrictEqual(errs, [], 'مفيش أخطاء JS: ' + errs.join(' | '));
     console.log('UI E2E OK');
   } catch (e) { console.error('FAIL', e); await page.screenshot({ path: path.join(os.tmpdir(), 'va-ui-fail.png') }).catch(() => {}); process.exitCode = 1; }

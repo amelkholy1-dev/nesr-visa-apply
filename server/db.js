@@ -48,6 +48,17 @@ const TABLES = [
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY ix_people_status (status), KEY ix_people_passport (passport_no), KEY ix_people_profile (profile_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS activity (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NULL,
+    user_name VARCHAR(120) NOT NULL DEFAULT '',
+    action VARCHAR(30) NOT NULL,
+    person_id INT NULL,
+    person_name VARCHAR(255) NOT NULL DEFAULT '',
+    detail VARCHAR(500) NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY ix_act_time (created_at), KEY ix_act_user (user_id), KEY ix_act_person (person_id), KEY ix_act_action (action)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
 ];
 

@@ -104,6 +104,24 @@ const api = async (method, url, body, extra = {}) => {
   assert.strictEqual((await api('DELETE', `/api/people/${id}`)).status, 200);
   assert.strictEqual((await api('DELETE', `/api/profiles/${profId}`)).status, 200);
 
+  // سجل النشاط + التقارير + الانتهاء
+  const F = require('../server/fields');
+  assert.strictEqual(F.expiryInfo('2020-01-01', '2026-12-01').expired, true);
+  assert.strictEqual(F.expiryInfo('2026-12-30', '2026-12-01', new Date('2026-11-01T10:00:00Z')).short, true, 'أقل من 6 شهور من الدخول');
+  assert.strictEqual(F.expiryInfo('2031-01-01', '2026-12-01', new Date('2026-11-01T10:00:00Z')).short, false);
+  await new Promise((r) => setTimeout(r, 400));
+  const act = await api('GET', '/api/activity');
+  assert.strictEqual(act.status, 200); assert.ok(act.json.rows.some((x) => x.action === 'create') && act.json.rows.some((x) => x.action === 'submitted'), 'السجل فيه الإضافة والإرسال');
+  assert.ok(act.json.rows.some((x) => x.action === 'login'), 'الدخول اتسجّل');
+  const evil = await api('POST', '/api/people', { data: { nameAr: '=HYPERLINK("http://x")', passportNo: 'ZZ99999', birthDate: '1990-01-01' } });
+  const sum = await api('GET', '/api/reports/summary');
+  assert.strictEqual(sum.status, 200); assert.ok(sum.json.total >= 1 && Array.isArray(sum.json.daily) && sum.json.users.length >= 1);
+  const csvRes = await fetch(base + '/api/reports/export.csv', { headers: { Cookie: cookie } }); const csvBuf = Buffer.from(await csvRes.arrayBuffer()); const csv = csvBuf.toString('utf8');
+  assert.strictEqual(csvRes.status, 200); assert.ok(csv.startsWith('﻿"م"'), 'CSV بـ BOM عشان Excel'); assert.ok(csv.split('\r\n').length >= 2);
+  const csv2 = await (await fetch(base + '/api/reports/export.csv', { headers: { Cookie: cookie } })).text();
+  assert.ok(csv2.includes('"\'=HYPERLINK') && !csv2.includes(',"=HYPERLINK'), 'حماية من صيغ Excel');
+  await api('DELETE', `/api/people/${evil.json.id}`);
+
   // حماية: طلب من مصدر تاني
   const csrf = await fetch(base + '/api/people', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'https://evil.example' }, body: '{}' });
   assert.strictEqual(csrf.status, 403);
