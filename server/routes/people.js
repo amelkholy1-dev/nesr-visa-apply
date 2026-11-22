@@ -11,6 +11,7 @@ const names = require('../names');
 const ocr = require('../ocr');
 const audit = require('../audit');
 const S = require('../stages');
+const wafid = require('../wafid');
 
 const router = express.Router();
 const json = (v) => { try { return JSON.parse(v || '{}') || {}; } catch (e) { return {}; } };
@@ -168,6 +169,18 @@ router.post('/:id(\\d+)/result', async (req, res) => {
     const pn = cur;
     audit.log(req, status === 'filled' || status === 'submitted' ? status : 'status', id, pn ? pn.name_ar : '', app || status);
     res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* بيانات حجز الفحص الطبي في وافد */
+router.get('/:id(\\d+)/wafid', async (req, res) => {
+  try {
+    const row = (await db.query('SELECT * FROM people WHERE id = ?', [req.params.id]))[0];
+    if (!row) return res.status(404).json({ error: 'الشخص مش موجود' });
+    const profile = await loadProfile(row.profile_id);
+    const r = wafid.build(json(row.data), profile && profile.data);
+    audit.log(req, 'fill', row.id, row.name_ar, 'وافد (الفحص الطبي)');
+    res.json({ personId: row.id, name: row.name_ar, wafid: r.payload, issues: r.issues, warns: r.warns });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

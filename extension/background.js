@@ -1,6 +1,7 @@
 'use strict';
 /* الوسيط بين نظام طلبات التأشيرات وصفحة الفورم في المنصة. كل البيانات بتتنقل جوه المتصفح بين تبويبين، مفيش أي سيرفر تالت. */
 const FORM_URL = 'https://visa.mofa.gov.sa/SmartForm/TraditionalApp';
+const WAFID_URL = 'https://wafid.com/ar/book-appointment/';
 const LOGIN_URL = 'https://visa.mofa.gov.sa/Account/Login/enjazcompany';
 const store = chrome.storage.session;
 const APP_TAB_RE = /^https:\/\/[a-z0-9-]+\.nisrelkhaleeg\.com\//;
@@ -33,6 +34,30 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       if (!t) { await chrome.storage.local.set({ pendingResult: data }); reply({ ok: true, delivered: false }); return; }
       try { await chrome.tabs.sendMessage(t.id, { kind: 'va-result', data }); reply({ ok: true, delivered: true }); }
       catch (e) { await chrome.storage.local.set({ pendingResult: data }); reply({ ok: true, delivered: false }); }
+    } else if (msg.kind === 'open-wafid') {
+      /* حجز الفحص الطبي في وافد: تبويب جديد بنفس أسلوب فورم المنصة */
+      const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now() };
+      const tab = await chrome.tabs.create({ url: WAFID_URL, active: true });
+      await store.set({ ['wctx_' + tab.id]: ctx });
+      reply({ ok: true });
+    } else if (msg.kind === 'get-wafid-ctx') {
+      const key = 'wctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); reply({ ctx: o[key] || null });
+    } else if (msg.kind === 'wafid-date') {
+      /* تاريخ في تقويم وافد: بنستخدم تقويم الصفحة نفسه (في عالم الصفحة) عشان الشكل يطلع زي ما الموقع عايزه */
+      const id = String(msg.id || ''); const iso = String(msg.iso || '');
+      if (!/^id_[a-z_]+$/.test(id) || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) { reply({ ok: false, why: 'قيمة غلط' }); return; }
+      try {
+        const [res] = await chrome.scripting.executeScript({ target: { tabId: sender.tab.id }, world: 'MAIN', args: [id, iso], func: (elId, isoDate) => {
+          try {
+            const el = document.getElementById(elId); const $ = window.jQuery || window.$;
+            if (!el) return { ok: false, why: 'الخانة مش موجودة' };
+            const d = new Date(isoDate + 'T12:00:00');
+            if ($ && $.fn && $.fn.calendar) { const cal = $(el).closest('.calendar-js, .ui.calendar'); if (cal.length) { cal.calendar('set date', d, true, true); return { ok: !!el.value, value: el.value }; } }
+            return { ok: false, why: 'مفيش تقويم' };
+          } catch (e) { return { ok: false, why: String(e && e.message || e) }; }
+        } });
+        reply(res && res.result ? res.result : { ok: false, why: 'مفيش رد' });
+      } catch (e) { reply({ ok: false, why: String(e && e.message || e) }); }
     } else if (msg.kind === 'next') {
       /* الطابور: الشخص التالي بيتطلب من صفحة النظام (هي اللي معاها الصلاحية تجيب بياناته) */
       const key = 'ctx_' + (sender.tab && sender.tab.id);
@@ -69,4 +94,4 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
     if (next !== ctx.stage) await store.set({ [key]: { ...ctx, stage: next } });
   } catch (e) { /* مش مهم */ }
 });
-chrome.tabs.onRemoved.addListener((id) => { store.remove('ctx_' + id).catch(() => {}); });
+chrome.tabs.onRemoved.addListener((id) => { store.remove(['ctx_' + id, 'wctx_' + id]).catch(() => {}); });

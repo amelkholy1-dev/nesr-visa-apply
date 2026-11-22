@@ -8,7 +8,10 @@ const OPT = {
   visaKind: MOFA.VisaKind, embassy: MOFA.EmbassyCode, passportType: MOFA.PASSPORType, religion: MOFA.RELIGION, social: MOFA.SOCIAL_STATUS,
   sex: MOFA.Sex, comingThrough: MOFA.COMING_THROUGH, entryPoint: MOFA.ENTRY_POINT, jobClass: MOFA.Classify_Occupations_Id,
   country: MOFA.PASSPORT_ISSUE_PLACE, nationality: [{ v: 'EGY', t: 'مصر' }],
-  autoDeclare: [{ v: '1', t: 'أيوه — علّم الإقرارين تلقائياً (أنا موافق عليهم بنفسي)' }]
+  autoDeclare: [{ v: '1', t: 'أيوه — علّم الإقرارين تلقائياً (أنا موافق عليهم بنفسي)' }],
+  medCity: [{ v: 'القاهرة', t: 'القاهرة' }, { v: 'الإسكندرية', t: 'الإسكندرية' }, { v: 'أسيوط', t: 'أسيوط' }, { v: 'سوهاج', t: 'سوهاج' }],
+  medVisa: [{ v: 'wv', t: 'تأشيرة عمل' }, { v: 'fv', t: 'تأشيرة عائلية' }, { v: 'hu', t: 'تأشيرة عمل موسمية للحج والعمرة' }],
+  medPosition: [{"v": "18", "t": "Banking & Finance"}, {"v": "19", "t": "Carpenter"}, {"v": "20", "t": "Cashier"}, {"v": "21", "t": "Electrician"}, {"v": "22", "t": "Engineer"}, {"v": "23", "t": "General Secretory"}, {"v": "24", "t": "Health & Medicine & Nursing"}, {"v": "25", "t": "Heavy Driver"}, {"v": "26", "t": "IT & Internet Engineer"}, {"v": "27", "t": "Leisure & Tourism"}, {"v": "28", "t": "Light Driver"}, {"v": "29", "t": "Mason"}, {"v": "30", "t": "President"}, {"v": "31", "t": "Labour"}, {"v": "32", "t": "Plumber"}, {"v": "33", "t": "Doctor"}, {"v": "34", "t": "Family"}, {"v": "35", "t": "Steel Fixer"}, {"v": "36", "t": "Aluminum Technician"}, {"v": "37", "t": "Nurse"}, {"v": "38", "t": "Male Nurse"}, {"v": "39", "t": "Ward Boy"}, {"v": "40", "t": "Shovel Operator"}, {"v": "41", "t": "Dozer Operator"}, {"v": "42", "t": "Car Mechanic"}, {"v": "43", "t": "Petrol Mechanic"}, {"v": "44", "t": "Diesel Mechanic"}, {"v": "45", "t": "Student"}, {"v": "46", "t": "Accountant"}, {"v": "47", "t": "Lab Technician"}, {"v": "48", "t": "Drafts man"}, {"v": "49", "t": "Auto-Cad Operator"}, {"v": "50", "t": "Painter"}, {"v": "51", "t": "Tailor"}, {"v": "52", "t": "Welder"}, {"v": "53", "t": "X-ray Technician"}, {"v": "54", "t": "Lecturer"}, {"v": "55", "t": "A.C Technician"}, {"v": "56", "t": "Business"}, {"v": "57", "t": "Cleaner"}, {"v": "58", "t": "Security Guard"}, {"v": "59", "t": "House Maid"}, {"v": "60", "t": "Manager"}, {"v": "61", "t": "Hospital Cleaning"}, {"v": "62", "t": "Mechanic"}, {"v": "63", "t": "Computer Operator"}, {"v": "64", "t": "House Driver"}, {"v": "65", "t": "Driver"}, {"v": "66", "t": "Cleaning Labour"}, {"v": "67", "t": "Building Electrician"}, {"v": "68", "t": "Salesman"}, {"v": "69", "t": "Plastermason"}, {"v": "70", "t": "Servant"}, {"v": "71", "t": "Barber"}, {"v": "72", "t": "Residence"}, {"v": "73", "t": "Shepherds"}, {"v": "74", "t": "Employment"}, {"v": "75", "t": "Fuel Filler"}, {"v": "76", "t": "Worker"}, {"v": "77", "t": "House Boy"}, {"v": "78", "t": "House Wife"}, {"v": "79", "t": "RCC Fitter"}, {"v": "80", "t": "Clerk"}, {"v": "81", "t": "Microbiologist"}, {"v": "82", "t": "Teacher"}, {"v": "83", "t": "Helper"}, {"v": "84", "t": "Hajj Duty"}, {"v": "85", "t": "Shuttering"}, {"v": "86", "t": "Supervisor"}, {"v": "87", "t": "Medical Specialist"}, {"v": "88", "t": "Office Secretary"}, {"v": "89", "t": "Technician"}, {"v": "90", "t": "Butcher"}, {"v": "91", "t": "Arabic Food Cook"}, {"v": "92", "t": "Agricultural Worker"}, {"v": "93", "t": "Service"}, {"v": "94", "t": "Studio CAD Designer"}, {"v": "95", "t": "Financial Analyst"}, {"v": "96", "t": "Cabin Appearance (AIR LINES)"}, {"v": "97", "t": "Car Washer"}, {"v": "98", "t": "Surveyor"}, {"v": "99", "t": "Electrical Technician"}, {"v": "100", "t": "Waiter"}, {"v": "103", "t": "Nursing helper"}, {"v": "104", "t": "Anesthesia technician"}, {"v": "107", "t": "Construction worker"}, {"v": "108", "t": "Other"}]
 };
 
 /* scope: profile = بتتظبط في ملف الضبط · person = لكل شخص · both = افتراضي في الملف ويتغلب في الشخص */
@@ -20,6 +23,11 @@ const GROUPS = [
     { k: 'entriesText', label: 'عدد مرات الدخول (زي ما بتظهر في المنصة)', type: 'text', scope: 'profile', hint: 'مثلاً: سفرة واحدة' },
     { k: 'entryDays', label: 'صلاحية التأشيرة (يوم)', type: 'text', scope: 'profile', hint: 'مثلاً: 365' },
     { k: 'residence', label: 'مدة الإقامة', type: 'text', scope: 'profile', hint: 'مثلاً: 90' }
+  ] },
+  { id: 'medical', title: 'الفحص الطبي (موقع وافد)', fields: [
+    { k: 'medCity', label: 'مدينة الفحص', type: 'select', opt: 'medCity', scope: 'both' },
+    { k: 'medVisa', label: 'نوع التأشيرة في وافد', type: 'select', opt: 'medVisa', scope: 'both' },
+    { k: 'medPosition', label: 'الوظيفة المتقدم إليها (اختياري)', type: 'select', opt: 'medPosition', scope: 'both' }
   ] },
   { id: 'declare', title: 'الإقرارات', fields: [
     { k: 'autoDeclare', label: 'تعليم «أقر بأن المعلومات صحيحة» و«أوافق على سياسة الخصوصية» تلقائياً', type: 'select', opt: 'autoDeclare', scope: 'profile', hint: 'لو سيبته فاضي الإضافة مش هتعلّمهم' }
@@ -59,6 +67,7 @@ const PERSON_GROUPS = [
     { k: 'birthDate', label: 'تاريخ الميلاد', type: 'date', req: true },
     { k: 'birthPlace', label: 'مكان الميلاد', type: 'text', max: 20, req: true },
     { k: 'nationalId', label: 'الرقم القومي', type: 'text', max: 20, ltr: true },
+    { k: 'issuePlace', label: 'مكان إصدار الجواز (للفحص الطبي)', type: 'text', max: 50 },
     { k: 'phone', label: 'رقم الموبايل (للفحص الطبي وتسهيل)', type: 'text', max: 20, ltr: true },
     { k: 'sex', label: 'الجنس', type: 'select', opt: 'sex', req: true }
   ] },

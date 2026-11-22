@@ -142,6 +142,9 @@ const api = async (method, url, body, extra = {}) => {
   assert.strictEqual((await api('PUT', '/api/settings/print', { company: 'شركة تجربة', dateFormat: 'YYYY-MM-DD' })).status, 200);
   assert.strictEqual((await api('GET', '/api/settings/print')).json.company, 'شركة تجربة');
   const rs = await api('GET', '/api/reports/summary'); assert.ok(rs.json.stages && rs.json.stages.medical.booked >= 1);
+  const wp = await api('GET', `/api/people/${spid}/wafid`); assert.strictEqual(wp.status, 200);
+  assert.deepStrictEqual([wp.json.wafid.first, wp.json.wafid.last, wp.json.wafid.passport, wp.json.wafid.gender, wp.json.wafid.dob, wp.json.wafid.phone], ['ALI', 'SAID', 'ST12345', 'male', '1990-02-03', '01000000000']);
+  assert.ok(wp.json.issues.some((x) => x.includes('مدينة الفحص')), 'مدينة الفحص ناقصة بتتعلّم');
   await api('DELETE', `/api/people/${spid}`);
 
   // حماية: طلب من مصدر تاني

@@ -55,6 +55,17 @@
     } catch (er) { fail(er); }
   }
 
+  async function wafidRequest(id) {
+    try {
+      const pl = await api('GET', `/people/${id}/wafid`);
+      if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
+      if (!extReady) return toast('إضافة Chrome مش متركّبة. من «الإضافة» نزّلها وركّبها الأول.', 'err');
+      if (pl.issues.length && !confirm('فيه نواقص للفحص الطبي:\n- ' + pl.issues.join('\n- ') + '\n\nتفتح وافد وتملا اللي موجود؟')) return;
+      const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_WAFID', data: { personId: id, name: pl.name, wafid: pl.wafid, issues: pl.issues, warns: pl.warns } }, location.origin); setTimeout(() => res(false), 4000); });
+      if (!ok) toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.4.0 أو أحدث).', 'err'); else toast('اتفتح موقع وافد وبيتملي…', 'ok');
+    } catch (er) { fail(er); }
+  }
+
   /* ===== أدوات ===== */
   const opt = (name) => (meta.options[name] || []);
   const optText = (name, v) => { const o = opt(name).find((x) => String(x.v) === String(v)); return o ? o.t : v || ''; };
@@ -277,7 +288,7 @@
         <div><input type="file" id="phF" accept="image/jpeg,image/png"><div class="small muted" style="margin-top:6px">${isNew ? 'بتترفع أول ما تحفظ.' : ''} بتتصغّر تلقائي لو أكبر من الحد. المنصة بتفحص مواصفات الصورة (خلفية فاتحة ووش واضح).</div>${!isNew && person.hasPhoto ? '<button class="btn small danger" id="phDel" style="margin-top:6px">حذف الصورة</button>' : ''}</div></div></div>
       <div class="card"><label class="f">ملاحظات<input data-k="notes" value="${e(data.notes || '')}"></label></div>
       ${resolved ? `<div class="card"><h2>الجاهزية</h2>${resolved.ready ? '<span class="pill ok">كل البيانات المطلوبة موجودة</span>' : `<ul class="list issues">${resolved.issues.map((x) => `<li>${e(x)}</li>`).join('')}</ul>`}${resolved.warns.length ? `<ul class="list warns">${resolved.warns.map((x) => `<li>${e(x)}</li>`).join('')}</ul>` : ''}</div>` : ''}
-      <div class="row actions"><button class="btn pri" id="save">حفظ</button>${!isNew ? '<button class="btn pri" id="fill">املى الطلب في المنصة</button><details class="menu"><summary class="btn">طباعة ▾</summary><div class="menu-box"><button class="btn small" data-pr="sheet">ورقة بيانات الطلب</button><button class="btn small" data-pr="undertaking">التعهد</button><button class="btn small" data-pr="letter">خطاب الترشيح</button><button class="btn small" data-pr="label">ليبل باركود</button></div></details><button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>
+      <div class="row actions"><button class="btn pri" id="save">حفظ</button>${!isNew ? '<button class="btn pri" id="fill">املى الطلب في المنصة</button><button class="btn" id="wafid" title="بيفتح موقع وافد ويملا فورم حجز الفحص الطبي">احجز الفحص الطبي (وافد)</button><details class="menu"><summary class="btn">طباعة ▾</summary><div class="menu-box"><button class="btn small" data-pr="sheet">ورقة بيانات الطلب</button><button class="btn small" data-pr="undertaking">التعهد</button><button class="btn small" data-pr="letter">خطاب الترشيح</button><button class="btn small" data-pr="label">ليبل باركود</button></div></details><button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>
       </div><aside class="side">${sideHtml()}</aside></div>`;
       wire();
       wirePv();
@@ -408,6 +419,7 @@
           if (r.mrz) { data = { ...collect(view), ...Object.fromEntries(Object.entries(r.mrz.suggest).filter(([, v]) => v)) }; draw(); toast(r.mrz.confidence === 'high' ? 'اتقرا بدقة عالية' : 'اتقرا: راجع البيانات', r.mrz.confidence === 'high' ? 'ok' : ''); $('#mrz').value = r.mrz.lines.join('\n'); } else toast(r.note || 'ما اتقراش', 'err');
         } catch (er) { fail(er); } finally { oc.disabled = false; oc.textContent = 'قراءة تلقائية من الصورة'; }
       };
+      const wf = $('#wafid'); if (wf) wf.onclick = async () => { try { await save(); wafidRequest(id); } catch (er) { fail(er); } };
       const fl = $('#fill'); if (fl) fl.onclick = async () => { try { await save(); fillRequest(id); } catch (er) { fail(er); } };
       const dl = $('#del'); if (dl) dl.onclick = async () => { if (!confirm('تحذف الشخص ده نهائياً؟')) return; try { await api('DELETE', `/people/${id}`); location.hash = '#/people'; } catch (er) { fail(er); } };
     };
