@@ -19,7 +19,7 @@
   }
   let toastT;
   function toast(msg, kind) { const t = $('#toast'); t.textContent = msg; t.className = 'toast ' + (kind || ''); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 4500); }
-  const fail = (er) => toast(er.message || String(er), 'err');
+  const fail = (er) => { try { console.error(er && er.stack || er); } catch (x) { /* مش مهم */ } toast(er.message || String(er), 'err'); };
 
   /* ===== جسر الإضافة ===== */
   const bridge = { pending: [] };
@@ -80,7 +80,7 @@
     else inner = `<input type="text" data-k="${f.k}" value="${e(val || '')}"${f.max ? ` maxlength="${f.max + 30}"` : ''}${f.ltr ? ' class="ltr"' : ''}${ph ? ` placeholder="${e(ph)}"` : f.hint ? ` placeholder="${e(f.hint)}"` : ''}>`;
     return `<label class="f">${label}${inner}<span class="over" data-over="${f.k}"></span></label>`;
   }
-  const collect = (root) => { const o = {}; root.querySelectorAll('[data-k]').forEach((el) => { o[el.dataset.k] = el.value.trim(); }); return o; };
+  const collect = (root) => { const o = {}; root.querySelectorAll('[data-k]').forEach((el) => { if (typeof el.value === 'string') o[el.dataset.k] = el.value.trim(); }); return o; };
   const splitArabic = (full) => { const w = String(full || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean); if (!w.length) return {}; if (w.length === 1) return { first: w[0] }; if (w.length === 2) return { first: w[0], family: w[1] }; if (w.length === 3) return { first: w[0], father: w[1], family: w[2] }; return { first: w[0], father: w[1], grand: w.slice(2, -1).join(' '), family: w[w.length - 1] }; };
   const fmtDate = (d) => { try { return d ? new Date(d).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : ''; } catch (x) { return ''; } };
 
@@ -238,7 +238,7 @@
       if (isNew || !meta.stages) return '';
       const st = person.stages || {};
       return `<div class="card"><h2>مراحل الطلب</h2><div class="stages">${meta.stages.map((x) => { const c = st[x.k] || { state: '', date: '', note: '' };
-        return `<div class="stg" data-k="${x.k}"><b>${e(x.label)}</b><select class="stS">${['', ...(x.booking ? ['booked'] : []), 'done'].map((v) => `<option value="${v}"${c.state === v ? ' selected' : ''}>${STATE_AR[v]}</option>`).join('')}</select><input type="date" class="stD" value="${e(c.date || '')}"><input class="stN" placeholder="ملاحظة (مكان / رقم / …)" value="${e(c.note || '')}">
+        return `<div class="stg" data-stage="${x.k}"><b>${e(x.label)}</b><select class="stS">${['', ...(x.booking ? ['booked'] : []), 'done'].map((v) => `<option value="${v}"${c.state === v ? ' selected' : ''}>${STATE_AR[v]}</option>`).join('')}</select><input type="date" class="stD" value="${e(c.date || '')}"><input class="stN" placeholder="ملاحظة (مكان / رقم / …)" value="${e(c.note || '')}">
           ${x.k === 'sent' ? `<div class="stX small">رقم الطلب: <b dir="ltr">${e(person.appNumber || '—')}</b> <input id="appNo" placeholder="E123456789" dir="ltr"> <button class="btn small" id="appNoBtn">سجّل رقم الطلب</button>${(c.history || []).length ? `<div class="muted">أرقام سابقة (قبل إعادة الإرسال): ${c.history.map((h) => `<span dir="ltr">${e(h.app)}</span>`).join('، ')}</div>` : ''}</div>` : ''}</div>`; }).join('')}</div></div>`;
     };
     const sideHtml = () => {
@@ -383,7 +383,7 @@
         } });
       const cm = $('#cropMrz'); if (cm) cm.onclick = () => openCropper({ src: srcUrl(), aspect: 0, title: 'حدّد سطري MRZ', hint: 'اسحب المربع على السطرين اللي في آخر صفحة البيانات (اللي فيهم < < <)', initial: { x: 0.02, y: 0.74, w: 0.96, h: 0.24 }, onDone: (blob) => mrzFromBlob(blob).catch(fail) });
       view.querySelectorAll('.stg').forEach((row) => {
-        const k = row.dataset.k;
+        const k = row.dataset.stage;
         const send = async () => { try { const r = await api('PUT', `/people/${id}/stages/${k}`, { state: row.querySelector('.stS').value, date: row.querySelector('.stD').value, note: row.querySelector('.stN').value }); person.stages = r.stages; row.querySelector('.stD').value = r.stages[k].date; toast('اتحفظت المرحلة', 'ok'); } catch (er) { fail(er); } };
         ['.stS', '.stD', '.stN'].forEach((c) => { row.querySelector(c).onchange = send; });
       });

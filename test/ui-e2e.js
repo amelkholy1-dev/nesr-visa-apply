@@ -76,10 +76,11 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.goto(base + '#/people/' + firstId); await page.waitForSelector('.split .side');
     assert.ok(await page.isVisible('.side .pv'), 'لوحة صورة الجواز ظاهرة جنب الحقول');
     /* مراحل الطلب في صفحة الشخص + النقط في القايمة + قايمة الطباعة */
-    await page.waitForSelector('.stg[data-k="medical"]');
-    await page.selectOption('.stg[data-k="medical"] .stS', 'booked'); await page.fill('.stg[data-k="medical"] .stD', '2026-12-05'); await page.dispatchEvent('.stg[data-k="medical"] .stD', 'change');
+    await page.waitForSelector('.stg[data-stage="medical"]');
+    await page.selectOption('.stg[data-stage="medical"] .stS', 'booked'); await page.fill('.stg[data-stage="medical"] .stD', '2026-12-05'); await page.dispatchEvent('.stg[data-stage="medical"] .stD', 'change');
     await page.waitForTimeout(600);
     assert.ok(await page.isVisible('details.menu summary'), 'قايمة الطباعة');
+    await page.click('#save'); await page.waitForTimeout(800); assert.ok(!(await page.textContent('#toast')).includes('trim'), 'الحفظ على شخص موجود شغّال'); assert.ok((await page.textContent('#toast')).includes('اتحفظ'), 'اتحفظ');
     await page.goto(base + '#/people'); await page.waitForSelector('#rows .dots');
     assert.ok((await page.locator('#rows .dot.booked').count()) >= 1, 'نقطة الفحص الطبي محجوز');
     await page.selectOption('#sf', 'b:medical'); await page.waitForTimeout(400);
