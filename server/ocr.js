@@ -11,12 +11,13 @@ const PROMPT = `You are reading the data page of a passport. Return ONLY a JSON 
 - birthPlaceAr: place of birth in Arabic as printed
 - issueDate: date of issue as YYYY-MM-DD (empty if unreadable)
 - expiryDate: date of expiry as YYYY-MM-DD (empty if unreadable)
+- nationalId: the 14-digit national number printed in the data page if present (digits only, empty if none)
 Do not guess characters you cannot read: copy the MRZ exactly. No explanations, JSON only.`;
 
 async function readPassport(buffer, mimeType) {
   if (!config.geminiKey) { const e = new Error('القراءة التلقائية مش متفعّلة (محتاجة GEMINI_API_KEY). الصق سطري MRZ بإيدك.'); e.status = 501; throw e; }
   if (!/^image\/(jpeg|png)$/.test(mimeType)) { const e = new Error('الصورة لازم JPG أو PNG'); e.status = 400; throw e; }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.geminiModel)}:generateContent`;
+  const url = `${process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com'}/v1beta/models/${encodeURIComponent(config.geminiModel)}:generateContent`;
   const body = { contents: [{ parts: [{ text: PROMPT }, { inline_data: { mime_type: mimeType, data: buffer.toString('base64') } }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
   const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': config.geminiKey }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
   if (!r.ok) { const e = new Error(`فشل الاتصال بخدمة القراءة (${r.status})`); e.status = 502; throw e; }
@@ -26,7 +27,7 @@ async function readPassport(buffer, mimeType) {
   let o = {};
   try { o = JSON.parse(raw.replace(/^```json\s*|```$/g, '')); } catch (e) { const er = new Error('رد خدمة القراءة مش مفهوم'); er.status = 502; throw er; }
   const s = (v) => String(v == null ? '' : v).trim();
-  return { mrz1: s(o.mrz1), mrz2: s(o.mrz2), nameAr: s(o.nameAr), birthPlaceEn: s(o.birthPlaceEn), birthPlaceAr: s(o.birthPlaceAr), issueDate: /^\d{4}-\d{2}-\d{2}$/.test(s(o.issueDate)) ? s(o.issueDate) : '', expiryDate: /^\d{4}-\d{2}-\d{2}$/.test(s(o.expiryDate)) ? s(o.expiryDate) : '' };
+  return { mrz1: s(o.mrz1), mrz2: s(o.mrz2), nameAr: s(o.nameAr), birthPlaceEn: s(o.birthPlaceEn), birthPlaceAr: s(o.birthPlaceAr), issueDate: /^\d{4}-\d{2}-\d{2}$/.test(s(o.issueDate)) ? s(o.issueDate) : '', nationalId: /^\d{14}$/.test(s(o.nationalId).replace(/\D/g, '')) ? s(o.nationalId).replace(/\D/g, '') : '', expiryDate: /^\d{4}-\d{2}-\d{2}$/.test(s(o.expiryDate)) ? s(o.expiryDate) : '' };
 }
 
 module.exports = { readPassport };

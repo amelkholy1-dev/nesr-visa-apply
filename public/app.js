@@ -149,7 +149,7 @@
         <div style="min-width:240px"><input type="file" id="pasF" accept="image/jpeg,image/png,application/pdf">
           ${pending.passport ? `<div style="margin-top:8px"><img class="thumb" src="${objUrl(pending.passport)}"></div>` : (!isNew && person.hasPassport ? `<div style="margin-top:8px"><img class="thumb" src="/api/people/${id}/file/passport?t=${Date.now()}" onerror="this.style.display='none'"></div>` : '')}
           <div class="small muted" style="margin-top:6px">${isNew ? 'اختار صورة الجواز (بتترفع أول ما تحفظ).' : 'صورة الجواز للتوثيق والقراءة (مش بتتبعت للمنصة).'}</div>
-          <div class="row" style="margin-top:6px"><button class="btn small pri" id="ocrLocal">قراءة MRZ من الصورة</button>${meta.ocr && !isNew ? '<button class="btn small" id="ocrBtn">قراءة بـ Gemini</button>' : ''}</div></div>
+          <div class="row" style="margin-top:6px"><button class="btn small pri" id="ocrLocal">قراءة MRZ من الصورة</button></div></div>
         <div style="flex:1;min-width:280px"><label class="f">سطري MRZ (آخر سطرين في صفحة بيانات الجواز) — اتملوا لوحدهم من «قراءة MRZ من الصورة»، أو الصقهم هنا<textarea id="mrz" class="mrz" placeholder="P&lt;EGY....&#10;A12345678...."></textarea></label>
           <div class="row" style="margin-top:6px"><button class="btn" id="mrzBtn">حلّل MRZ واملى البيانات</button><span id="mrzMsg" class="small"></span></div></div></div></div>
       ${personFields}
@@ -208,10 +208,23 @@
           applyMrz(best, 'من الصورة — ');
         } catch (er) { fail(er); msg.textContent = ''; } finally { btn.disabled = false; }
       };
-      $('#ocrLocal').onclick = runLocalOcr;
+      /* لو Gemini متفعّل: بيقرا كل حاجة (MRZ + الاسم العربي + مكان الميلاد + الإصدار)، ولو فشل أو الدقة مش عالية بنكمّل بالقراءة المحلية */
+      const runRead = async () => {
+        if (!meta.ocr) return runLocalOcr();
+        const btn = $('#ocrLocal'), msg = $('#mrzMsg');
+        try {
+          const blob = await passportBlob(); if (!blob) return toast('اختار صورة الجواز الأول', 'err');
+          btn.disabled = true; msg.textContent = 'بيقرا الجواز بالذكاء الاصطناعي…';
+          const fd = new FormData(); fd.append('file', blob, 'p.jpg');
+          const r = await api('POST', '/people/ocr', fd);
+          applyMrz(r.mrz, 'Gemini — ');
+          if (!r.mrzOk || r.mrz.confidence !== 'high') { msg.textContent += ' — بكمّل بالقراءة المحلية للـ MRZ…'; btn.disabled = false; await runLocalOcr(); }
+        } catch (er) { btn.disabled = false; toast('قراءة Gemini فشلت (' + er.message + ') — بجرّب القراءة المحلية', 'err'); await runLocalOcr(); } finally { btn.disabled = false; }
+      };
+      $('#ocrLocal').onclick = runRead;
       $('#mrzBtn').onclick = async () => {
         try {
-          if (!$('#mrz').value.trim()) return runLocalOcr();
+          if (!$('#mrz').value.trim()) return runRead();
           applyMrz(await api('POST', '/people/mrz', { text: $('#mrz').value }));
         } catch (er) { fail(er); }
       };

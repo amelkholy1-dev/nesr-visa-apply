@@ -190,7 +190,14 @@ router.post('/ocr', upload.single('file'), async (req, res) => {
     if (r.nameAr) extra.nameAr = r.nameAr;
     if (r.birthPlaceEn || r.birthPlaceAr) extra.birthPlace = String(r.birthPlaceEn || r.birthPlaceAr).slice(0, 20);
     if (r.issueDate) extra.issueDate = r.issueDate;
-    res.json({ mrz: fromMrz(m, extra), printed: r, note: m ? '' : 'ما قدرتش أقرا MRZ من الصورة. جرّب صورة أوضح أو الصق السطرين.' });
+    if (r.nationalId) extra.nationalId = r.nationalId;
+    const warn = [];
+    if (m && r.expiryDate && m.expiryDate && r.expiryDate !== m.expiryDate) warn.push('تاريخ الانتهاء المطبوع مختلف عن اللي في MRZ: راجعه');
+    let out = fromMrz(m, extra);
+    if (out && r.issueDate) out.guess = {};
+    if (!out) out = { confidence: 'low', checks: {}, corrected: false, lines: ['', ''], suggest: extra, guess: {}, warnings: [] };
+    out.warnings = (out.warnings || []).concat(warn);
+    res.json({ mrz: out, mrzOk: !!m, printed: r });
   } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 
