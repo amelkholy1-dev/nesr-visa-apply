@@ -20,8 +20,9 @@ const MOCK = `<script>
     var o=document.getElementById('JOB_OR_RELATION_Id'); if(o) o.innerHTML='';
     var $=function(i){return document.getElementById(i)};
     $('NATIONALITY').addEventListener('change', function(){ later(function(){ opts('NUMBER_OF_ENTRIES', [['0','سفرة واحدة'],['1','متعددة']]); }); });
-    $('NUMBER_OF_ENTRIES').addEventListener('change', function(){ later(function(){ opts('Number_Entry_Day', [['90','90 يوم'],['365','365 يوم']]); }); });
-    $('Number_Entry_Day').addEventListener('change', function(){ later(function(){ opts('RESIDENCY_IN_KSA', [['30','30'],['90','90']]); }); });
+    var nodur = sessionStorage.getItem('nodur');
+    $('NUMBER_OF_ENTRIES').addEventListener('change', function(){ if(nodur) return; later(function(){ opts('Number_Entry_Day', [['90','90 يوم'],['365','365 يوم']]); }); });
+    $('Number_Entry_Day').addEventListener('change', function(){ if(nodur) return; later(function(){ opts('RESIDENCY_IN_KSA', [['30','30'],['90','90']]); }); });
     document.querySelector('[name=Classify_Occupations_Id]').addEventListener('change', function(){ var c=this.value; later(function(){ opts('JOB_OR_RELATION_Id', c==='832' ? [['8321','سائق سيارة'],['8322','سائق حافلة']] : [['1431','مدير فندق'],['1432','مدير مطعم']]); }); });
     $('COMING_THROUGH').addEventListener('change', function(){ var c=this.value; later(function(){ opts('ENTRY_POINT', c==='2' ? [['5','مطار جدة الدولي'],['6','مطار المدينة']] : [['17','جسر الملك فهد'],['18','منفذ الحديثة']]); }); });
     $('PersonalImage').addEventListener('change', function(){ later(function(){ $('image').setAttribute('src','/SmartForm/GetImage?rand=1'); }); });
@@ -57,6 +58,8 @@ const MOFA = {
   let loggedIn = true;
   await ctx.route('https://visa.mofa.gov.sa/**', (r) => {
     const rq = r.request();
+    if (/\/Base\/GetEntryDurations/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ Value: 365, Text: '365' }]) });
+    if (/\/Base\/GetResidenceDurations/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ Value: 90, Text: '90' }]) });
     if (/GetOccupationsByClassificationId/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(/jobClassificationId=832/.test(rq.url()) ? [{ Value: 8321, Text: 'سائق سيارة' }, { Value: 8322, Text: 'سائق حافلة' }] : [{ Value: 1431, Text: 'مدير فندق' }]) });
     const html = (b) => r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body>' + b + '</body>' });
     if (/\/Account\/Login/i.test(rq.url())) return html('<h2>دخول الشركات</h2><input id="user"><input id="pw" type="password">');
@@ -132,6 +135,13 @@ const MOFA = {
   await app.waitForFunction(() => window.nexts.length > 0, null, { timeout: 10000 });
   const nx = await app.evaluate(() => window.nexts[0]);
   assert.strictEqual(nx.personId, '11'); assert.deepStrictEqual(nx.queue.map((x) => x.id), ['12']); assert.strictEqual(nx.total, 3);
+  /* سيناريو 5: المنصة ما حمّلتش صلاحية التأشيرة/مدة الإقامة بنفسها ← الإضافة تسأل نفس رابط المنصة وتحطهم */
+  await tab.evaluate(() => sessionStorage.setItem('nodur', '1'));
+  await app.evaluate((d) => window.fill(d), { personId: '13', name: 'تجربة API', mofa: MOFA, issues: [], warns: [], photo: PHOTO });
+  await tab.waitForTimeout(3000);
+  await tab.waitForFunction(() => { const b = document.getElementById('nesr-va-bar'); return b && /اتملى \d+ خانة/.test(b.innerText) && !!document.getElementById('nesr-va-again'); }, null, { timeout: 150000 }).catch(async (e) => { console.log('BAR:', await tab.evaluate(() => (document.getElementById('nesr-va-bar') || {}).innerText)); throw e; });
+  const s5 = await tab.evaluate(() => ({ Days: document.querySelector('[name="Number_Entry_Day"]').value, Res: document.querySelector('[name="RESIDENCY_IN_KSA"]').value }));
+  assert.deepStrictEqual([s5.Days, s5.Res], ['365', '90'], 'اتحمّلوا من المنصة مباشرة: ' + JSON.stringify(s5));
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

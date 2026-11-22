@@ -48,11 +48,12 @@
     if (!el) return note(label, 'failed', 'القايمة مش موجودة'), false;
     const hasWant = (Array.isArray(want) ? want : [want]).some((w) => String(w == null ? '' : w).trim());
     const loaded = await waitFor(() => realOptions(el).length >= (opts.min || 1), opts.timeout || 9000);
-    if (!loaded) return note(label, 'failed', 'القايمة ما اتحمّلتش'), mark(el), false;
+    const bad = (msg) => { if (!opts.silent) { note(label, 'failed', msg); mark(el); } return false; };
+    if (!loaded) return bad('القايمة ما اتحمّلتش' + (el.disabled ? ' (متقفّلة من المنصة)' : ''));
     await settled(el, opts.quiet || 450);
     let o = findOption(el, want);
     if (!o && opts.firstIfEmpty && !hasWant) o = realOptions(el)[0];
-    if (!o) return note(label, hasWant ? 'failed' : 'manual', hasWant ? 'مش لاقي «' + [].concat(want).filter(Boolean)[0] + '» في القايمة — المتاح: ' + (sample(el) || 'مفيش') : 'فاضي في النظام'), mark(el), false;
+    if (!o) { if (opts.silent) return false; return note(label, hasWant ? 'failed' : 'manual', hasWant ? 'مش لاقي «' + [].concat(want).filter(Boolean)[0] + '» في القايمة — المتاح: ' + (sample(el) || 'مفيش') : 'فاضي في النظام'), mark(el), false; }
     /* المنصة ساعات بتصفّر القايمة بعد الاختيار (تحميل متأخّر): نتأكد ونعيد لحد 3 مرات */
     for (let i = 0; i < 3; i++) {
       el.value = o.value; fire(el);
@@ -61,7 +62,7 @@
       await waitFor(() => realOptions(el).length >= 1, 6000); await settled(el, 450);
       o = findOption(el, want) || o;
     }
-    if (String(el.value) !== String(o.value)) return note(label, 'failed', 'المنصة رجّعت القيمة فاضية — اختارها بإيدك'), mark(el), false;
+    if (String(el.value) !== String(o.value)) return bad('المنصة رجّعت القيمة فاضية — اختارها بإيدك');
     chosen[name] = String(o.value);
     note(label, 'ok', opts.firstIfEmpty && !hasWant ? 'أول اختيار: ' + o.textContent.trim() : ''); return true;
   }
@@ -87,6 +88,27 @@
       if (res === 'err') return note('الصورة الشخصية', 'failed', 'المنصة رفضت مواصفات الصورة'), mark(input), false;
       return note('الصورة الشخصية', 'manual', 'اترفعت؟ اتأكد إنها ظهرت في الفورم'), mark(input), false;
     } catch (e) { return note('الصورة الشخصية', 'failed', 'تعذر الرفع'), mark(input), false; }
+  }
+
+  /* صلاحية التأشيرة ومدة الإقامة: المنصة بتحمّلهم بطلبات متسلسلة (عدد المرات ← الصلاحية ← مدة الإقامة). لو القايمة ما اتملتش بالطريقة العادية
+     بنسأل نفس رابط المنصة بنفسنا (بنفس الباراميترات) ونحط الاختيار ونبلّغ المنصة بالتغيير، ولو مفيش نكتب السبب بالظبط. */
+  const val = (n) => { const e = q(n); return e ? e.value : ''; };
+  async function setSelectViaApi(name, want, label, build) {
+    if (await setSelect(name, want, label, { firstIfEmpty: true, timeout: 20000, silent: true })) return true;
+    const el = q(name); if (!el) return note(label, 'failed', 'القايمة مش موجودة'), false;
+    const { url, params, text } = build();
+    let status = 0, list = [];
+    try { const r = await fetch(url + '?' + new URLSearchParams(params), { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } }); status = r.status; if (r.ok) list = (await r.json()) || []; } catch (e) { /* نكتب السبب تحت */ }
+    const w = String(want == null ? '' : want).trim();
+    const item = list.find((x) => String(x.Value) === w) || (!w ? list[0] : null);
+    if (!item) {
+      const have = list.slice(0, 5).map((x) => x.Value).join('، ');
+      return note(label, 'failed', w ? 'المنصة رجّعت ' + list.length + ' اختيار' + (have ? ' (' + have + ')' : '') + ' ومفيهاش «' + w + '»' + (status && status !== 200 ? ' [رد ' + status + ']' : '') + ' — اختارها بإيدك' : 'المنصة ما رجّعتش اختيارات — اختارها بإيدك'), mark(el), false;
+    }
+    if (![...el.options].some((o) => String(o.value) === String(item.Value))) { const op = document.createElement('option'); op.value = String(item.Value); op.textContent = text(item); el.appendChild(op); }
+    el.value = String(item.Value); fire(el); await sleep(700);
+    if (String(el.value) !== String(item.Value)) return note(label, 'failed', 'المنصة رجّعت القيمة فاضية — اختارها بإيدك'), mark(el), false;
+    chosen[name] = String(item.Value); note(label, 'ok', 'اتحمّلت من المنصة مباشرة'); return true;
   }
 
   /* المهنة: القايمة بتتحمّل حسب «التصنيف المهني». لو المهنة مش في التصنيف المختار بندوّر عليها في كل التصنيفات (نفس رابط المنصة) ونغيّر التصنيف */
@@ -161,9 +183,9 @@
     await sleep(500);
     await setSelect('NUMBER_OF_ENTRIES', m.NUMBER_OF_ENTRIES, 'عدد مرات الدخول', { firstIfEmpty: true });
     await sleep(500);
-    await setSelect('Number_Entry_Day', m.Number_Entry_Day, 'صلاحية التأشيرة', { firstIfEmpty: true });
+    await setSelectViaApi('Number_Entry_Day', m.Number_Entry_Day, 'صلاحية التأشيرة', () => ({ url: '/Base/GetEntryDurations', params: { visaKindID: val('VisaKind'), entryType: val('NUMBER_OF_ENTRIES'), naionalityCode: val('NATIONALITY') }, text: (it) => it.Value + '  يوم' }));
     await sleep(500);
-    await setSelect('RESIDENCY_IN_KSA', m.RESIDENCY_IN_KSA, 'مدة الإقامة', { firstIfEmpty: true });
+    await setSelectViaApi('RESIDENCY_IN_KSA', m.RESIDENCY_IN_KSA, 'مدة الإقامة', () => ({ url: '/Base/GetResidenceDurations', params: { visaKindID: val('VisaKind'), entryType: val('NUMBER_OF_ENTRIES'), entryDuration: val('Number_Entry_Day'), NationalityIsoCode: val('NATIONALITY') }, text: (it) => String(it.Text || it.Value) }));
 
     setStatus('الأسماء…');
     setInput('AFIRSTNAME', m.AFIRSTNAME, 'الاسم الأول (عربي)'); setInput('AFATHER', m.AFATHER, 'الأب (عربي)'); setInput('AGRAND', m.AGRAND, 'الجد (عربي)'); setInput('AFAMILY', m.AFAMILY, 'العائلة (عربي)');
