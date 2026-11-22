@@ -1,6 +1,7 @@
 'use strict';
 /* الوسيط بين نظام طلبات التأشيرات وصفحة الفورم في المنصة. كل البيانات بتتنقل جوه المتصفح بين تبويبين، مفيش أي سيرفر تالت. */
 const FORM_URL = 'https://visa.mofa.gov.sa/SmartForm/TraditionalApp';
+const LOGIN_URL = 'https://visa.mofa.gov.sa/Account/Login/enjazcompany';
 const store = chrome.storage.session;
 const APP_TAB_RE = /^https:\/\/[a-z0-9-]+\.nisrelkhaleeg\.com\//;
 
@@ -13,7 +14,7 @@ async function findAppTab(preferId) {
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   (async () => {
     if (msg.kind === 'open-fill') {
-      const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now() };
+      const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now(), stage: 'opening' };
       let tab = null;
       const o = await store.get('formTab');
       if (o.formTab) { try { const t = await chrome.tabs.get(o.formTab); if (t && /^https:\/\/visa\.mofa\.gov\.sa\//.test(t.url || '')) tab = t; } catch (e) { /* اتقفل */ } }
@@ -38,5 +39,24 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     }
   })().catch((e) => reply({ error: String(e && e.message || e) }));
   return true;
+});
+/* المنصة بترجّع غير المسجّلين للرئيسية أو لصفحة الدخول. بنتابع تبويب الفورم:
+   opening → (رجعنا للرئيسية) → login (بنفتح صفحة دخول الشركات) → المستخدم بيدخل بنفسه → retry (بنفتح الفورم تاني) → form.
+   لو رجعنا تاني لغير الفورم: failed (بنقول للمستخدم يفتح الفورم بنفسه والإضافة هتملاه). */
+chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
+  try {
+    if (info.status !== 'complete') return;
+    const key = 'ctx_' + tabId; const o = await store.get(key); const ctx = o[key];
+    if (!ctx) return;
+    const url = String(tab.url || '');
+    if (!/^https:\/\/visa\.mofa\.gov\.sa\//.test(url)) return;
+    let next = ctx.stage;
+    if (/\/SmartForm\/TraditionalApp/i.test(url)) next = 'form';
+    else if (/\/Account\/Login/i.test(url)) next = 'login';
+    else if (ctx.stage === 'opening') { next = 'login'; await store.set({ [key]: { ...ctx, stage: next } }); await chrome.tabs.update(tabId, { url: LOGIN_URL }); return; }
+    else if (ctx.stage === 'login') { next = 'retry'; await store.set({ [key]: { ...ctx, stage: next } }); await chrome.tabs.update(tabId, { url: FORM_URL }); return; }
+    else if (ctx.stage === 'retry') next = 'failed';
+    if (next !== ctx.stage) await store.set({ [key]: { ...ctx, stage: next } });
+  } catch (e) { /* مش مهم */ }
 });
 chrome.tabs.onRemoved.addListener((id) => { store.remove('ctx_' + id).catch(() => {}); });

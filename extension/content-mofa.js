@@ -173,10 +173,19 @@
     }
   }
 
+  /* صفحات الدخول/الرئيسية: الإضافة بتوجّهك لصفحة دخول الشركات وبعد ما تدخل بتفتح الفورم لوحدها */
+  function onLoginFlow(ctx) {
+    if (ctx.stage === 'login') bar('<div>🔐 <b>سجّل الدخول بحساب الشركة</b> (الإضافة مش بتكتب ولا بتخزّن كلمة السر).</div><div>أول ما تدخل هفتح فورم «طلب تأشيرة» وأملاه لـ <b>' + esc(ctx.name || '') + '</b>.</div>', 'info');
+    else if (ctx.stage === 'retry') bar('<div>✅ دخلت. بفتح الفورم…</div>', 'ok');
+    else if (ctx.stage === 'failed') bar('<div>⚠️ المنصة رجّعتك للرئيسية. افتح فورم «طلب تأشيرة» بنفسك من القايمة (أو من <b dir="ltr">visa.mofa.gov.sa/SmartForm/TraditionalApp</b>) وأنا هملاه لـ <b>' + esc(ctx.name || '') + '</b> أول ما يتفتح.</div>', 'warn');
+    else if (ctx.stage === 'opening') bar('<div>بفتح الفورم…</div>', 'info');
+  }
+
   (async function run() {
     const { ctx } = await send({ kind: 'get-ctx' });
     if (!ctx || !ctx.mofa) return;
     if (document.getElementById('myform') && q('VisaKind')) return onForm(ctx);
-    if (!/TraditionalApp/i.test(location.pathname)) return onAfterSave(ctx);
+    if (/\/SmartForm\//i.test(location.pathname) && !/TraditionalApp/i.test(location.pathname)) return onAfterSave(ctx);
+    if (ctx.stage && ctx.stage !== 'form') return onLoginFlow(ctx);
   })();
 })();
