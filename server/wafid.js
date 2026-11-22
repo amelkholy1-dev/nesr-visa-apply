@@ -26,7 +26,8 @@ function build(data, profileData) {
     first: (m.EFIRSTNAME || '').slice(0, 50), last: (m.EFAMILY || '').slice(0, 50),
     dob: v.birthDate || '', nationalityText: 'مصري', gender: v.sex === '2' ? 'female' : v.sex === '1' ? 'male' : '', marital: MARITAL(v.social),
     passport: m.PASSPORTnumber || '', issueDate: v.issueDate || '', expiryDate: v.expiryDate || '', issuePlace: (v.issuePlace || 'Egypt').slice(0, 50),
-    email: v.email || '', phone: intlPhone(v.phone), nationalId: v.nationalId || '', position: v.medPosition || ''
+    email: v.email || '', phone: intlPhone(v.phone),
+    autoDeclare: v.autoDeclare === '1', /* نفس إعداد «تعليم الإقرارات تلقائياً» في ملف الضبط */ nationalId: v.nationalId || '', position: v.medPosition || ''
   };
   return { payload, issues, warns };
 }

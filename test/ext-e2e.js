@@ -163,7 +163,7 @@ const MOFA = {
   const s6 = await tab.evaluate(() => ({ Days: document.querySelector('[name="Number_Entry_Day"]').value, bar: document.getElementById('nesr-va-bar').innerText.replace(/\s+/g, ' ') }));
   assert.strictEqual(s6.Days, '90'); assert.ok(s6.bar.includes('اتغيّر عن ملف الضبط') && s6.bar.includes('«365»'), 'التنبيه: ' + s6.bar);
   /* سيناريو 7: حجز الفحص الطبي في وافد */
-  const WF = { country: 'EGY', city: 'القاهرة', traveled: 'SA', visa: 'hu', first: 'ATEF', last: 'ELSHAHAWY', dob: '1989-11-01', nationalityText: 'مصري', gender: 'male', marital: 'married', passport: 'A45449365', issueDate: '2026-06-24', expiryDate: '2033-06-23', issuePlace: 'Egypt', email: 'a@b.com', phone: '+201000000000', nationalId: '29001010100011', position: '65' };
+  const WF = { country: 'EGY', city: 'القاهرة', traveled: 'SA', visa: 'hu', first: 'ATEF', last: 'ELSHAHAWY', dob: '1989-11-01', nationalityText: 'مصري', gender: 'male', marital: 'married', passport: 'A45449365', issueDate: '2026-06-24', expiryDate: '2033-06-23', issuePlace: 'Egypt', email: 'a@b.com', phone: '+201000000000', nationalId: '29001010100011', position: '65', autoDeclare: true };
   const [wpage] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_WAFID', data: d }, location.origin), { personId: '21', name: 'تجربة وافد', wafid: WF, issues: [], warns: [] })]);
   await wpage.waitForSelector('#nesr-wf-bar', { timeout: 30000 });
   await wpage.waitForFunction(() => /اتملى \d+ خانة/.test((document.getElementById('nesr-wf-bar') || {}).innerText || ''), null, { timeout: 90000 });
@@ -172,7 +172,7 @@ const MOFA = {
   assert.deepStrictEqual([w7.country, w7.city, w7.trav, w7.first, w7.last, w7.nat, w7.gender, w7.marital], ['EGY', '87', 'SA', 'ATEF', 'ELSHAHAWY', '55', 'male', 'married']);
   assert.deepStrictEqual([w7.pass, w7.pass2, w7.place, w7.email, w7.phone, w7.nid, w7.pos, w7.visa], ['A45449365', 'A45449365', 'Egypt', 'a@b.com', '+201000000000', '29001010100011', '65', 'hu']);
   assert.deepStrictEqual([w7.dob, w7.iss, w7.exp], ['01/11/1989', '24/06/2026', '23/06/2033'], 'التواريخ اتحطت بتقويم الصفحة');
-  assert.strictEqual(w7.confirm, false, 'الإقرار مش بيتعلّم'); assert.ok(w7.apptType, 'نوع الموعد اتسجّل'); assert.strictEqual(w7.apptDate, '', 'تاريخ الموعد مش بيتلمس'); assert.strictEqual(w7.captcha, '', 'الكابتشا مش بتتلمس');
+  assert.strictEqual(w7.confirm, true, 'الإقرار اتعلّم لأن الإعداد مفعّل'); assert.ok(w7.apptType, 'نوع الموعد اتسجّل'); assert.strictEqual(w7.apptDate, '', 'تاريخ الموعد مش بيتلمس'); assert.strictEqual(w7.captcha, '', 'الكابتشا مش بتتلمس');
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

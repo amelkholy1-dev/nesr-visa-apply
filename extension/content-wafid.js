@@ -80,7 +80,11 @@
       else if (vis.length > 1) { note('نوع الموعد', 'manual', 'فيه أكتر من اختيار (بسعر مختلف): اختار بإيدك'); radios.forEach((r) => mark(r.closest('.card'))); }
     });
     /* الإقرار بصحة المعلومات: بإيدك (مش بنعلّمه تلقائياً هنا) */
-    const conf = byId('id_confirm'); if (conf) mark(conf.closest('.checkbox') || conf);
+    /* الإقرار بصحة المعلومات: بيتعلّم بس لو أحمد فعّل «تعليم الإقرارات تلقائياً» في ملف الضبط (طلبه صراحة)، وإلا بإيدك */
+    const conf = byId('id_confirm');
+    if (conf && w.autoDeclare) {
+      await step('الإقرار', async () => { if (!conf.checked) { (conf.closest('.checkbox') || conf).click(); await sleep(250); if (!conf.checked) { conf.checked = true; fire(conf); } } if (conf.checked) note('الإقرار بصحة المعلومات', 'ok', 'اتعلّم بطلبك'); else { note('الإقرار بصحة المعلومات', 'failed', 'ما اتعلّمش'); mark(conf.closest('.checkbox') || conf); } });
+    } else if (conf) mark(conf.closest('.checkbox') || conf);
     mark(byId('id_appointment_date'));
   }
 
@@ -93,7 +97,7 @@
     try { sessionStorage.setItem(flag, '1'); } catch (e) { /* مش مهم */ }
     const bad = report.failed.length || ctx.issues.length;
     const b = bar('<div><b>' + (bad ? '⚠️' : '✅') + ' اتملى ' + report.ok.length + ' خانة' + (report.failed.length ? ' · ' + report.failed.length + ' محتاجة راجعة' : '') + '</b> — دلوقتي:</div>' +
-      '<ol style="margin:4px 18px;padding:0"><li>راجع الخانات اللي حواليها إطار برتقالي</li><li>اختار <b>تاريخ الموعد</b> (من الموقع)</li><li>علّم على الإقرار، ولو طلب كود تحقق/OTP اكتبه</li><li>دوس «حفظ ومتابعة»</li></ol>' +
+      '<ol style="margin:4px 18px;padding:0"><li>راجع الخانات اللي حواليها إطار برتقالي</li><li>اختار <b>تاريخ الموعد</b> (من الموقع)</li><li>' + (ctx.wafid.autoDeclare ? 'الإقرار اتعلّم' : 'علّم على الإقرار') + '، ولو طلب كود تحقق/OTP اكتبه</li><li>دوس «حفظ ومتابعة»</li></ol>' +
       (ctx.issues.length ? '<div>⛔ في النظام:</div>' + list(ctx.issues) : '') + (report.failed.length ? '<div>❌ مش اتملى:</div>' + list(report.failed) : '') + (report.manual.length ? '<div>✋ فاضي في النظام:</div>' + list(report.manual) : '') + ((ctx.warns || []).length ? '<div>ℹ️</div>' + list(ctx.warns) : '') +
       '<div style="margin-top:6px"><button id="nesr-wf-hide" style="background:#ffffff33;color:#fff;border:0;border-radius:8px;padding:6px 12px;font:700 12px Tahoma;cursor:pointer">إخفاء</button></div>');
     const h = b.querySelector('#nesr-wf-hide'); if (h) h.addEventListener('click', () => b.remove());

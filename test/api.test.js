@@ -144,6 +144,7 @@ const api = async (method, url, body, extra = {}) => {
   const rs = await api('GET', '/api/reports/summary'); assert.ok(rs.json.stages && rs.json.stages.medical.booked >= 1);
   const wp = await api('GET', `/api/people/${spid}/wafid`); assert.strictEqual(wp.status, 200);
   assert.deepStrictEqual([wp.json.wafid.first, wp.json.wafid.last, wp.json.wafid.passport, wp.json.wafid.gender, wp.json.wafid.dob, wp.json.wafid.phone], ['ALI', 'SAID', 'ST12345', 'male', '1990-02-03', '+201000000000']);
+  assert.strictEqual(wp.json.wafid.autoDeclare, false, 'الإقرار مش متفعّل من غير الإعداد');
   assert.ok(wp.json.issues.some((x) => x.includes('مدينة الفحص')), 'مدينة الفحص ناقصة بتتعلّم');
   await api('DELETE', `/api/people/${spid}`);
 
