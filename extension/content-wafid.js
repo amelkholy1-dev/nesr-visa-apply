@@ -51,24 +51,28 @@
   }
   const list = (arr) => (arr.length ? '<ul style="margin:4px 18px;padding:0">' + arr.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '');
 
+  /* كل خطوة لوحدها: لو خطوة وقعت بخطأ، نكتب اسمها ونكمّل الباقي (بدل ما كل حاجة توقف) */
+  const step = async (name, fn) => { try { await fn(); } catch (e) { report.failed.push(name + ': حصل خطأ (' + String(e && e.message || e) + ')'); } };
   async function fillAll(w, setStatus) {
     setStatus('الموقع والدولة…');
-    await setSelect('id_country', w.country, 'الدولة');
-    await waitFor(() => { const c = byId('id_city'); return c && real(c).length >= 1; }, 12000);
-    await setSelect('id_city', w.city, 'المدينة', { timeout: 12000 });
-    await setSelect('id_traveled_country', w.traveled, 'الدولة المتوجه إليها');
+    await step('الدولة', () => setSelect('id_country', w.country, 'الدولة'));
+    await step('المدينة', async () => { await waitFor(() => { const c = byId('id_city'); return c && real(c).length >= 1; }, 12000); await setSelect('id_city', w.city, 'المدينة', { timeout: 12000 }); });
+    await step('الدولة المتوجه إليها', () => setSelect('id_traveled_country', w.traveled, 'الدولة المتوجه إليها'));
     setStatus('بيانات المتقدم…');
-    setInput('id_first_name', w.first, 'الاسم الأول'); setInput('id_last_name', w.last, 'اسم العائلة');
-    await setSelect('id_nationality', ['55', w.nationalityText, 'Egyptian'], 'الجنسية');
-    await setSelect('id_gender', w.gender, 'الجنس'); await setSelect('id_marital_status', w.marital, 'الحالة الاجتماعية');
-    setInput('id_passport', w.passport, 'رقم الجواز'); setInput('id_confirm_passport', w.passport, 'تأكيد رقم الجواز'); setInput('id_passport_issue_place', w.issuePlace, 'مكان إصدار الجواز');
-    setInput('id_email', w.email, 'البريد الإلكتروني'); setInput('id_phone', w.phone, 'رقم الهاتف'); setInput('id_national_id', w.nationalId, 'الهوية الوطنية');
-    await setSelect('id_applied_position', w.position, 'الوظيفة المتقدم إليها', { optional: true, timeout: 3000 });
+    await step('الاسمين', async () => { setInput('id_first_name', w.first, 'الاسم الأول'); setInput('id_last_name', w.last, 'اسم العائلة'); });
+    await step('الجنسية', () => setSelect('id_nationality', ['55', w.nationalityText, 'Egyptian'], 'الجنسية'));
+    await step('الجنس', () => setSelect('id_gender', w.gender, 'الجنس'));
+    await step('الحالة الاجتماعية', () => setSelect('id_marital_status', w.marital, 'الحالة الاجتماعية'));
+    await step('الجواز', async () => { setInput('id_passport', w.passport, 'رقم الجواز'); setInput('id_confirm_passport', w.passport, 'تأكيد رقم الجواز'); setInput('id_passport_issue_place', w.issuePlace, 'مكان إصدار الجواز'); });
+    await step('الاتصال', async () => { setInput('id_email', w.email, 'البريد الإلكتروني'); setInput('id_phone', w.phone, 'رقم الهاتف'); setInput('id_national_id', w.nationalId, 'الهوية الوطنية'); });
+    await step('الوظيفة', () => setSelect('id_applied_position', w.position, 'الوظيفة المتقدم إليها', { optional: true, timeout: 3000 }));
     setStatus('التواريخ…');
-    await setDate('id_dob', w.dob, 'تاريخ الميلاد'); await setDate('id_passport_issue_date', w.issueDate, 'تاريخ إصدار الجواز'); await setDate('id_passport_expiry_on', w.expiryDate, 'تاريخ انتهاء الجواز');
+    await step('تاريخ الميلاد', () => setDate('id_dob', w.dob, 'تاريخ الميلاد'));
+    await step('تاريخ إصدار الجواز', () => setDate('id_passport_issue_date', w.issueDate, 'تاريخ إصدار الجواز'));
+    await step('تاريخ انتهاء الجواز', () => setDate('id_passport_expiry_on', w.expiryDate, 'تاريخ انتهاء الجواز'));
     setStatus('نوع التأشيرة…');
     await sleep(600);
-    await setSelect('id_visa_type', w.visa, 'نوع التأشيرة', { timeout: 6000 });
+    await step('نوع التأشيرة', () => setSelect('id_visa_type', w.visa, 'نوع التأشيرة', { timeout: 6000 }));
     for (const id of ['id_appointment_date', 'id_confirm']) { const el = byId(id); if (el) mark(el.type === 'checkbox' ? (el.closest('.checkbox') || el) : el); }
   }
 

@@ -38,7 +38,7 @@ const WMOCK = `<script>
     var city=document.getElementById('id_city'); city.innerHTML='<option value="" selected>اختر مدينة</option>';
     document.getElementById('id_country').addEventListener('change', function(){ setTimeout(function(){ city.innerHTML='<option value="" selected>اختر مدينة</option><option value="120">الإسكندرية</option><option value="87">القاهرة</option>'; }, 400); });
     var f=function(d){ return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear(); };
-    window.jQuery=function(el){ return { closest:function(){ return { length:1, calendar:function(cmd,d){ el.value=f(d); el.dispatchEvent(new Event('change',{bubbles:true})); } }; } }; }; window.jQuery.fn={calendar:function(){}};
+    window.jQuery=function(el){ return { closest:function(){ return { length:1, calendar:function(cmd,d,u,fc){ if(fc) throw new TypeError("Cannot read properties of undefined (reading 'trim')"); el.value=f(d); } }; } }; }; window.jQuery.fn={calendar:function(){}};
   });
 })();
 </script>`;

@@ -52,7 +52,17 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
             const el = document.getElementById(elId); const $ = window.jQuery || window.$;
             if (!el) return { ok: false, why: 'الخانة مش موجودة' };
             const d = new Date(isoDate + 'T12:00:00');
-            if ($ && $.fn && $.fn.calendar) { const cal = $(el).closest('.calendar-js, .ui.calendar'); if (cal.length) { cal.calendar('set date', d, true, true); return { ok: !!el.value, value: el.value }; } }
+            if ($ && $.fn && $.fn.calendar) {
+              const cal = $(el).closest('.calendar-js, .ui.calendar');
+              if (cal.length) {
+                /* بنجرّب من غير ما نشغّل أحداث الموقع الخاصة بالتقويم (ساعات بتوقع بخطأ)، وبعدين بأحداثها، وبعدين تاريخ بس */
+                let lastErr = '';
+                for (const a of [[d, true, false], [d, true, true], [d]]) {
+                  try { cal.calendar('set date', ...a); if (el.value) { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return { ok: true, value: el.value }; } } catch (e) { lastErr = String(e && e.message || e); }
+                }
+                return { ok: false, why: lastErr || 'التقويم ما غيّرش القيمة' };
+              }
+            }
             return { ok: false, why: 'مفيش تقويم' };
           } catch (e) { return { ok: false, why: String(e && e.message || e) }; }
         } });
