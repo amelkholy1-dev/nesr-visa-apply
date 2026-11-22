@@ -185,9 +185,9 @@
       $('#prof').onchange = () => { data = { ...data, ...collect(view) }; profileId = $('#prof').value; draw(); };
       $('#save').onclick = () => save().then(() => { if (!isNew) pagePerson(id); }).catch((er) => { if (er.data && er.data.duplicateId && confirm(er.message + '\nتفتحه؟')) location.hash = '#/people/' + er.data.duplicateId; else fail(er); });
       const applyMrz = (r, how) => {
-        data = { ...collect(view), ...Object.fromEntries(Object.entries(r.suggest).filter(([, v]) => v)) }; const keep = r.lines.join('\n'); draw();
+        const cur = collect(view); const gs = {}; Object.entries(r.guess || {}).forEach(([k, v]) => { if (v && !cur[k]) gs[k] = v; }); data = { ...cur, ...gs, ...Object.fromEntries(Object.entries(r.suggest).filter(([, v]) => v)) }; const keep = r.lines.join('\n'); draw();
         $('#mrz').value = keep;
-        $('#mrzMsg').innerHTML = `<span class="pill ${r.confidence === 'high' ? 'ok' : r.confidence === 'medium' ? 'warn' : 'bad'}">${how || ''}دقة ${r.confidence === 'high' ? 'عالية (الأرقام سليمة)' : r.confidence === 'medium' ? 'متوسطة: راجع' : 'ضعيفة: راجع كل حاجة'}</span> ${r.warnings.map(e).join(' · ')}`;
+        $('#mrzMsg').innerHTML = `<span class="pill ${r.confidence === 'high' ? 'ok' : r.confidence === 'medium' ? 'warn' : 'bad'}">${how || ''}دقة ${r.confidence === 'high' ? 'عالية (الأرقام سليمة)' : r.confidence === 'medium' ? 'متوسطة: راجع' : 'ضعيفة: راجع كل حاجة'}</span> ${r.warnings.map(e).join(' · ')}${gs.issueDate ? ' · <b>تاريخ الإصدار تقدير</b> (الانتهاء − 7 سنين): راجعه من الصورة' : ''} · <span class="muted">الاسم العربي ومكان الميلاد مش في MRZ، اكتبهم من الصورة</span>`;
         const re = $('#mrzMsg'); if (re) re.scrollIntoView({ block: 'nearest' });
       };
       const passportBlob = async () => {

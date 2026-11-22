@@ -49,7 +49,7 @@ function parseLine1(l) {
   const names = l.slice(5);
   const i = names.indexOf('<<');
   const sur = (i >= 0 ? names.slice(0, i) : names).replace(/</g, ' ').trim();
-  const giv = (i >= 0 ? names.slice(i + 2) : '').replace(/<+$/g, '').split('<').map(x => x.trim()).filter(Boolean);
+  const giv = (i >= 0 ? names.slice(i + 2).split('<<')[0] : '').replace(/<+$/g, '').split('<').map(x => x.trim()).filter(Boolean);
   out.surname = sur; out.given = giv;
   return out;
 }
@@ -67,8 +67,16 @@ function alignLine2(l) {
   return (l + '<'.repeat(44)).slice(0, 44);
 }
 
+/* خانة الرقم الشخصي (28-41) غالباً فاضية (<<<<) والقراءة الضوئية بتحوّلها لحروف زي K/L. لو مش أرقام كفاية نرجّعها فاضية */
+function cleanTail(l) {
+  const per = l.slice(28, 42);
+  const digits = (per.match(/\d/g) || []).length;
+  if (digits === 0 || digits < 6) return l.slice(0, 28) + '<'.repeat(14) + l.slice(42);
+  return l;
+}
+
 function parseLine2(raw) {
-  const l = alignLine2(raw);
+  const l = cleanTail(alignLine2(raw));
   const out = { raw: l, checks: {} };
   const no = l.slice(0, 9), noC = digitsOnly(l[9]);
   const fixedNo = checkDigit(no) === +noC ? no : fixByCheck(no, noC, false);
@@ -91,6 +99,7 @@ function parseLine2(raw) {
   out.checks.personal = checkDigit(per) === +perC || /^<+$/.test(per);
   out.checks.composite = (() => {
     const c = (fixedNo || no) + l[9] + l.slice(13, 20) + l.slice(21, 28) + l.slice(28, 43);
+    if (!/\d/.test(digitsOnly(l[43])) && /^<+$/.test(per)) return true; // آخر رقمين ضاعوا في القراءة والرقم الشخصي فاضي: مفيش حاجة تتفحص زيادة
     return checkDigit(c.replace(/[^A-Z0-9<]/g, '<')) === +digitsOnly(l[43]);
   })();
   if (!out.birthDate) out.checks.birth = false;

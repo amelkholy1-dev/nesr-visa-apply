@@ -156,6 +156,12 @@ router.post('/:id(\\d+)/result', async (req, res) => {
 });
 
 /* MRZ: لصق سطرين ← بيانات جاهزة (مع فحص أرقام التحقق) */
+/* تاريخ الإصدار مش في MRZ. الجواز المصري صلاحيته 7 سنين: الإصدار = الانتهاء − 7 سنين + يوم. تقدير بس ولازم يتراجع */
+function issueGuess(m) {
+  if (!m || m.nationality !== 'EGY' || !m.expiryDate) return {};
+  const d = new Date(m.expiryDate + 'T00:00:00Z'); d.setUTCFullYear(d.getUTCFullYear() - 7); d.setUTCDate(d.getUTCDate() + 1);
+  return { issueDate: d.toISOString().slice(0, 10) };
+}
 function fromMrz(m, extra = {}) {
   if (!m) return null;
   const en = names.splitEnglish(m.surname, m.given);
@@ -166,6 +172,7 @@ function fromMrz(m, extra = {}) {
       passportNo: m.passportNumber, birthDate: m.birthDate, expiryDate: m.expiryDate, sex: m.sex === 'M' ? '1' : m.sex === 'F' ? '2' : '',
       nameEnFirst: en.first, nameEnFather: en.father, nameEnGrand: en.grand, nameEnFamily: en.family, nationalId: nid, ...extra
     },
+    guess: issueGuess(m),
     warnings: names.lengthWarnings({ first: en.first, father: en.father, grand: en.grand, family: en.family }, { first: 'English First', father: 'English Father', grand: 'English Grand', family: 'English Family' })
   };
 }
