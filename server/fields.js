@@ -7,7 +7,8 @@ const names = require('./names');
 const OPT = {
   visaKind: MOFA.VisaKind, embassy: MOFA.EmbassyCode, passportType: MOFA.PASSPORType, religion: MOFA.RELIGION, social: MOFA.SOCIAL_STATUS,
   sex: MOFA.Sex, comingThrough: MOFA.COMING_THROUGH, entryPoint: MOFA.ENTRY_POINT, jobClass: MOFA.Classify_Occupations_Id,
-  country: MOFA.PASSPORT_ISSUE_PLACE, nationality: [{ v: 'EGY', t: 'مصر' }]
+  country: MOFA.PASSPORT_ISSUE_PLACE, nationality: [{ v: 'EGY', t: 'مصر' }],
+  autoDeclare: [{ v: '1', t: 'أيوه — علّم الإقرارين تلقائياً (أنا موافق عليهم بنفسي)' }]
 };
 
 /* scope: profile = بتتظبط في ملف الضبط · person = لكل شخص · both = افتراضي في الملف ويتغلب في الشخص */
@@ -19,6 +20,9 @@ const GROUPS = [
     { k: 'entriesText', label: 'عدد مرات الدخول (زي ما بتظهر في المنصة)', type: 'text', scope: 'profile', hint: 'مثلاً: سفرة واحدة' },
     { k: 'entryDays', label: 'صلاحية التأشيرة (يوم)', type: 'text', scope: 'profile', hint: 'مثلاً: 365' },
     { k: 'residence', label: 'مدة الإقامة', type: 'text', scope: 'profile', hint: 'مثلاً: 90' }
+  ] },
+  { id: 'declare', title: 'الإقرارات', fields: [
+    { k: 'autoDeclare', label: 'تعليم «أقر بأن المعلومات صحيحة» و«أوافق على سياسة الخصوصية» تلقائياً', type: 'select', opt: 'autoDeclare', scope: 'profile', hint: 'لو سيبته فاضي الإضافة مش هتعلّمهم' }
   ] },
   { id: 'sponsor', title: 'جهة العمل', fields: [
     { k: 'sponsorName', label: 'اسم الجهة', type: 'text', scope: 'profile', max: 100 },
@@ -93,6 +97,7 @@ function resolve(person, profile, files = {}) {
 
   const mofa = {
     VisaKind: v.visaKind, NATIONALITY: v.nationality || 'EGY', EmbassyCode: v.embassy,
+    AUTO_DECLARE: v.autoDeclare === '1' ? '1' : '',
     NUMBER_OF_ENTRIES: v.entriesText, Number_Entry_Day: v.entryDays, RESIDENCY_IN_KSA: v.residence,
     AFIRSTNAME: arParts.first, AFATHER: arParts.father, AGRAND: arParts.grand, AFAMILY: arParts.family,
     EFIRSTNAME: enParts.first, EFATHER: enParts.father, EGRAND: enParts.grand, EFAMILY: enParts.family,
@@ -129,6 +134,7 @@ function resolve(person, profile, files = {}) {
   if (!files.personalPhoto) issues.push('الصورة الشخصية ناقصة');
   else if (files.personalPhotoSize && files.personalPhotoSize > 1024 * 1024) issues.push('الصورة الشخصية أكبر من 1 ميجا');
   if (!files.passportImage) warns.push('صورة الجواز مش مرفوعة (مش بتتبعت للمنصة، للتوثيق بس)');
+  if (/^\s*مطار/.test(mofa.entryPointText || '') && mofa.COMING_THROUGH && mofa.COMING_THROUGH !== '2') warns.push('منفذ الدخول مطار لكن وسيلة الوصول مش «جوا»: الإضافة هتختار «جوا» تلقائياً عشان المنصة تعرض المطارات');
   if (!mofa.NUMBER_OF_ENTRIES || !mofa.Number_Entry_Day || !mofa.RESIDENCY_IN_KSA) warns.push('عدد الدخول/الصلاحية/مدة الإقامة فاضيين: الإضافة هتاخد أول اختيار متاح، راجعه');
   if (!mofa.SPONSER_NAME) warns.push('بيانات جهة العمل فاضية');
   if (!mofa.COMING_THROUGH) warns.push('وسيلة الوصول فاضية');

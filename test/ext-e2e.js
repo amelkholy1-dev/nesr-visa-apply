@@ -22,8 +22,8 @@ const MOCK = `<script>
     $('NATIONALITY').addEventListener('change', function(){ later(function(){ opts('NUMBER_OF_ENTRIES', [['0','سفرة واحدة'],['1','متعددة']]); }); });
     $('NUMBER_OF_ENTRIES').addEventListener('change', function(){ later(function(){ opts('Number_Entry_Day', [['90','90 يوم'],['365','365 يوم']]); }); });
     $('Number_Entry_Day').addEventListener('change', function(){ later(function(){ opts('RESIDENCY_IN_KSA', [['30','30'],['90','90']]); }); });
-    document.querySelector('[name=Classify_Occupations_Id]').addEventListener('change', function(){ later(function(){ opts('JOB_OR_RELATION_Id', [['8321','سائق سيارة'],['8322','سائق حافلة'],['9333','عامل تحميل وتنزيل']]); }); });
-    $('COMING_THROUGH').addEventListener('change', function(){ later(function(){ opts('ENTRY_POINT', [['5','مطار جدة الدولي'],['17','جسر الملك فهد']]); }); });
+    document.querySelector('[name=Classify_Occupations_Id]').addEventListener('change', function(){ var c=this.value; later(function(){ opts('JOB_OR_RELATION_Id', c==='832' ? [['8321','سائق سيارة'],['8322','سائق حافلة']] : [['1431','مدير فندق'],['1432','مدير مطعم']]); }); });
+    $('COMING_THROUGH').addEventListener('change', function(){ var c=this.value; later(function(){ opts('ENTRY_POINT', c==='2' ? [['5','مطار جدة الدولي'],['6','مطار المدينة']] : [['17','جسر الملك فهد'],['18','منفذ الحديثة']]); }); });
     $('PersonalImage').addEventListener('change', function(){ later(function(){ $('image').setAttribute('src','/SmartForm/GetImage?rand=1'); }); });
     window.__submitted = null;
   });
@@ -57,6 +57,7 @@ const MOFA = {
   let loggedIn = true;
   await ctx.route('https://visa.mofa.gov.sa/**', (r) => {
     const rq = r.request();
+    if (/GetOccupationsByClassificationId/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(/jobClassificationId=832/.test(rq.url()) ? [{ Value: 8321, Text: 'سائق سيارة' }, { Value: 8322, Text: 'سائق حافلة' }] : [{ Value: 1431, Text: 'مدير فندق' }]) });
     const html = (b) => r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body>' + b + '</body>' });
     if (/\/Account\/Login/i.test(rq.url())) return html('<h2>دخول الشركات</h2><input id="user"><input id="pw" type="password">');
     if (/\/Home\/Index/i.test(rq.url())) return html('<h1>الرئيسية</h1>');
@@ -85,7 +86,7 @@ const MOFA = {
   assert.deepStrictEqual([state.VisaKind, state.NAT, state.Emb, state.Entries, state.Days, state.Res], ['38', 'EGY', '320', '0', '365', '90']);
   assert.deepStrictEqual([state.AF, state.AFam, state.EF, state.EFam, state.PNo, state.PType], ['بدر', 'العنين', 'BADR', 'ABOUELENIN', 'A42014007', '1']);
   assert.deepStrictEqual([state.Issue, state.IDate, state.BDate, state.Bplace, state.NID, state.Rel, state.Soc, state.Sex], ['مصر', '2024/07/01', '1983/01/01', 'Cairo', '29001010100011', '1', '2', '1']);
-  assert.deepStrictEqual([state.Class, state.Job, state.Deg, state.Addr, state.Email, state.Sp, state.Come, state.Port, state.Exp], ['832', '8322', 'دبلوم', 'جدة حي الصفا', 'hr@example.com', 'شركة تجربة', '2', '17', '2027/01/15']);
+  assert.deepStrictEqual([state.Class, state.Job, state.Deg, state.Addr, state.Email, state.Sp, state.Come, state.Port, state.Exp], ['832', '8322', 'دبلوم', 'جدة حي الصفا', 'hr@example.com', 'شركة تجربة', '1', '17', '2027/01/15']);
   assert.ok(state.prevNo && state.traveledNo, 'الراديوهات');
   assert.ok(String(state.img).includes('GetImage'), 'الصورة اترفعت');
   assert.strictEqual(state.endorse, false, 'الإقرارات متعلّمش عليها تلقائي'); assert.strictEqual(state.privacy, false); assert.strictEqual(state.cap, '', 'الكابتشا فاضية');
@@ -110,6 +111,16 @@ const MOFA = {
   await tab.waitForURL(/SmartForm\/TraditionalApp/, { timeout: 20000 });
   await tab.waitForSelector('#nesr-va-again', { timeout: 60000 });
   assert.strictEqual(await tab.evaluate(() => document.querySelector('[name="VisaKind"]').value), '38', 'اتملى بعد الدخول');
+  /* سيناريو 3: التصنيف المهني غلط (مدير) والمهنة «سائق حافلة» ← الإضافة تلاقي التصنيف الصح لوحدها + تعليم الإقرارين لما يتفعّلوا + المنفذ مطار والوسيلة «برا» ← تتصلّح «جوا» */
+  const MOFA3 = { ...MOFA, Classify_Occupations_Id: '143', AUTO_DECLARE: '1', COMING_THROUGH: '1', ENTRY_POINT: '5', entryPointText: 'مطار جدة الدولي' };
+  await app.evaluate((d) => window.fill(d), { personId: '9', name: 'تجربة تالتة', mofa: MOFA3, issues: [], warns: [], photo: PHOTO });
+  await tab.waitForTimeout(3000);
+  await tab.waitForURL(/SmartForm\/TraditionalApp/, { timeout: 20000 });
+  await tab.waitForFunction(() => { const b = document.getElementById('nesr-va-bar'); return b && /اتملى \d+ خانة/.test(b.innerText) && !!document.getElementById('nesr-va-again') && document.querySelector('input[name="Endorsement"]') && document.querySelector('input[name="Endorsement"]').checked; }, null, { timeout: 90000 });
+  const s3 = await tab.evaluate(() => { const v = (n) => document.querySelector('[name="' + n + '"]').value; return { Class: v('Classify_Occupations_Id'), Job: v('JOB_OR_RELATION_Id'), Come: v('COMING_THROUGH'), Port: v('ENTRY_POINT'), Days: v('Number_Entry_Day'), Res: v('RESIDENCY_IN_KSA'), endorse: document.querySelector('input[name="Endorsement"]').checked, privacy: document.querySelector('input[name="IsPrivacyPolicyAgreed"]').checked, cap: v('Captcha'), bar: document.getElementById('nesr-va-bar').innerText.replace(/\s+/g, ' ').slice(0, 500) }; });
+  console.log(JSON.stringify(s3));
+  assert.deepStrictEqual([s3.Class, s3.Job, s3.Come, s3.Port, s3.Days, s3.Res], ['832', '8322', '2', '5', '365', '90']);
+  assert.ok(s3.endorse && s3.privacy, 'الإقرارين اتعلّموا بالتفعيل'); assert.strictEqual(s3.cap, '', 'الكابتشا لسه فاضية');
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });
