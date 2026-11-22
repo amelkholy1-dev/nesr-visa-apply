@@ -138,7 +138,7 @@ const api = async (method, url, body, extra = {}) => {
   assert.ok(((await api('GET', '/api/people')).json.people.find((p) => p.id === spid) || {}).stages.medical.state === 'booked', 'المراحل في القايمة');
   const tx = await fetch(base + `/api/export/tasheel.xlsx?ids=${spid}&fmt=DD-Mon-YYYY`, { headers: { Cookie: cookie } }); const txb = Buffer.from(await tx.arrayBuffer());
   assert.strictEqual(tx.status, 200); assert.strictEqual(txb.slice(0, 2).toString(), 'PK'); fs.writeFileSync(path.join(os.tmpdir(), 'tasheel-test.xlsx'), txb);
-  const ps = await api('GET', '/api/settings/print'); assert.strictEqual(ps.status, 200); assert.ok(ps.json.undertaking.includes('{{name}}'));
+  const ps = await api('GET', '/api/settings/print'); assert.strictEqual(ps.status, 200); assert.ok(ps.json.company && !('undertaking' in ps.json) && !('letter' in ps.json), 'إعدادات الطباعة من غير تعهد وخطاب');
   assert.strictEqual((await api('PUT', '/api/settings/print', { company: 'شركة تجربة', dateFormat: 'YYYY-MM-DD' })).status, 200);
   assert.strictEqual((await api('GET', '/api/settings/print')).json.company, 'شركة تجربة');
   const rs = await api('GET', '/api/reports/summary'); assert.ok(rs.json.stages && rs.json.stages.medical.booked >= 1);

@@ -11,9 +11,7 @@ const json = (v) => { try { return JSON.parse(v || '{}') || {}; } catch (e) { re
 const admin = (req, res, next) => (req.user.role === 'admin' ? next() : res.status(403).json({ error: 'ده للمدير بس' }));
 
 const DEFAULT_PRINT = {
-  company: 'نسر الخليج', line2: '', dateFormat: 'DD/MM/YYYY',
-  undertaking: 'أتعهد أنا الموقّع أدناه {{name}} حامل جواز السفر رقم {{passport}} بصحة جميع البيانات المقدّمة في طلب التأشيرة رقم {{app}}، وبالالتزام بأنظمة المملكة العربية السعودية وتعليماتها، وبمغادرة المملكة عند انتهاء مدة التأشيرة.\n\nالتوقيع: ....................          التاريخ: {{date}}',
-  letter: 'السادة / القنصلية السعودية\n\nتحية طيبة وبعد،\nنتقدم لسيادتكم بطلب إصدار تأشيرة للسيد / {{name}} حامل جواز السفر رقم {{passport}} (رقم الطلب {{app}}) وذلك للعمل لدى {{sponsor}}.\n\nوتفضلوا بقبول فائق الاحترام والتقدير،\n{{company}}\n{{date}}'
+  company: 'نسر الخليج', line2: '', dateFormat: 'DD/MM/YYYY'
 };
 async function printSettings() {
   const r = (await db.query("SELECT v FROM settings WHERE k = 'print'"))[0];

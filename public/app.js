@@ -288,7 +288,7 @@
         <div><input type="file" id="phF" accept="image/jpeg,image/png"><div class="small muted" style="margin-top:6px">${isNew ? 'بتترفع أول ما تحفظ.' : ''} بتتصغّر تلقائي لو أكبر من الحد. المنصة بتفحص مواصفات الصورة (خلفية فاتحة ووش واضح).</div>${!isNew && person.hasPhoto ? '<button class="btn small danger" id="phDel" style="margin-top:6px">حذف الصورة</button>' : ''}</div></div></div>
       <div class="card"><label class="f">ملاحظات<input data-k="notes" value="${e(data.notes || '')}"></label></div>
       ${resolved ? `<div class="card"><h2>الجاهزية</h2>${resolved.ready ? '<span class="pill ok">كل البيانات المطلوبة موجودة</span>' : `<ul class="list issues">${resolved.issues.map((x) => `<li>${e(x)}</li>`).join('')}</ul>`}${resolved.warns.length ? `<ul class="list warns">${resolved.warns.map((x) => `<li>${e(x)}</li>`).join('')}</ul>` : ''}</div>` : ''}
-      <div class="row actions"><button class="btn pri" id="save">حفظ</button>${!isNew ? '<button class="btn pri" id="fill">املى الطلب في المنصة</button><button class="btn" id="wafid" title="بيفتح موقع وافد ويملا فورم حجز الفحص الطبي">احجز الفحص الطبي (وافد)</button><details class="menu"><summary class="btn">طباعة ▾</summary><div class="menu-box"><button class="btn small" data-pr="sheet">ورقة بيانات الطلب</button><button class="btn small" data-pr="undertaking">التعهد</button><button class="btn small" data-pr="letter">خطاب الترشيح</button><button class="btn small" data-pr="label">ليبل باركود</button></div></details><button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>
+      <div class="row actions"><button class="btn pri" id="save">حفظ</button>${!isNew ? '<button class="btn pri" id="fill">املى الطلب في المنصة</button><button class="btn" id="wafid" title="بيفتح موقع وافد ويملا فورم حجز الفحص الطبي">احجز الفحص الطبي (وافد)</button><details class="menu"><summary class="btn">طباعة ▾</summary><div class="menu-box"><button class="btn small" data-pr="sheet">طلب التأشيرة (ورقة الطباعة)</button><button class="btn small" data-pr="label">ليبل باركود</button></div></details><button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>
       </div><aside class="side">${sideHtml()}</aside></div>`;
       wire();
       wirePv();
@@ -319,7 +319,7 @@
         const [pr, st] = await Promise.all([api('GET', `/people/${id}`), api('GET', '/settings/print')]);
         const o = { person: pr.person, resolved: pr.resolved, profile: pr.profile, settings: st, optText, photoUrl: pr.person.hasPhoto ? location.origin + `/api/people/${id}/file/photo` : '' };
         let html;
-        if (kind === 'sheet') html = window.VaPrint.sheet(o); else if (kind === 'undertaking') html = window.VaPrint.undertaking(o); else if (kind === 'letter') html = window.VaPrint.letter(o);
+        if (kind === 'sheet') html = window.VaPrint.sheet(o);
         else { const m = (pr.resolved && pr.resolved.mofa) || {}; html = window.VaPrint.labels([{ name: [m.EFIRSTNAME, m.EFAMILY].filter(Boolean).join(' ') || pr.person.data.nameAr || '', code: pr.person.appNumber || m.PASSPORTnumber || '' }], st); }
         w.document.open(); w.document.write(html); w.document.close(); w.focus();
         api('POST', `/people/${id}/printed`, { kind }).catch(() => {});
@@ -527,11 +527,9 @@
     view.innerHTML = `<h1>إعدادات الطباعة والتصدير</h1>
       <div class="card"><div class="grid wide"><label class="f">اسم الشركة (أعلى الورقة)<input id="sCo" value="${e(st.company)}"></label><label class="f">سطر تاني (عنوان / تليفون)<input id="sL2" value="${e(st.line2)}"></label>
         <label class="f">شكل التاريخ في ملف تسهيل<select id="sDf">${[['DD/MM/YYYY', '22/05/1984'], ['DD-Mon-YYYY', '22-May-1984'], ['YYYY-MM-DD', '1984-05-22'], ['MM/DD/YYYY', '05/22/1984']].map(([v, t]) => `<option value="${v}"${st.dateFormat === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label></div></div>
-      <div class="card"><h2>نص التعهد</h2><label class="f"><textarea id="sUn" rows="6">${e(st.undertaking)}</textarea></label>
-        <h2 style="margin-top:14px">نص خطاب الترشيح</h2><label class="f"><textarea id="sLe" rows="7">${e(st.letter)}</textarea></label>
-        <p class="muted small">تقدر تكتب في النصوص: <code dir="ltr">{{name}}</code> الاسم · <code dir="ltr">{{passport}}</code> رقم الجواز · <code dir="ltr">{{app}}</code> رقم الطلب · <code dir="ltr">{{date}}</code> التاريخ · <code dir="ltr">{{company}}</code> الشركة · <code dir="ltr">{{sponsor}}</code> جهة العمل. النصوص دي أمثلة، عدّلها زي نموذجك المعتمد.</p>
-        <button class="btn pri" id="sSave">حفظ</button></div>`;
-    $('#sSave').onclick = async () => { try { await api('PUT', '/settings/print', { company: $('#sCo').value, line2: $('#sL2').value, dateFormat: $('#sDf').value, undertaking: $('#sUn').value, letter: $('#sLe').value }); toast('اتحفظت الإعدادات', 'ok'); } catch (er) { fail(er); } };
+      <p class="muted small">ورقة «طلب التأشيرة» بتتطبع على نفس ترتيب نموذج منصة التأشيرات (الحقول + نص الإقرار + الاسم والتوقيع والتاريخ). اسم الشركة بيظهر أعلاها.</p>
+      <button class="btn pri" id="sSave">حفظ</button>`;
+    $('#sSave').onclick = async () => { try { await api('PUT', '/settings/print', { company: $('#sCo').value, line2: $('#sL2').value, dateFormat: $('#sDf').value }); toast('اتحفظت الإعدادات', 'ok'); } catch (er) { fail(er); } };
   }
 
   async function pageProfiles() {

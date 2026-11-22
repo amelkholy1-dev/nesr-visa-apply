@@ -4,7 +4,7 @@ const STAGES = [
   { k: 'sent', label: 'إرسال الطلب لإنجاز' },
   { k: 'insurance', label: 'التأمين الصحي' },
   { k: 'fee', label: 'سداد الرسوم' },
-  { k: 'printed', label: 'الطباعة (طلب وتعهد)' },
+  { k: 'printed', label: 'الطباعة (طلب التأشيرة)' },
   { k: 'medical', label: 'الفحص الطبي', booking: true },
   { k: 'fingerprint', label: 'البصمة (تسهيل)', booking: true }
 ];
