@@ -151,6 +151,17 @@ const api = async (method, url, body, extra = {}) => {
   const ldoc = await fetch(base + `/api/people/${spid}/letter/suez`, { headers: { Cookie: cookie } }); const ldb = Buffer.from(await ldoc.arrayBuffer());
   assert.strictEqual(ldoc.status, 200); assert.strictEqual(ldb.slice(0, 2).toString(), 'PK'); assert.ok(String(ldoc.headers.get('content-disposition')).includes('nomination-suez-ST12345.docx'), 'اسم ملف الخطاب'); assert.ok(String(ldoc.headers.get('content-type')).includes('wordprocessingml'));
   assert.strictEqual((await api('GET', `/api/people/${spid}/letter/zzz`)).status, 404, 'نوع خطاب مش معروف');
+  /* شخص مربوط بملف ضبط فيه بيانات التأشيرة: الخطاب لازم يطلع فيه رقم التأشيرة والباركودين */
+  const lprof = await api('POST', '/api/profiles', { name: 'ملف خطابات', data: { visaNumber: '1306311796', unifiedNumber: '7001185532', sponsorName: 'شركة تجربة للنقل', visaDate: '1448/02/30', jobText: 'سائق حافلة', degree: 'دبلوم', boxNumber: '464', agencyNumber: '30000001' } });
+  const lperson = await api('POST', '/api/people', { profileId: lprof.json.id, data: { nameAr: 'محمد أحمد علي', passportNo: 'LT1234567' } });
+  await api('POST', `/api/people/${lperson.json.id}/result`, { status: 'submitted', appNumber: 'E823565987' });
+  assert.deepStrictEqual((await api('GET', `/api/people/${lperson.json.id}/letter/suez?check=1`)).json.issues, [], 'مفيش نواقص لو الملف فيه البيانات');
+  assert.ok(lcheck.json.hints.some((h) => h.includes('رقم التأشيرة ناقص') && h.includes('الباركود')), 'رسالة النواقص بتقول المصدر وإيه اللي هيختفي');
+  for (const kind of ['suez', 'cairo']) {
+    const r = await fetch(base + `/api/people/${lperson.json.id}/letter/${kind}`, { headers: { Cookie: cookie } }); const b = Buffer.from(await r.arrayBuffer());
+    fs.writeFileSync(path.join(os.tmpdir(), `letter-${kind}-test.docx`), b); assert.strictEqual(r.status, 200);
+  }
+  await api('DELETE', `/api/people/${lperson.json.id}`);
   const ps = await api('GET', '/api/settings/print'); assert.strictEqual(ps.status, 200); assert.ok(ps.json.dateFormat);
   assert.strictEqual((await api('PUT', '/api/settings/print', { company: 'شركة تجربة', dateFormat: 'YYYY-MM-DD' })).status, 200);
   assert.strictEqual((await api('GET', '/api/settings/print')).json.company, 'شركة تجربة');

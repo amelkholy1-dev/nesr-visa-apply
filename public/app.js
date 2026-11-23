@@ -521,8 +521,8 @@
         try {
           await save();
           const c = await api('GET', `/people/${id}/letter/${kind}?check=1`);
-          const warn = [...(c.issues || []).map((x) => x + ' (ناقص)'), ...(c.warns || []), ...(c.hasPhoto ? [] : ['الصورة الشخصية ناقصة: الخطاب هيطلع من غير صورة'])];
-          if (warn.length && !confirm('قبل ما نحمّل الخطاب:\n- ' + warn.join('\n- ') + '\n\nتحمّله كده؟')) return;
+          const warn = [...(c.hints && c.hints.length ? c.hints : (c.issues || []).map((x) => x + ' (ناقص)')), ...(c.warns || []), ...(c.hasPhoto ? [] : ['الصورة الشخصية ناقصة: الخطاب هيطلع من غير صورة'])];
+          if (warn.length && !confirm('الخطاب هيطلع ناقص:\n- ' + warn.join('\n- ') + '\n\nتحمّله كده؟ (دوس إلغاء، كمّل البيانات، وجرّب تاني)')) return;
           window.location.href = `/api/people/${id}/letter/${kind}`; toast('بيتحمّل خطاب الترشيح (Word)…', 'ok');
         } catch (er) { fail(er); }
       };

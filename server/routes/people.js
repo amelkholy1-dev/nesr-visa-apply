@@ -207,7 +207,13 @@ router.get('/:id(\\d+)/letter/:kind(suez|cairo)', async (req, res) => {
     const vars = { name: v.nameAr || row.name_ar || '', passport: String(v.passportNo || '').toUpperCase(), job: v.jobText || '', degree: v.degree || 'لايوجد', visaNo: v.visaNumber || '', visaDate: v.visaDate || '', sponsor: v.sponsorName || '',
       unifiedNo: v.unifiedNumber || v.sponsorNumber || '', box: v.boxNumber || '', agency: v.agencyNumber || '', appNo: row.app_number || '' };
     const c = letters.check(req.params.kind, vars);
-    if (req.query.check) return res.json({ ...c, hasPhoto: !!row.personal_photo });
+    if (req.query.check) {
+      /* رسائل واضحة: إيه الناقص، ومصدره فين، وإيه اللي هيختفي من الخطاب بسببه */
+      const pn = profile ? profile.name : ''; const where = pn ? `ملف الضبط «${pn}»: اكتبه فيه ودوس حفظ` : 'الشخص مش مربوط بملف ضبط: اربطه بملف فيه البيانات';
+      const H = { 'رقم التأشيرة': `رقم التأشيرة ناقص (${where}) — من غيره رقم التأشيرة والباركود التاني مش هيظهروا`, 'تاريخ التأشيرة': `تاريخ التأشيرة ناقص (${where})`, 'رقم إنجاز (رقم الطلب)': 'رقم إنجاز ناقص: رقم الطلب لسه مش مسجّل للشخص (بيتسجّل بعد «حفظ» في المنصة، أو اكتبه بإيدك في صفحة الشخص) — من غيره الباركود الأول مش هيظهر',
+        'اسم جهة العمل': `اسم جهة العمل ناقص (${where})`, 'المهنة': `المهنة ناقصة (${where})`, 'رقم السجل (الرقم الموحد)': `الرقم الموحد ناقص (${where})`, 'الاسم': 'اسم الشخص بالعربي ناقص', 'رقم الجواز': 'رقم الجواز ناقص' };
+      return res.json({ ...c, hints: c.issues.map((x) => H[x] || x + ' ناقص'), profileName: pn, hasPhoto: !!row.personal_photo });
+    }
     let photo = null; try { if (row.personal_photo) photo = fs.readFileSync(fullPath(row.id, row.personal_photo)); } catch (e) { photo = null; }
     const buf = await letters.build(req.params.kind, vars, photo);
     audit.log(req, 'fill', row.id, row.name_ar, 'خطاب ترشيح ' + letters.KINDS[req.params.kind].label);
