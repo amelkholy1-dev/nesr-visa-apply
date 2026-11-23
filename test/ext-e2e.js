@@ -225,7 +225,7 @@ const MOFA = {
   global.__inquiry = true;
   /* سيناريو 10: «التفويض على تأشيرة» من ملف الضبط، من جوه النظام — التبويب بيتفتح في الخلفية، صورة الكابتشا بتتبعت للنظام، إنت بتكتبها (غلط ثم صح)، والنتيجة بترجع والتبويب بيتقفل */
   const [vpage] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', embassy: '' })]); /* الممثلية فاضية ← الإضافة تختار السويس لوحدها */
-  await vpage.reload(); /* Playwright مبيلقطش أول طلب لتبويب اتفتح في الخلفية (مشكلة في الاختبار بس، مش في Chrome): بنعمل إعادة تحميل عشان الصفحة التجريبية تتحمّل */
+  await vpage.waitForTimeout(1500); await vpage.reload().catch(async () => { await vpage.waitForTimeout(2000); await vpage.reload(); }); /* Playwright مبيلقطش أول طلب لتبويب اتفتح في الخلفية (مشكلة في الاختبار بس، مش في Chrome): بنعمل إعادة تحميل عشان الصفحة التجريبية تتحمّل */
   await app.waitForFunction(() => window.caps.length > 0, null, { timeout: 40000 });
   const c1 = await app.evaluate(() => window.caps[0]);
   assert.ok(String(c1.image).startsWith('data:image/png;base64,') && !c1.error, 'صورة الكابتشا وصلت للنظام');

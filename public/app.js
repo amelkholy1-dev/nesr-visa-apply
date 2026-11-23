@@ -47,7 +47,7 @@
     } catch (er) { fail(er); }
   }
   /* بحث «التفويض على تأشيرة» من جوه النظام: الإضافة بتفتح المنصة في تبويب مخفي وبتبعتلنا صورة الكابتشا، وإنت اللي بتكتبها هنا وتدوس بحث (مفيش أي حل تلقائي للكابتشا) */
-  let capTimer = null;
+  let capTimer = null; let visaPlusTried = false; /* محاولة رقم المستند (+1) التلقائية بتحصل مرة واحدة بس */
   const visaLogAdd = (t) => { const b = $('#visaLog'); if (b) b.insertAdjacentHTML('beforeend', `<div>${e(new Date().toLocaleTimeString('ar-EG', { hour12: false }))} — ${e(t)}</div>`); };
   const visaReset = () => { ['visaCapBox', 'visaInfoBox', 'visaDocBox', 'visaLog'].forEach((id) => { const b = $('#' + id); if (b) b.innerHTML = ''; }); };
   const visaCtl = (op, captcha) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op, captcha: captcha || '' } }, location.origin);
@@ -57,6 +57,9 @@
     clearTimeout(capTimer); if (!$('#visaCapBox')) return;
     const img = typeof d.image === 'string' && d.image.startsWith('data:image/png;base64,') ? d.image : '';
     if (!img) {
+      visaLogAdd(d.message || 'مفيش صورة كابتشا');
+      /* مستند فاضي: غالباً الرقم المكتوب هو رقم الصادر، ورقم المستند = رقم الصادر + 1. بنجرّب +1 لوحدنا مرة (محتاجة كابتشا جديدة) */
+      if (d.empty && !visaPlusTried) { visaPlusTried = true; visaLogAdd('مفيش بيانات بالرقم ده: بنجرّب رقم المستند (رقم التأشيرة + 1) تلقائي'); capCard('<b>مفيش بيانات بالرقم ده. بنجرّب رقم المستند (رقم التأشيرة + 1)…</b>'); const b = $('#visaDocOnly'); if (b) setTimeout(() => b.dispatchEvent(new CustomEvent('plus1')), 600); return; }
       capCard(`<b>${e(d.message || 'مقدرتش أجيب صورة الكابتشا من المنصة.')}</b><div class="row" style="margin-top:8px"><button class="btn" id="capOpen">افتح تبويب المنصة واكتب الكابتشا هناك</button><button class="btn" id="capRetry">جرّب تاني</button></div>`);
       $('#capOpen').onclick = () => visaCtl('open'); $('#capRetry').onclick = () => { const b = $('#visaLookup'); if (b) b.click(); };
       if (d.empty) { const pb = document.createElement('button'); pb.className = 'btn'; pb.id = 'capPlus'; pb.type = 'button'; pb.textContent = 'جرّب برقم المستند (رقم التأشيرة + 1)'; pb.title = 'غالباً رقم المستند = رقم الصادر + 1 (مثلاً 1306025676 ← 1306025677)'; pb.onclick = () => { const b = $('#visaDocOnly'); if (b) b.dispatchEvent(new CustomEvent('plus1')); }; $('#capRetry').after(pb); }
@@ -641,13 +644,15 @@
       $('#peditor').scrollIntoView({ behavior: 'smooth' });
       const startLookup = async (mode, plus) => {
         const dd = collect($('#peditor'));
+        if (!plus) visaPlusTried = false;
         if (plus && /^\d+$/.test(dd.visaNumber)) dd.visaNumber = String(BigInt(dd.visaNumber) + 1n); /* تجربة رقم المستند: رقم الصادر + 1 (من غير ما نغيّر الخانة) */
         if (!dd.visaNumber || !dd.unifiedNumber) return toast('اكتب رقم التأشيرة والرقم الموحد الأول.', 'err');
         if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
         if (!extReady) return toast('إضافة Chrome مش متركّبة. من «الإضافة» نزّلها وركّبها الأول.', 'err');
-        visaReset(); visaLogAdd(mode === 'doc' ? 'بدأ جلب مستند التأشيرة' : 'بدأ البحث');
+        if (plus) { ['visaCapBox', 'visaDocBox'].forEach((id) => { const b = $('#' + id); if (b) b.innerHTML = ''; }); } else visaReset(); /* في محاولة +1 بنسيب السجل ونتيجة التفويض */
+        visaLogAdd(mode === 'doc' ? 'بدأ جلب مستند التأشيرة' + (plus ? ' برقم ' + dd.visaNumber : '') : 'بدأ البحث');
         const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: { name: $('#pname').value, visaNumber: dd.visaNumber, unifiedNumber: dd.unifiedNumber, mode, embassy: dd.embassy } }, location.origin); setTimeout(() => res(false), 4000); });
-        if (ok) { visaLogAdd('الإضافة فتحت المنصة في الخلفية'); capWait(mode === 'doc' ? 'بنفتح استعلام مستند التأشيرة في الخلفية…' : 'بنفتح المنصة في الخلفية ونجيب الكابتشا…', 25000, 'مفيش كابتشا وصلت من المنصة خلال 25 ثانية. شوف السجل تحت، أو افتح تبويب المنصة.'); } else toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.9.3 أو أحدث).', 'err');
+        if (ok) { visaLogAdd('الإضافة فتحت المنصة في الخلفية'); capWait(mode === 'doc' ? 'بنفتح استعلام مستند التأشيرة في الخلفية…' : 'بنفتح المنصة في الخلفية ونجيب الكابتشا…', 25000, 'مفيش كابتشا وصلت من المنصة خلال 25 ثانية. شوف السجل تحت، أو افتح تبويب المنصة.'); } else toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.9.4 أو أحدث).', 'err');
       };
       $('#visaLookup').onclick = () => startLookup('');
       $('#visaDocOnly').onclick = () => startLookup('doc'); $('#visaDocOnly').addEventListener('plus1', () => startLookup('doc', true));

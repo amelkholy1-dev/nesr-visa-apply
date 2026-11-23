@@ -135,9 +135,11 @@
     await send({ kind: 'visainfo-status', data: { text: 'قريت جدول المستند: ' + rows.length + ' صف' + (document.querySelector('#gridDocumentVisaList tr.jtable-no-data-row') ? ' (الجدول فاضي: ' + cut((document.querySelector('#gridDocumentVisaList tr.jtable-no-data-row') || {}).textContent, 60) + ')' : '') } });
     if (!rows.length) {
       /* بنقول للنظام السبب بنص المنصة بدل ما نسكت */
-      const dlg = [...document.querySelectorAll('.ui-dialog-content, #dlgMessageContent, .alert-danger, .field-validation-error')].map((x) => cut(x.textContent, 100)).filter(Boolean)[0] || '';
+      /* نص خطأ حقيقي بس: عناصر ظاهرة فعلاً (الصفحة فيها نافذة خطأ مخفية بنص ثابت «عفوا حدث خطأ» مش بتتحسب) */
+      const shownNow = (x) => !!(x.offsetParent || x.getClientRects().length) && getComputedStyle(x).visibility !== 'hidden';
+      const dlg = [...document.querySelectorAll('.ui-dialog-content, #dlgMessageContent, .alert-danger, .field-validation-error')].filter(shownNow).map((x) => cut(x.textContent, 100)).filter(Boolean)[0] || '';
       const gridTxt = cut((document.querySelector('#gridDocumentVisaList tr.jtable-no-data-row') || document.querySelector('#gridDocumentVisaList') || {}).textContent, 80);
-      const msg = 'مستند التأشيرة رجع من غير بيانات' + (gridTxt ? ' (الجدول: «' + gridTxt + '»)' : ' (الجدول ما اتحمّلش)') + (dlg ? ' — المنصة قالت: ' + dlg : '') + '.';
+      const msg = 'مستند التأشيرة رقم «' + ((info.docNumber) || 'مش ظاهر في الصفحة') + '» (اللي بحثنا عنه: ' + (ctx.visaNumber || '') + ') رجع من غير بيانات' + (gridTxt ? ' (الجدول: «' + gridTxt + '»)' : ' (الجدول ما اتحمّلش)') + (dlg ? ' — المنصة قالت: ' + dlg : '') + '.';
       bar('<div>⚠️ ' + esc(msg) + '</div>');
       await send({ kind: 'visainfo-captcha', data: { step: 2, only: ctx.mode === 'doc', image: '', error: true, empty: true, message: msg } });
       return;
