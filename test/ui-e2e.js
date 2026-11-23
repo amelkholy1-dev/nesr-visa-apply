@@ -90,10 +90,17 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     /* ملف الضبط: الرقمين تحت الاسم + نتيجة «التفويض على تأشيرة» بتتحط في الخانات من غير حفظ */
     await page.goto(base + '#/profiles'); await page.click('#newP'); await page.waitForSelector('#visaLookup');
     assert.strictEqual(await page.locator('#peditor [data-k=visaNumber]').count(), 1); assert.strictEqual(await page.locator('#peditor [data-k=unifiedNumber]').count(), 1);
-    await page.evaluate(() => window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_VISAINFO_RESULT', data: { visaNumber: '1000000001', visaDate: '1447/09/25', sponsorName: 'شركة تجربة للنقل', unifiedNumber: '7000000001', embassyCode: '320', embassyName: 'السويس', jobs: [{ count: '8', job: 'سائق حافلة', nationality: 'مصر', embassy: 'السويس', remaining: '0' }] } }, location.origin));
+    await page.evaluate(() => window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_VISAINFO_RESULT', data: { visaNumber: '1000000001', visaDate: '1447/09/25', sponsorName: 'شركة تجربة للنقل', unifiedNumber: '7000000001', embassyCode: '320', embassyName: 'السويس',
+      jobs: [{ count: '8', job: 'سائق حافلة', nationality: 'مصر', embassy: 'السويس', remaining: '0' }, { count: '5', job: 'فني', nationality: 'مصر', embassy: 'السويس', remaining: '2' }],
+      delegations: [{ number: '20000001', embassy: 'السويس', count: '8', job: 'سائق حافلة', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }, { number: '20000002', embassy: 'السويس', count: '5', job: 'فني', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }] } }, location.origin));
     await page.waitForFunction(() => document.querySelector('#peditor [data-k=sponsorName]').value === 'شركة تجربة للنقل');
-    assert.deepStrictEqual(await page.evaluate(() => ['sponsorNumber', 'unifiedNumber', 'visaNumber', 'embassy', 'jobText'].map((k) => document.querySelector('#peditor [data-k=' + k + ']').value)), ['7000000001', '7000000001', '1000000001', '320', 'سائق حافلة']);
-    assert.ok((await page.textContent('#visaInfoBox')).includes('مفيش تأشيرات متبقية'), 'تنبيه العدد المتبقي صفر');
+    assert.deepStrictEqual(await page.evaluate(() => ['sponsorNumber', 'unifiedNumber', 'visaNumber', 'embassy', 'jobText'].map((k) => document.querySelector('#peditor [data-k=' + k + ']').value)), ['7000000001', '7000000001', '1000000001', '320', ''], 'بيانات الجهة اتملّت والمهنة مستنية الاختيار');
+    assert.strictEqual(await page.locator('input[name=visaPickRow]').count(), 2, 'قايمة التفاويض للاختيار');
+    assert.ok((await page.textContent('#visaInfoBox')).includes('وكالة تجربة'));
+    await page.click('input[name=visaPickRow][value="1"]'); await page.click('#visaPick');
+    assert.strictEqual(await page.evaluate(() => document.querySelector('#peditor [data-k=jobText]').value), 'فني', 'المهنة اللي اتختارت');
+    await page.click('input[name=visaPickRow][value="0"]'); await page.click('#visaPick');
+    assert.strictEqual(await page.evaluate(() => document.querySelector('#peditor [data-k=jobText]').value), 'سائق حافلة');
     await page.goto(base + '#/reports'); await page.waitForSelector('#rbody .card'); assert.ok((await page.textContent('#rbody')).includes('الوضع الحالي'));
     assert.ok((await page.getAttribute('#rx', 'href')).includes('/api/reports/export.csv'));
     await page.goto(base + '#/activity'); await page.waitForSelector('#arows tr'); assert.ok((await page.textContent('#arows')).includes('دخول'));

@@ -6,6 +6,8 @@
  <div class="form-group"><label class="col-md-2 control-label"> رقم الإقامة </label><div class="col-md-3 control-display-label"> 7000000001 </div></div>
  <div class="form-group"><label class="col-md-2 control-label"> عرض التأشيرات الموجودة في ممثلية: </label><div class="col-md-3"><select class="required select2me" id="EmbassyID" name="EmbassyID"><option value="302">القاهرة</option><option value="320" selected>السويس</option></select></div></div>
  <h3 class="form-section">قائمة المهن</h3><div id="dvJobsGrid"><div class="jtable-main-container"><table class="styled"><thead><tr><th>عدد الأشخاص</th><th>المهنة</th><th>الجنسية</th><th>جهة القدوم</th><th>العدد المتبقي</th><th>الاسم</th></tr></thead><tbody id="jb"></tbody></table></div></div>
+<h3 class="form-section">التفاويض في الممثلية</h3><div id="dvDelegationsInEmbassies"><div class="jtable-main-container"><table class="styled"><thead><tr><th>رقم التفويض</th><th>جهة القدوم</th><th>عدد الأشخاص</th><th>المهنة</th><th>رقم الوكالة#</th><th>اسم الوكالة</th><th>الاجراءات</th></tr></thead><tbody id="db"></tbody></table></div></div>
 </form>
+<script>setTimeout(function(){ document.getElementById('db').innerHTML='<tr class="jtable-data-row jtable-row-even"><td>20000001</td><td>السويس</td><td>14</td><td>سائق حافلة</td><td>30000001</td><td>وكالة تجربة</td><td><a></a></td></tr>'; }, 1300);</script>
 <script>setTimeout(function(){ document.getElementById('jb').innerHTML='<tr class="jtable-data-row jtable-row-even"><td><span>8</span></td><td>سائق حافلة</td><td>مصر</td><td>السويس</td><td><span>3</span></td><td></td></tr>'; }, 900);</script>
 </body></html>

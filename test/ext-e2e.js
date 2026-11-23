@@ -226,6 +226,7 @@ const MOFA = {
   await app.waitForFunction(() => window.visa.length > 0, null, { timeout: 40000 });
   const vi = await app.evaluate(() => window.visa[0]);
   assert.deepStrictEqual([vi.visaNumber, vi.visaDate, vi.sponsorName, vi.unifiedNumber, vi.embassyCode, vi.embassyName], ['1000000001', '1447/09/25', 'شركة تجربة للنقل', '7000000001', '320', 'السويس'], JSON.stringify(vi));
+  assert.deepStrictEqual(vi.delegations, [{ number: '20000001', embassy: 'السويس', count: '14', job: 'سائق حافلة', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }], 'جدول التفاويض');
   assert.deepStrictEqual(vi.jobs, [{ count: '8', job: 'سائق حافلة', nationality: 'مصر', embassy: 'السويس', remaining: '3' }], 'جدول المهن');
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);

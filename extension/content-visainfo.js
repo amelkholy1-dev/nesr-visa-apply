@@ -42,14 +42,17 @@
   const labelValue = (label) => { for (const l of document.querySelectorAll('label.control-label')) { if (norm(l.textContent) === label) { const d = l.nextElementSibling; return d ? norm(d.textContent) : ''; } } return ''; };
   async function runResult() {
     bar('<span>🔎 بقرا بيانات التأشيرة من النتيجة…</span>');
-    await waitFor(() => document.querySelector('#dvJobsGrid tr.jtable-data-row, #dvJobsGrid tr.jtable-no-data-row'), 15000);
+    const loaded = (id) => document.querySelector('#' + id + ' tr.jtable-data-row, #' + id + ' tr.jtable-no-data-row');
+    await waitFor(() => loaded('dvJobsGrid') && (!document.getElementById('dvDelegationsInEmbassies') || loaded('dvDelegationsInEmbassies')), 15000);
     const sel = document.getElementById('EmbassyID'); const opt = sel && sel.selectedOptions && sel.selectedOptions[0];
     const jobs = [...document.querySelectorAll('#dvJobsGrid tr.jtable-data-row')].slice(0, 30).map((tr) => { const td = [...tr.children].map((c) => norm(c.textContent)); return { count: cut(td[0], 6), job: cut(td[1], 60), nationality: cut(td[2], 30), embassy: cut(td[3], 30), remaining: cut(td[4], 6) }; });
-    const info = { visaNumber: cut(labelValue('رقم الصادر'), 20), visaDate: cut(labelValue('تاريخ التأشيرة'), 12), sponsorName: cut(labelValue('الاسم'), 100), unifiedNumber: cut(labelValue('رقم الإقامة'), 12).replace(/\D/g, '').slice(0, 10), embassyCode: sel ? String(sel.value || '').replace(/\D/g, '').slice(0, 6) : '', embassyName: opt ? cut(opt.textContent, 30) : '', jobs };
-    if (!info.sponsorName && !info.unifiedNumber && !jobs.length) { bar('<div>⚠️ مقدرتش أقرا بيانات من الصفحة دي. اتأكد إنها نتيجة البحث، وجرّب تاني.</div>'); return; }
+    /* «التفاويض في الممثلية»: رقم التفويض، جهة القدوم، عدد الأشخاص، المهنة، رقم الوكالة، اسم الوكالة */
+    const delegations = [...document.querySelectorAll('#dvDelegationsInEmbassies tr.jtable-data-row')].slice(0, 50).map((tr) => { const td = [...tr.children].map((c) => norm(c.textContent)); return { number: cut(td[0], 20), embassy: cut(td[1], 30), count: cut(td[2], 6), job: cut(td[3], 60), agencyNumber: cut(td[4], 20), agencyName: cut(td[5], 80) }; });
+    const info = { delegations, visaNumber: cut(labelValue('رقم الصادر'), 20), visaDate: cut(labelValue('تاريخ التأشيرة'), 12), sponsorName: cut(labelValue('الاسم'), 100), unifiedNumber: cut(labelValue('رقم الإقامة'), 12).replace(/\D/g, '').slice(0, 10), embassyCode: sel ? String(sel.value || '').replace(/\D/g, '').slice(0, 6) : '', embassyName: opt ? cut(opt.textContent, 30) : '', jobs };
+    if (!info.sponsorName && !info.unifiedNumber && !jobs.length && !delegations.length) { bar('<div>⚠️ مقدرتش أقرا بيانات من الصفحة دي. اتأكد إنها نتيجة البحث، وجرّب تاني.</div>'); return; }
     const r = await send({ kind: 'visainfo-result', data: info });
     bar('<div><b>' + (r && r.ok ? '✅ البيانات اتبعتت لملف الضبط' : '⚠️ مقدرتش أرجّع البيانات') + '</b></div>' + (r && r.ok ? '<div>ارجع لتبويب النظام: راجع الخانات ودوس <b>حفظ</b>.</div>' : '<div>' + esc((r && r.error) || 'جرّب تاني') + '</div>') +
-      '<ul style="margin:4px 18px;padding:0"><li>جهة العمل: ' + esc(info.sponsorName) + '</li><li>الرقم الموحد: ' + esc(info.unifiedNumber) + '</li><li>جهة القدوم: ' + esc(info.embassyName) + '</li>' + jobs.map((j) => '<li>' + esc(j.job) + ' — ' + esc(j.nationality) + ' — العدد ' + esc(j.count) + '، المتبقي ' + esc(j.remaining) + '</li>').join('') + '</ul>');
+      '<ul style="margin:4px 18px;padding:0"><li>جهة العمل: ' + esc(info.sponsorName) + '</li><li>الرقم الموحد: ' + esc(info.unifiedNumber) + '</li><li>جهة القدوم: ' + esc(info.embassyName) + '</li>' + (delegations.length ? '<li>التفاويض: ' + delegations.length + '</li>' : '') + jobs.map((j) => '<li>' + esc(j.job) + ' — ' + esc(j.nationality) + ' — العدد ' + esc(j.count) + '، المتبقي ' + esc(j.remaining) + '</li>').join('') + '</ul>');
   }
 
   (async function run() {
