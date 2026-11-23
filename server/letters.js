@@ -36,17 +36,43 @@ function png(w, h, pix) {
   const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 0; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
-const DIGITS = { 0: ['01110', '10001', '10011', '10101', '11001', '10001', '01110'], 1: ['00100', '01100', '00100', '00100', '00100', '00100', '01110'], 2: ['01110', '10001', '00001', '00010', '00100', '01000', '11111'], 3: ['11110', '00001', '00001', '01110', '00001', '00001', '11110'], 4: ['00010', '00110', '01010', '10010', '11111', '00010', '00010'], 5: ['11111', '10000', '11110', '00001', '00001', '10001', '01110'], 6: ['00110', '01000', '10000', '11110', '10001', '10001', '01110'], 7: ['11111', '00001', '00010', '00100', '01000', '01000', '01000'], 8: ['01110', '10001', '10001', '01110', '10001', '10001', '01110'], 9: ['01110', '10001', '10001', '01111', '00001', '00010', '01100'] };
+/* أرقام بخط خطّي (نقط على شبكة 4×8) بيتم رسمه بسمك وتنعيم عشان يبان غامق وواضح */
+const STROKES = {
+  0: [[[1, 0], [3, 0], [4, 1], [4, 7], [3, 8], [1, 8], [0, 7], [0, 1], [1, 0]]],
+  1: [[[0.8, 1.8], [2, 0], [2, 8]], [[0.5, 8], [3.5, 8]]],
+  2: [[[0, 1.5], [1, 0], [3, 0], [4, 1.5], [4, 3], [0, 8], [4, 8]]],
+  3: [[[0, 1], [1, 0], [3, 0], [4, 1], [4, 3], [3, 4], [1.5, 4]], [[3, 4], [4, 5], [4, 7], [3, 8], [1, 8], [0, 7]]],
+  4: [[[3.2, 8], [3.2, 0], [0, 5.5], [4.5, 5.5]]],
+  5: [[[4, 0], [0.6, 0], [0, 3.8], [2.5, 3.4], [4, 4.6], [4, 7], [3, 8], [1, 8], [0, 7]]],
+  6: [[[3.5, 0], [1.5, 0], [0, 2], [0, 7], [1, 8], [3, 8], [4, 7], [4, 5], [3, 4], [1, 4], [0, 5]]],
+  7: [[[0, 0], [4, 0], [1.5, 8]]],
+  8: [[[2, 4], [0.7, 3.3], [0.7, 1], [1.7, 0], [2.3, 0], [3.3, 1], [3.3, 3.3], [2, 4], [3.5, 4.7], [4, 6], [4, 7], [3, 8], [1, 8], [0, 7], [0, 6], [0.5, 4.7], [2, 4]]],
+  9: [[[0.5, 8], [2.5, 8], [4, 6], [4, 1], [3, 0], [1, 0], [0, 1], [0, 3], [1, 4], [3, 4], [4, 3]]]
+};
+function drawDigit(pix, w, h, ch, x0, y0, gh) {
+  const st = STROKES[ch]; if (!st) return; const k = gh / 8; const half = Math.max(1.4, gh / 15); const gw = Math.ceil(4.6 * k) + 4;
+  for (let py = Math.max(0, Math.floor(y0 - half - 1)); py < Math.min(h, Math.ceil(y0 + gh + half + 1)); py++) {
+    for (let px = Math.max(0, Math.floor(x0 - half - 1)); px < Math.min(w, x0 + gw); px++) {
+      let d = 1e9;
+      for (const line of st) for (let a = 0; a + 1 < line.length; a++) {
+        const ax = x0 + line[a][0] * k, ay = y0 + line[a][1] * k, bx = x0 + line[a + 1][0] * k, by = y0 + line[a + 1][1] * k;
+        const dx = bx - ax, dy = by - ay; const t = Math.max(0, Math.min(1, ((px + 0.5 - ax) * dx + (py + 0.5 - ay) * dy) / (dx * dx + dy * dy || 1)));
+        const ex = ax + t * dx - (px + 0.5), ey = ay + t * dy - (py + 0.5); d = Math.min(d, Math.sqrt(ex * ex + ey * ey));
+      }
+      const cov = Math.max(0, Math.min(1, half + 0.5 - d)); if (cov > 0) pix[py * w + px] = Math.min(pix[py * w + px], Math.round(255 * (1 - cov)));
+    }
+  }
+}
 /* صورة باركود: كل خط عرضه عدد صحيح من البكسل (لازم، وإلا الماسح مبيقراش)، والارتفاع من نسبة المكان في الخطاب. text = رقم تحت الباركود (للأرقام بس) */
 function barcodePng(value, ratio, text, mod) {
   const mods = code128Modules(value); const quiet = 2; const total = mods.length + quiet * 2; const m = mod || 3;
   const w = total * m; const h = Math.max(24, Math.round(w / ratio));
   const pix = Buffer.alloc(w * h, 255);
-  const sc = Math.max(2, Math.round(h / 36)); const textH = text ? 7 * sc + 4 : 0; const barH = h - textH - (text ? 2 : 0);
+  const textH = text ? Math.round(h * 0.34) : 0; const barH = h - textH - (text ? 2 : 0);
   for (let i = 0; i < mods.length; i++) if (mods[i]) for (let x = (quiet + i) * m; x < (quiet + i + 1) * m; x++) for (let y = 0; y < barH; y++) pix[y * w + x] = 0;
   if (text) {
-    const s = String(value).replace(/\D/g, ''); const gw = 6 * sc; const tw = s.length * gw; let x0 = Math.max(0, Math.floor((w - tw) / 2)); const y0 = barH + 2;
-    for (const ch of s) { const g = DIGITS[ch]; if (g) for (let r = 0; r < 7; r++) for (let c = 0; c < 5; c++) if (g[r][c] === '1') for (let dy = 0; dy < sc; dy++) for (let dx = 0; dx < sc; dx++) { const px = x0 + c * sc + dx; const py = y0 + r * sc + dy; if (px < w && py < h) pix[py * w + px] = 0; } x0 += gw; }
+    const s = String(value).replace(/\D/g, ''); const gh = textH - 5; const adv = Math.min(Math.floor(w * 0.085), Math.floor(gh * 0.9)); const gwid = 4 * (gh / 8); const tw = (s.length - 1) * adv + gwid; let x0 = (w - tw) / 2; const y0 = barH + 4;
+    for (const ch of s) { drawDigit(pix, w, h, ch, x0, y0, gh); x0 += adv; }
   }
   return png(w, h, pix);
 }
