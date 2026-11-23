@@ -38,12 +38,12 @@
     const problems = [];
     const st = byId('SearchingType');
     if (st) { st.value = '2'; fire(st); await sleep(400); if (st.value !== '2') problems.push('نوع الاستعلام: اختار «رقم مستند التأشيرة» بإيدك'); }
-    putInput(problems, 'ApplicationNumber', ctx.docNumber || ctx.visaNumber, 'رقم المستند/التأشيرة'); putInput(problems, 'SponserID', ctx.unifiedNumber, 'الرقم الموحد (رقم السجل)');
+    putInput(problems, 'ApplicationNumber', ctx.visaNumber, 'رقم المستند/التأشيرة'); putInput(problems, 'SponserID', ctx.unifiedNumber, 'الرقم الموحد (رقم السجل)');
     const failedBefore = ctx.stage === 'submitted'; if (failedBefore) await send({ kind: 'visainfo-stage', stage: '' });
     const shown = (document.querySelector('.field-validation-error, .validation-summary-errors, .alert-danger, #dlgMessageContent p') || {}).textContent;
     bar('<div><b>🔎 ' + esc(ctx.name || 'ملف الضبط') + '</b> — الخطوة 2: استعلام مستند التأشيرة. اتكتبت الأرقام، والكابتشا بتظهرلك في <b>صفحة النظام</b>: اكتبها هناك ودوس «بحث».</div>' + (problems.length ? '<ul style="margin:4px 18px;padding:0">' + problems.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : ''));
     const image = await captchaImage();
-    await send({ kind: 'visainfo-captcha', data: { step: 2, image, error: failedBefore, problems, message: failedBefore ? (norm(shown) || 'الكود غلط أو الرقم مش مقبول: اكتب الكود الجديد، أو دوس «تخطّي» لو الرقم مش رقم مستند') : '' } });
+    await send({ kind: 'visainfo-captcha', data: { step: 2, only: ctx.mode === 'doc', image, error: failedBefore, problems, message: failedBefore ? (norm(shown) || 'الكود غلط أو الرقم مش مقبول: اكتب الكود الجديد، أو دوس «تخطّي» لو الرقم مش رقم مستند') : '' } });
   }
   async function runSearch(ctx) {
     const problems = [];
@@ -82,7 +82,7 @@
           const img = document.getElementById('imgCaptcha'); const old = img ? img.src : ''; const rb = document.getElementById('btnRefreshCaptcha'); if (rb) rb.click();
           await waitFor(() => img && img.src !== old && img.complete && img.naturalWidth > 0, 8000);
           const image = await captchaImage(); const { ctx } = await send({ kind: 'get-visainfo-ctx' });
-          await send({ kind: 'visainfo-captcha', data: { step: isHomeSearch() ? 2 : 1, image, error: false, refreshed: true } }); reply({ ok: true, ctx: !!ctx });
+          await send({ kind: 'visainfo-captcha', data: { step: isHomeSearch() ? 2 : 1, only: !!(ctx && ctx.mode === 'doc'), image, error: false, refreshed: true } }); reply({ ok: true, ctx: !!ctx });
         })(); return true;
       }
     });
@@ -141,11 +141,14 @@
     const { ctx } = await send({ kind: 'get-visainfo-ctx' }); if (!ctx) return;
     const phase = ctx.phase === 'inquiry' ? 'inquiry' : 'enjaz'; /* inquiry = الخطوة 2 */
     const step = phase === 'inquiry' ? 2 : 1;
+    const status = (text) => send({ kind: 'visainfo-status', data: { text } });
+    await status('الخطوة ' + step + ': فتحت ' + location.pathname);
     /* لو الصفحة مش اللي متوقعينها (دخول، تحويل، تغيير في المنصة…): بنقول للنظام بدل ما يفضل مستني */
-    const tell = (message) => send({ kind: 'visainfo-captcha', data: { step, image: '', error: true, message } });
+    const tell = (message) => send({ kind: 'visainfo-captcha', data: { step, only: ctx.mode === 'doc', image: '', error: true, message } });
     try {
       const want = phase === 'enjaz' ? () => isEnjazSearch() || isEnjazResult() : () => isHomeSearch() || isDocResult();
-      if (!(await waitFor(want, 12000))) { await tell('صفحة المنصة مش زي المتوقع (' + location.pathname + '). افتح تبويب المنصة وشوف إيه اللي ظاهر.'); return; }
+      if (!(await waitFor(want, 12000))) { await status('الصفحة مش اللي متوقعينها'); await tell('صفحة المنصة مش زي المتوقع (' + location.pathname + '). افتح تبويب المنصة وشوف إيه اللي ظاهر.'); return; }
+      await status('الصفحة ظاهرة زي المتوقع، بجيب الكابتشا…');
       if (phase === 'enjaz') { if (isEnjazSearch()) await runSearch(ctx); else await runResult(); }
       else if (isHomeSearch()) await runHomeSearch(ctx); else await runDoc();
     } catch (e) { await tell('حصل خطأ في الإضافة: ' + String(e && e.message || e).slice(0, 120)); }

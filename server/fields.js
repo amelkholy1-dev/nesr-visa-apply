@@ -20,8 +20,7 @@ const OPT = {
 const GROUPS = [
   { id: 'lookup', title: 'رقم التأشيرة والرقم الموحد', fields: [
     { k: 'visaNumber', label: 'رقم التأشيرة (رقم الصادر)', type: 'text', scope: 'profile', max: 20, ltr: true, hint: 'مثلاً: 1306025676' },
-    { k: 'unifiedNumber', label: 'الرقم الموحد (رقم السجل)', type: 'text', scope: 'profile', max: 10, ltr: true, hint: 'مثلاً: 7011022865' },
-    { k: 'docNumber', label: 'رقم مستند التأشيرة (لو مختلف عن رقم الصادر — اختياري)', type: 'text', scope: 'profile', max: 20, ltr: true, hint: 'لو سيبته فاضي بنستخدم رقم التأشيرة' }
+    { k: 'unifiedNumber', label: 'الرقم الموحد (رقم السجل)', type: 'text', scope: 'profile', max: 10, ltr: true, hint: 'مثلاً: 7011022865' }
   ] },
   { id: 'visa', title: 'بيانات التأشيرة', fields: [
     { k: 'visaKind', label: 'نوع التأشيرة', type: 'select', opt: 'visaKind', scope: 'profile', req: true },

@@ -223,7 +223,7 @@ const MOFA = {
   assert.deepStrictEqual([nx3.personId, nx3.target, nx3.queue.length, nx3.total], ['32', 'lab', 0, 2]);
   global.__inquiry = true;
   /* سيناريو 10: «التفويض على تأشيرة» من ملف الضبط، من جوه النظام — التبويب بيتفتح في الخلفية، صورة الكابتشا بتتبعت للنظام، إنت بتكتبها (غلط ثم صح)، والنتيجة بترجع والتبويب بيتقفل */
-  const [vpage] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', docNumber: '1000000002', embassy: '' })]); /* الممثلية فاضية ← الإضافة تختار السويس لوحدها */
+  const [vpage] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', embassy: '' })]); /* الممثلية فاضية ← الإضافة تختار السويس لوحدها */
   await vpage.reload(); /* Playwright مبيلقطش أول طلب لتبويب اتفتح في الخلفية (مشكلة في الاختبار بس، مش في Chrome): بنعمل إعادة تحميل عشان الصفحة التجريبية تتحمّل */
   await app.waitForFunction(() => window.caps.length > 0, null, { timeout: 40000 });
   const c1 = await app.evaluate(() => window.caps[0]);
@@ -250,7 +250,7 @@ const MOFA = {
   /* الخطوة 2: نفس التبويب بيروح لاستعلام «مستند التأشيرة» ← كابتشا تانية في النظام (step 2) ← كود غلط ثم صح ← نتيجة المستند */
   await app.waitForFunction(() => window.caps.some((c) => c.step === 2), null, { timeout: 40000 });
   const h2 = await vpage.evaluate(() => ({ type: document.getElementById('SearchingType').value, no: document.getElementById('ApplicationNumber').value, sp: document.getElementById('SponserID').value, cap: document.getElementById('Captcha').value }));
-  assert.deepStrictEqual([h2.type, h2.no, h2.sp, h2.cap], ['2', '1000000002', '7000000001', ''], 'استعلام المستند اتملا برقم المستند والكابتشا فاضية: ' + JSON.stringify(h2));
+  assert.deepStrictEqual([h2.type, h2.no, h2.sp, h2.cap], ['2', '1000000001', '7000000001', ''], 'استعلام المستند اتملا برقم التأشيرة والكابتشا فاضية: ' + JSON.stringify(h2));
   const nc2 = await app.evaluate(() => window.caps.length);
   await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '000000' } }, location.origin));
   await app.waitForFunction((n) => window.caps.length > n, nc2, { timeout: 30000 });
@@ -260,8 +260,19 @@ const MOFA = {
   const doc = await app.evaluate(() => window.docs[0]);
   assert.deepStrictEqual([doc.docNumber, doc.docDate, doc.sponsorName, doc.visaKindId], ['1000000002', '1447/09/25', 'شركة تجربة للنقل', '13'], JSON.stringify(doc));
   assert.deepStrictEqual(doc.rows, [{ visaKind: 'عمل موسمي', embassy: 'السويس', gender: 'ذكر', nationality: 'مصر', job: 'سائق حافلة', entries: 'سفرة واحدة', residence: '90' }], 'صف مستند التأشيرة');
-  assert.ok(/t=2&n=1000000002&s=7000000001/.test(global.__printUrl), 'اتبعت للمنصة: ' + global.__printUrl);
+  assert.ok(/t=2&n=1000000001&s=7000000001/.test(global.__printUrl), 'اتبعت للمنصة: ' + global.__printUrl);
   await vpage.waitForEvent('close', { timeout: 15000 }).catch(() => {}); assert.ok(vpage.isClosed(), 'تبويب المنصة اتقفل لوحده');
+  /* سيناريو 12: «مستند التأشيرة فقط» — بيبدأ من استعلام المستند على طول (كابتشا واحدة) وبيتقفل بعد النتيجة */
+  global.__inquiry = true; global.__printUrl = '';
+  const nDocs = await app.evaluate(() => window.docs.length); const nCaps4 = await app.evaluate(() => window.caps.length);
+  const [vp4] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', mode: 'doc', embassy: '' })]);
+  await vp4.waitForTimeout(1500); await vp4.reload().catch(async () => { await vp4.waitForTimeout(2000); await vp4.reload(); });
+  await app.waitForFunction((n) => window.caps.length > n, nCaps4, { timeout: 40000 });
+  const c4 = await app.evaluate(() => window.caps[window.caps.length - 1]); assert.ok(c4.step === 2 && c4.only === true && String(c4.image).startsWith('data:image/png'), 'كابتشا مستند التأشيرة فقط');
+  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '123456' } }, location.origin));
+  await app.waitForFunction((n) => window.docs.length > n, nDocs, { timeout: 40000 });
+  assert.ok(/t=2&n=1000000001/.test(global.__printUrl), 'اتبعت للمنصة: ' + global.__printUrl);
+  await vp4.waitForEvent('close', { timeout: 15000 }).catch(() => {}); assert.ok(vp4.isClosed(), 'التبويب اتقفل بعد المستند');
   /* سيناريو 11: صفحة الاستعلام في المنصة مش زي المتوقع (تحويل/دخول…) ← النظام بيتقاله بدل ما يفضل مستني */
   global.__inquiry = 'broken';
   const nCaps3 = await app.evaluate(() => window.caps.length); const nVisa3 = await app.evaluate(() => window.visa.length);

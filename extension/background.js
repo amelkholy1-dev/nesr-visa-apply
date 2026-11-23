@@ -50,8 +50,9 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now() };
       /* التبويب بيتفتح في الخلفية: إنت فاضل في النظام، والإضافة بتبعتلك صورة الكابتشا هناك وإنت اللي بتكتبها */
       const o = await store.get('visainfoTab'); if (o.visainfoTab) { try { await chrome.tabs.remove(o.visainfoTab); } catch (e) { /* اتقفل */ } }
-      const tab = await chrome.tabs.create({ url: VISAINFO_URL, active: false });
-      await store.set({ ['vctx_' + tab.id]: { ...ctx, inline: true, stage: '', phase: 'enjaz', doc: true }, visainfoTab: tab.id });
+      const only = ctx.mode === 'doc'; /* «مستند التأشيرة فقط»: بنبدأ من الخطوة 2 على طول (كابتشا واحدة) */
+      const tab = await chrome.tabs.create({ url: only ? VISADOC_URL : VISAINFO_URL, active: false });
+      await store.set({ ['vctx_' + tab.id]: { ...ctx, inline: true, stage: '', phase: only ? 'inquiry' : 'enjaz', doc: true }, visainfoTab: tab.id });
       reply({ ok: true });
     } else if (msg.kind === 'visainfo-ctl') {
       /* أوامر من صفحة النظام لتبويب المنصة: submit (الكابتشا اللي كتبتها) · refresh (صورة تانية) · open (افتح التبويب) · cancel */
@@ -70,6 +71,12 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       const t = await findAppTab(ctx.originTabId);
       if (!t) { reply({ ok: false }); return; }
       try { await chrome.tabs.sendMessage(t.id, { kind: 'va-visainfo-captcha', data: msg.data }); reply({ ok: true }); } catch (e) { reply({ ok: false }); }
+    } else if (msg.kind === 'visainfo-status') {
+      /* سجل بسيط بيوصل لصفحة النظام عشان نعرف الإضافة وصلت لحد فين */
+      const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
+      const t = await findAppTab(ctx.originTabId);
+      if (t) { try { await chrome.tabs.sendMessage(t.id, { kind: 'va-visainfo-status', data: { text: String((msg.data && msg.data.text) || '').slice(0, 200) } }); } catch (e) { /* مش مهم */ } }
+      reply({ ok: true });
     } else if (msg.kind === 'visainfo-doc') {
       const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
       const t = await findAppTab(ctx.originTabId);
