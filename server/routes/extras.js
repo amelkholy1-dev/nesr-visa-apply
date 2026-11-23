@@ -8,7 +8,8 @@ const audit = require('../audit');
 
 const router = express.Router();
 const json = (v) => { try { return JSON.parse(v || '{}') || {}; } catch (e) { return {}; } };
-const admin = (req, res, next) => (req.user.role === 'admin' ? next() : res.status(403).json({ error: 'ده للمدير بس' }));
+const P = require('../perms');
+const admin = P.need('users.manage');
 
 const DEFAULT_PRINT = {
   company: 'نسر الخليج', line2: '', dateFormat: 'DD/MM/YYYY'
@@ -39,7 +40,7 @@ const TASAHEEL_HEAD = ['E.No', 'First Name*', 'Second Name', 'Last Name*', 'Pass
 router.get('/settings/profile-template', async (req, res) => {
   try { const r = (await db.query("SELECT v FROM settings WHERE k = 'profileTemplate'"))[0]; res.json({ auto: !!(r && json(r.v).auto) }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
-router.put('/settings/profile-template', admin, async (req, res) => {
+router.put('/settings/profile-template', P.need('profiles.edit'), async (req, res) => {
   try {
     const auto = !!(req.body && req.body.auto);
     await db.query("INSERT INTO settings (k, v) VALUES ('profileTemplate', ?) ON DUPLICATE KEY UPDATE v = VALUES(v)", [JSON.stringify({ auto })]);
@@ -52,7 +53,7 @@ router.put('/settings/profile-template', admin, async (req, res) => {
 router.get('/export/tasheel.xlsx', (req, res) => res.redirect(302, '/api/export/tasaheel.xls' + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '')));
 
 /* تصدير لتساهيل: ?ids=1,2,3 أو ?status=… ، وبيرجّع ملف Excel (.xls) بنفس شكل ملف تساهيل (ورقة Bio_Applicant_Details + ورقة hiddenSheet المخفية) */
-router.get('/export/tasaheel.xls', async (req, res) => {
+router.get('/export/tasaheel.xls', P.need('export'), async (req, res) => {
   try {
     const ids = String(req.query.ids || '').split(',').map((x) => parseInt(x, 10)).filter(Boolean).slice(0, 2000);
     const where = [], vals = [];

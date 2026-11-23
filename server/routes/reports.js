@@ -8,11 +8,11 @@ const S = require('../stages');
 
 const router = express.Router();
 const json = (v) => { try { return JSON.parse(v || '{}') || {}; } catch (e) { return {}; } };
-const admin = (req, res, next) => (req.user.role === 'admin' ? next() : res.status(403).json({ error: 'ده للمدير بس' }));
+const P = require('../perms');
 const day = (v, fallback) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : fallback);
 const isoDay = (d) => d.toISOString().slice(0, 10);
 
-router.get('/reports/summary', async (req, res) => {
+router.get('/reports/summary', P.need('stats.view'), async (req, res) => {
   try {
     const to = day(req.query.to, isoDay(new Date())); const from = day(req.query.from, isoDay(new Date(Date.now() - 29 * 86400000)));
     const byStatus = Object.fromEntries((await db.query('SELECT status, COUNT(*) AS n FROM people GROUP BY status')).map((r) => [r.status, Number(r.n)]));
@@ -42,7 +42,7 @@ router.get('/reports/summary', async (req, res) => {
 /* تصدير CSV (بيتفتح في Excel بالعربي): كل الأشخاص أو حسب الحالة والتاريخ */
 const csvCell = (v) => { let t = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };
 const STATUS_AR = { draft: 'مسودة', ready: 'جاهز', waiting: 'مستني تأمين الجواز', filled: 'اتملى في المنصة', submitted: 'اتبعت' };
-router.get('/reports/export.csv', async (req, res) => {
+router.get('/reports/export.csv', P.need('export'), async (req, res) => {
   try {
     const where = [], vals = [];
     if (req.query.status && STATUS_AR[req.query.status]) { where.push('p.status = ?'); vals.push(req.query.status); }
@@ -60,7 +60,7 @@ router.get('/reports/export.csv', async (req, res) => {
 });
 
 /* سجل النشاط (للمدير) */
-router.get('/activity', admin, async (req, res) => {
+router.get('/activity', P.need('activity.view'), async (req, res) => {
   try {
     const where = [], vals = [];
     if (req.query.user) { where.push('user_name = ?'); vals.push(String(req.query.user)); }

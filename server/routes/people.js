@@ -14,8 +14,19 @@ const S = require('../stages');
 const wafid = require('../wafid');
 const lab = require('../lab');
 const letters = require('../letters');
+const R = require('../readiness');
+const { letterVars } = R;
+const readiness = (row, profile) => R.readiness(row, profile, sizeOf(row.id, row.personal_photo));
 
 const router = express.Router();
+const P = require('../perms');
+/* صلاحية كل مسار (أول قاعدة تنطبق) */
+const RULES = [
+  ['GET', /^\/\d+\/(payload|wafid|lab|letter\/.*)$/, 'people.fill'], ['POST', /^\/\d+\/result$/, 'people.fill'],
+  ['PUT', /^\/\d+\/stages\//, 'people.mark'], ['POST', /^\/bulk\//, 'people.mark'],
+  ['DELETE', /^\/\d+$/, 'people.delete'], ['GET', /./, 'people.view'], ['*', /./, 'people.edit']
+];
+router.use((req, res, next) => { for (const [m, re, perm] of RULES) if ((m === '*' || m === req.method) && re.test(req.path)) return P.need(perm)(req, res, next); next(); });
 const json = (v) => { try { return JSON.parse(v || '{}') || {}; } catch (e) { return {}; } };
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxPassportBytes + 1 } });
 
@@ -33,7 +44,7 @@ function brief(row, profile) {
   const r = F.resolve(json(row.data), profile && profile.data, { personalPhoto: row.personal_photo, personalPhotoSize: sizeOf(row.id, row.personal_photo), passportImage: row.passport_image });
   return { id: row.id, name: row.name_ar, passportNo: row.passport_no, status: row.status, profileId: row.profile_id, profileName: profile ? profile.name : '',
     appNumber: row.app_number, hasPhoto: !!row.personal_photo, hasPassport: !!row.passport_image, issues: r.issues.length, ready: r.ready, updatedAt: row.updated_at, filledAt: row.filled_at,
-    stages: S.parse(row.stages),
+    stages: S.parse(row.stages), service: readiness(row, profile),
     expiry: F.expiryInfo(json(row.data).expiryDate, json(row.data).expectedEntryDate || (profile && profile.data && profile.data.expectedEntryDate)) };
 }
 
@@ -55,7 +66,7 @@ router.get('/:id(\\d+)', async (req, res) => {
     if (!row) return res.status(404).json({ error: 'الشخص مش موجود' });
     const profile = await loadProfile(row.profile_id);
     const files = { personalPhoto: row.personal_photo, personalPhotoSize: sizeOf(row.id, row.personal_photo), passportImage: row.passport_image };
-    res.json({ person: { id: row.id, profileId: row.profile_id, status: row.status, appNumber: row.app_number, data: json(row.data), hasPhoto: !!row.personal_photo, hasPassport: !!row.passport_image, photoSize: files.personalPhotoSize, stages: S.parse(row.stages) },
+    res.json({ person: { id: row.id, profileId: row.profile_id, status: row.status, appNumber: row.app_number, data: json(row.data), hasPhoto: !!row.personal_photo, hasPassport: !!row.passport_image, photoSize: files.personalPhotoSize, stages: S.parse(row.stages), service: readiness(row, profile), profileName: profile ? profile.name : '' },
       profile, resolved: F.resolve(json(row.data), profile && profile.data, files) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -90,7 +101,7 @@ router.delete('/:id(\\d+)', async (req, res) => {
     const id = parseInt(req.params.id, 10);
     const row = (await db.query('SELECT id, created_by, name_ar, passport_no FROM people WHERE id = ?', [id]))[0];
     if (!row) return res.status(404).json({ error: 'الشخص مش موجود' });
-    if (req.user.role !== 'admin' && row.created_by !== req.user.id) return res.status(403).json({ error: 'الحذف للمدير أو لمن أضافه' });
+    if (!['admin', 'manager'].includes(req.user.role) && row.created_by !== req.user.id) return res.status(403).json({ error: 'الحذف للمدير أو لمن أضافه' });
     await db.query('DELETE FROM people WHERE id = ?', [id]);
     audit.log(req, 'delete', id, row.name_ar, row.passport_no);
     fs.rmSync(peopleDir(id), { recursive: true, force: true });
@@ -204,8 +215,7 @@ router.get('/:id(\\d+)/letter/:kind(suez|cairo)', async (req, res) => {
     const row = (await db.query('SELECT * FROM people WHERE id = ?', [req.params.id]))[0];
     if (!row) return res.status(404).json({ error: 'الشخص مش موجود' });
     const profile = await loadProfile(row.profile_id); const v = F.resolve(json(row.data), profile && profile.data, {}).values;
-    const vars = { name: v.nameAr || row.name_ar || '', passport: String(v.passportNo || '').toUpperCase(), job: v.jobText || '', degree: v.degree || 'لايوجد', visaNo: v.visaNumber || '', visaDate: v.visaDate || '', sponsor: v.sponsorName || '',
-      unifiedNo: v.unifiedNumber || v.sponsorNumber || '', box: v.boxNumber || '', agency: v.agencyNumber || '', appNo: row.app_number || '' };
+    const vars = letterVars(row, v);
     const c = letters.check(req.params.kind, vars);
     if (req.query.check) {
       /* رسائل واضحة: إيه الناقص، ومصدره فين، وإيه اللي هيختفي من الخطاب بسببه */
@@ -217,9 +227,62 @@ router.get('/:id(\\d+)/letter/:kind(suez|cairo)', async (req, res) => {
     let photo = null; try { if (row.personal_photo) photo = fs.readFileSync(fullPath(row.id, row.personal_photo)); } catch (e) { photo = null; }
     const buf = await letters.build(req.params.kind, vars, photo);
     audit.log(req, 'fill', row.id, row.name_ar, 'خطاب ترشيح ' + letters.KINDS[req.params.kind].label);
+    try { await patchStage(row.id, 'letter', { state: 'done', note: letters.KINDS[req.params.kind].label }); } catch (e) { /* مش مهم */ }
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodeURIComponent('nomination-' + req.params.kind + '-' + (vars.passport || row.id) + '.docx'));
     res.send(buf);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* تعليم مرحلة لشخص (بيستخدمه الزرار الفردي والجماعي والخطابات) */
+async function patchStage(id, key, body, req) {
+  const row = (await db.query('SELECT name_ar, stages FROM people WHERE id = ?', [id]))[0]; if (!row) return null;
+  const stages = S.parse(row.stages); if (!S.patch(stages, key, body || {})) return false;
+  await db.query('UPDATE people SET stages = ? WHERE id = ?', [JSON.stringify(stages), id]);
+  if (req) { const st = S.STAGES.find((x) => x.k === key); const c = stages[key]; audit.log(req, 'stage', id, row.name_ar, st.label + ': ' + (c.state === 'done' ? 'تم' : c.state === 'booked' ? 'محجوز' : 'لسه') + (c.date ? ' ' + c.date : '')); }
+  return stages;
+}
+/* ===== تعليم جماعي: POST /bulk/stage | /bulk/status | /bulk/profile | /bulk/delete  body: { ids:[…], … } ===== */
+const idsOf = (req) => [...new Set((Array.isArray(req.body && req.body.ids) ? req.body.ids : []).map((x) => parseInt(x, 10)).filter(Boolean))].slice(0, 2000);
+router.post('/bulk/stage', async (req, res) => {
+  try {
+    const ids = idsOf(req); const b = req.body || {}; if (!ids.length) return res.status(400).json({ error: 'اختار أشخاص الأول' });
+    if (!S.STAGES.some((x) => x.k === b.key)) return res.status(400).json({ error: 'المرحلة مش صحيحة' });
+    let ok = 0, skipped = 0;
+    for (const id of ids) { const r = await patchStage(id, b.key, { state: b.state, ...(b.date !== undefined ? { date: b.date } : {}), ...(b.note !== undefined ? { note: b.note } : {}) }, req); if (r) ok++; else skipped++; }
+    if (!ok && skipped) return res.status(400).json({ error: 'الحالة دي مش مسموحة للمرحلة دي' });
+    res.json({ ok: true, updated: ok, skipped });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/bulk/status', async (req, res) => {
+  try {
+    const ids = idsOf(req); const status = String((req.body || {}).status || ''); if (!ids.length) return res.status(400).json({ error: 'اختار أشخاص الأول' });
+    if (!['draft', 'ready', 'waiting', 'filled', 'submitted'].includes(status)) return res.status(400).json({ error: 'الحالة مش صحيحة' });
+    await db.query(`UPDATE people SET status = ? WHERE id IN (${ids.map(() => '?').join(',')})`, [status, ...ids]);
+    audit.log(req, 'status', null, ids.length + ' شخص', 'تغيير الحالة جماعي: ' + status);
+    res.json({ ok: true, updated: ids.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/bulk/profile', P.need('people.edit'), async (req, res) => {
+  try {
+    const ids = idsOf(req); const pid = parseInt((req.body || {}).profileId, 10) || null; if (!ids.length) return res.status(400).json({ error: 'اختار أشخاص الأول' });
+    if (pid && !(await loadProfile(pid))) return res.status(400).json({ error: 'ملف الضبط مش موجود' });
+    await db.query(`UPDATE people SET profile_id = ? WHERE id IN (${ids.map(() => '?').join(',')})`, [pid, ...ids]);
+    audit.log(req, 'update', null, ids.length + ' شخص', 'نقل لملف ضبط جماعي');
+    res.json({ ok: true, updated: ids.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/bulk/delete', P.need('people.delete'), async (req, res) => {
+  try {
+    const ids = idsOf(req); if (!ids.length) return res.status(400).json({ error: 'اختار أشخاص الأول' });
+    let n = 0;
+    for (const id of ids) {
+      const row = (await db.query('SELECT * FROM people WHERE id = ?', [id]))[0]; if (!row) continue;
+      if (!['admin', 'manager'].includes(req.user.role) && row.created_by !== req.user.id) continue;
+      await db.query('DELETE FROM people WHERE id = ?', [id]); try { fs.rmSync(peopleDir(id), { recursive: true, force: true }); } catch (e) { /* مش مهم */ }
+      audit.log(req, 'delete', id, row.name_ar, 'حذف جماعي'); n++;
+    }
+    res.json({ ok: true, deleted: n, skipped: ids.length - n });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

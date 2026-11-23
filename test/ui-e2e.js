@@ -20,14 +20,16 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
   for (let i = 0; i < 60; i++) { try { const r = await fetch(`http://127.0.0.1:${PORT}/api/health`); const j = await r.json(); if (j.db && j.db.ready) break; } catch (e) { /* لسه */ } await new Promise((r) => setTimeout(r, 500)); }
   const browser = await chromium.launch({ args: ['--no-sandbox'], executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium' });
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
-  const errs = []; page.on('pageerror', (e) => errs.push(e.message));
+  const errs = []; page.on('pageerror', (e) => errs.push(e.message)); page.on('dialog', (d) => d.accept());
   const base = `http://127.0.0.1:${PORT}/`;
   try {
     await page.goto(base); await page.waitForSelector('#u');
     await page.fill('#u', 'admin'); await page.fill('#p', 'wrong'); await page.click('#go'); await page.waitForFunction(() => document.getElementById('err').textContent.length > 0);
     await page.fill('#p', 'Admin#12345'); await page.click('#go');
-    await page.waitForSelector('#rows');
-    assert.ok(await page.isVisible('#top'), 'الهيدر ظاهر بعد الدخول');
+    await page.waitForSelector('.kpis');
+    assert.ok(await page.isVisible('#top'), 'القائمة الجانبية ظاهرة بعد الدخول');
+    assert.ok((await page.textContent('#top')).includes('عين النسر'), 'اسم السيستم المميّز ظاهر');
+    assert.ok((await page.textContent('.page-head')).includes('لوحة التحكم'), 'الصفحة الرئيسية = لوحة التحكم');
 
     // ملف ضبط
     await page.goto(base + '#/profiles'); await page.click('#newP');
@@ -54,7 +56,7 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.fill('[data-k=birthPlace]', 'Cairo'); await page.fill('[data-k=issueDate]', '2024-07-01');
     await page.click('#save'); await page.waitForURL(/#\/people\/\d+/); await page.waitForSelector('#phF');
     const id = page.url().match(/people\/(\d+)/)[1];
-    assert.ok(await page.isVisible('#letSuez') && await page.isVisible('#letCairo'), 'زرارين خطاب الترشيح (السويس / القاهرة) ظاهرين في صفحة الشخص');
+    await page.waitForSelector('#letCairo'); assert.ok(await page.isVisible('#letSuez') && await page.isVisible('#letCairo'), 'زرارين خطاب الترشيح (السويس / القاهرة) ظاهرين في صفحة الشخص');
     assert.ok((await page.textContent('body')).includes('الصورة الشخصية ناقصة'), 'الناقص ظاهر');
     // رفع صورة كبيرة ← بتتصغّر تحت 1 ميجا
     if (BIG) {
@@ -67,23 +69,36 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     assert.strictEqual(pay.mofa.VisaKind, '38'); assert.strictEqual(pay.mofa.AFIRSTNAME, 'بدر'); assert.strictEqual(pay.mofa.AFAMILY, 'العنين'); assert.strictEqual(pay.mofa.ENTRY_POINT, '17');
     await page.goto(base + '#/people'); await page.waitForSelector('#rows tr.click');
     assert.ok((await page.textContent('#rows')).includes('بدر خليل'));
+    assert.ok(await page.isHidden('.bulkbar') || (await page.locator('.bulkbar').count()) === 0, 'شريط التعليم مخفي من غير تحديد');
     await page.goto(base + '#/extension'); await page.waitForSelector('.steps');
     /* الطابور والحالة والتقارير والسجل والرفع الجماعي */
     await page.goto(base + '#/people'); await page.waitForSelector('#rows .sel');
-    assert.ok(await page.isHidden('#queueBtn'), 'زرار الطابور مخفي من غير تحديد');
+    assert.ok((await page.locator('#queueBtn').count()) === 0 || await page.isHidden('#queueBtn'), 'زرار الطابور مخفي من غير تحديد');
     await page.check('#rows .sel'); assert.ok(await page.isVisible('#queueBtn'), 'زرار الطابور ظهر بعد التحديد'); assert.ok(await page.isVisible('#wafQueueBtn'), 'زرار طابور وافد ظهر بعد التحديد');
+    assert.ok(await page.isVisible('#bkApply') && await page.isVisible('#labQueueBtn'), 'أزرار «اعلّم» وحجز المعمل ظاهرة بعد التحديد');
+    /* تعليم جماعي: المرحلة «المنصة» تتعلّم تم لكل المحدّدين */
+    await page.selectOption('#bkStage', 'sent'); await page.selectOption('#bkState', 'done'); await page.click('#bkApply'); await page.waitForTimeout(900);
+    assert.ok((await page.locator('#rows .dot.done').count()) >= 1, 'التعليم الجماعي اشتغل (نقطة «تم»)');
+    await page.uncheck('#rows .sel').catch(() => {});
     /* صفحة الشخص: لوحة صورة الجواز جنب الحقول */
     const firstId = await page.evaluate(async () => (await (await fetch('/api/people')).json()).people[0].id);
     await page.goto(base + '#/people/' + firstId); await page.waitForSelector('.split .side');
     assert.ok(await page.isVisible('.side .pv'), 'لوحة صورة الجواز ظاهرة جنب الحقول');
     /* مراحل الطلب في صفحة الشخص + النقط في القايمة + قايمة الطباعة */
     await page.waitForSelector('.stg[data-stage="medical"]');
+    assert.ok(await page.isVisible('#svcCard') || (await page.textContent('body')).includes('الخدمات والإجراءات'), 'كارت الخدمات في صفحة الشخص');
+    assert.ok(await page.isVisible('#letSuez') && await page.isVisible('#fill'), 'أزرار الخدمات (خطاب/منصة) ظاهرة');
     await page.selectOption('.stg[data-stage="medical"] .stS', 'booked'); await page.fill('.stg[data-stage="medical"] .stD', '2026-12-05'); await page.dispatchEvent('.stg[data-stage="medical"] .stD', 'change');
     await page.waitForTimeout(600);
     assert.ok(!(await page.locator('details.menu').count()), 'مفيش زرار طباعة');
     await page.click('#save'); await page.waitForTimeout(800); assert.ok(!(await page.textContent('#toast')).includes('trim'), 'الحفظ على شخص موجود شغّال'); assert.ok((await page.textContent('#toast')).includes('اتحفظ'), 'اتحفظ');
     await page.goto(base + '#/people'); await page.waitForSelector('#rows .dots');
     assert.ok((await page.locator('#rows .dot.booked').count()) >= 1, 'نقطة الفحص الطبي محجوز');
+    /* المستخدمين والصلاحيات + دفعات التأشيرات */
+    await page.goto(base + '#/users'); await page.waitForSelector('#addU'); assert.ok((await page.textContent('#view, main, body')).includes('الأدوار الجاهزة'));
+    await page.click('#addU'); await page.waitForSelector('.modal .perm-grid'); assert.ok((await page.locator('.modal [data-perm]').count()) >= 8, 'قايمة الصلاحيات ظاهرة'); await page.click('#mc');
+    await page.goto(base + '#/profiles'); await page.waitForSelector('.vcard'); assert.ok((await page.textContent('.vcard')).includes('شخص'), 'كارت الدفعة فيه أعداد الأشخاص');
+    await page.goto(base + '#/people'); await page.waitForSelector('#sf');
     await page.selectOption('#sf', 'b:medical'); await page.waitForTimeout(400);
     assert.ok((await page.locator('#rows tr.click').count()) >= 1, 'فلتر المراحل');
     await page.selectOption('#sf', '');

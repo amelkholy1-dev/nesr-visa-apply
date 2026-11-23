@@ -98,7 +98,17 @@ const PERSON_GROUPS = [
 const PROFILE_KEYS = GROUPS.flatMap(g => g.fields.map(f => f.k));
 const PERSON_KEYS = [...PERSON_GROUPS.flatMap(g => g.fields.map(f => f.k)), ...GROUPS.flatMap(g => g.fields.filter(f => f.scope === 'both').map(f => f.k)), 'notes'];
 
-const meta = () => ({ groups: GROUPS, personGroups: PERSON_GROUPS, options: OPT, maxName: names.MAX });
+/* كل خانة بتتستخدم في إيه: mofa منصة التأشيرات · wafid الفحص الطبي · lab المعمل · letter خطابات الترشيح · tash ملف تساهيل */
+const USES = {
+  passportNo: ['mofa', 'wafid', 'lab', 'letter', 'tash'], issueDate: ['mofa', 'wafid', 'tash'], expiryDate: ['mofa', 'wafid', 'tash'], birthDate: ['mofa', 'wafid', 'tash'], birthPlace: ['mofa'], nationalId: ['mofa', 'wafid', 'lab'],
+  issuePlace: ['wafid', 'tash'], phone: ['wafid', 'lab', 'tash'], sex: ['mofa', 'wafid', 'tash'], nameAr: ['mofa', 'letter'], nameArFirst: ['mofa'], nameArFather: ['mofa'], nameArGrand: ['mofa'], nameArFamily: ['mofa'],
+  nameEnFirst: ['mofa', 'wafid', 'lab', 'tash'], nameEnFather: ['mofa', 'lab', 'tash'], nameEnGrand: ['mofa', 'lab', 'tash'], nameEnFamily: ['mofa', 'wafid', 'lab', 'tash'],
+  visaKind: ['mofa'], nationality: ['mofa', 'tash'], embassy: ['mofa'], entriesText: ['mofa'], entryDays: ['mofa'], residence: ['mofa'], medCity: ['wafid'], medVisa: ['wafid'], medPosition: ['wafid'], autoDeclare: ['mofa', 'wafid'],
+  sponsorName: ['mofa', 'letter'], sponsorNumber: ['mofa', 'letter'], sponsorAddress: ['mofa'], sponsorPhone: ['mofa'], comingThrough: ['mofa'], entryPoint: ['mofa'], expectedEntryDate: ['mofa'], purpose: ['mofa'], carNumber: ['mofa'],
+  passportType: ['mofa'], issueCountry: ['mofa'], religion: ['mofa'], social: ['mofa', 'wafid'], degree: ['mofa', 'letter'], degreeSource: ['mofa'], homeAddress: ['mofa'], email: ['mofa', 'wafid', 'lab', 'tash'], jobClass: ['mofa'], jobText: ['mofa', 'lab', 'letter'],
+  visaNumber: ['letter', 'lab'], unifiedNumber: ['letter'], visaDate: ['letter'], boxNumber: ['letter'], agencyNumber: ['letter'], labDest: ['lab'], labJob: ['lab']
+};
+const meta = () => ({ uses: USES, groups: GROUPS, personGroups: PERSON_GROUPS, options: OPT, maxName: names.MAX });
 
 const pick = (src, keys) => { const o = {}; for (const k of keys) if (src && src[k] !== undefined && src[k] !== null) o[k] = typeof src[k] === 'string' ? src[k].trim() : src[k]; return o; };
 const sanitizeProfile = (d) => pick(d, PROFILE_KEYS);

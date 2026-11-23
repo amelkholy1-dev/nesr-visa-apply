@@ -78,6 +78,9 @@ async function init() {
   /* أعمدة اتضافت بعد أول إصدار (الجداول القديمة بتتحدّث لوحدها) */
   const hasCol = (await query("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'people' AND column_name = 'stages'"))[0].n;
   if (!hasCol) await pool.query('ALTER TABLE people ADD COLUMN stages LONGTEXT NULL');
+  const hasPerms = (await query("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'perms'"))[0].n;
+  if (!hasPerms) await pool.query('ALTER TABLE users ADD COLUMN perms TEXT NULL');
+  await pool.query('ALTER TABLE users MODIFY role VARCHAR(20) NOT NULL DEFAULT \'staff\'');
   const n = (await query('SELECT COUNT(*) AS n FROM users'))[0].n;
   if (!n) {
     const pass = config.adminPassword;

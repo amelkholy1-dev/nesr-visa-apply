@@ -1,6 +1,7 @@
 'use strict';
 /* واجهة نظام طلبات التأشيرات (JS عادي من غير بناء). الصفحات: الأشخاص · شخص · ملفات الضبط · المستخدمين · الإضافة */
 (function () {
+  const NA = (window.NA = window.NA || { pages: {} });
   const $ = (s, r = document) => r.querySelector(s);
   const view = $('#view');
   const e = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -173,8 +174,10 @@
   function selectHtml(name, k, val, blank) {
     return `<select data-k="${k}"><option value="">${e(blank || '— اختار —')}</option>${opt(name).map((o) => `<option value="${e(o.v)}"${String(o.v) === String(val) ? ' selected' : ''}>${e(o.t)}</option>`).join('')}</select>`;
   }
+  const TAGN = { mofa: 'منصة', wafid: 'وافد', lab: 'معمل', letter: 'خطاب', tash: 'تساهيل' };
   function fieldHtml(f, val, ph) {
-    const label = `${e(f.label)}${f.req ? ' <span class="req">*</span>' : ''}${f.max ? ` <span class="hint">(حد ${f.max})</span>` : ''}`;
+    const uses = (meta.uses && meta.uses[f.k]) || [];
+    const label = `${e(f.label)}${f.req ? ' <span class="req">*</span>' : ''}${f.max ? ` <span class="hint">(حد ${f.max})</span>` : ''}${uses.length ? `<span class="tags">${uses.map((t) => `<i class="tag ${t}" title="بتتستخدم في: ${TAGN[t]}">${TAGN[t]}</i>`).join('')}</span>` : ''}`;
     let inner;
     if (f.type === 'select') inner = selectHtml(f.opt, f.k, val, ph ? 'من ملف الضبط: ' + optText(f.opt, ph) : '');
     else if (f.type === 'date') inner = `<input type="date" data-k="${f.k}" value="${e(val || '')}">`;
@@ -206,13 +209,16 @@
 
   /* ===== الصفحات ===== */
   async function pageLogin() {
-    $('#top').hidden = true;
-    view.innerHTML = `<div class="card login"><h1>🦅 طلبات التأشيرات</h1>
+    $('#top').hidden = true; document.body.classList.remove('app');
+    const br = await fetch('/api/brand').then((r) => r.json()).catch(() => ({}));
+    document.title = (br.brand || 'عين النسر') + ' — ' + (br.tag || 'نظام إدارة التأشيرات');
+    view.innerHTML = `<div class="login-wrap"><div class="login-card"><div class="lg"><svg viewBox="0 0 48 48" width="46" height="46"><path d="M3 24C9 13 16 8 24 8s15 5 21 16c-6 11-13 16-21 16S9 35 3 24z" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/><circle cx="24" cy="24" r="9.5" fill="#e0b24a"/><circle cx="24" cy="24" r="4.4" fill="#0f3438"/><path d="M33 14l6-6M40 12l-4-4" stroke="#e0b24a" stroke-width="2.2" stroke-linecap="round"/></svg></div>
+      <h1>${e(br.brand || 'عين النسر')}</h1><span class="tag">${e(br.tag || 'نظام إدارة التأشيرات')}</span>
       <label class="f">اسم المستخدم<input id="u" autocomplete="username"></label><br>
       <label class="f">كلمة السر<input id="p" type="password" autocomplete="current-password"></label><br>
-      <button id="go" class="btn pri" style="width:100%">دخول</button><p id="err" class="issues muted"></p></div>`;
+      <button id="go" class="btn pri" style="width:100%">دخول</button><p id="err" class="issues muted"></p></div></div>`;
     const go = async () => {
-      try { const r = await api('POST', '/login', { username: $('#u').value, password: $('#p').value }); me = r.user; location.hash = '#/people'; }
+      try { const r = await api('POST', '/login', { username: $('#u').value, password: $('#p').value }); me = r.user; location.hash = '#/'; render(); }
       catch (er) { $('#err').textContent = er.message; }
     };
     $('#go').onclick = go; $('#p').onkeydown = (ev) => { if (ev.key === 'Enter') go(); };
@@ -269,72 +275,6 @@
     };
   }
 
-  async function pagePeople() {
-    const [profs] = await Promise.all([api('GET', '/profiles')]);
-    const state = JSON.parse(sessionStorage.getItem('peopleFilter') || '{}');
-    view.innerHTML = `<h1>الأشخاص</h1>
-      <div class="card"><div class="row">
-        <input id="q" placeholder="بحث بالاسم أو رقم الجواز" value="${e(state.q || '')}" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:220px">
-        <select id="st" style="padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">كل الحالات</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${state.st === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select>
-        <select id="pf" style="padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">كل ملفات الضبط</option>${profs.profiles.map((p) => `<option value="${p.id}"${String(state.pf) === String(p.id) ? ' selected' : ''}>${e(p.name)}</option>`).join('')}</select>
-        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exOnly"${state.ex ? ' checked' : ''}> جوازات قريبة الانتهاء</label>
-        <select id="sf" style="padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">كل المراحل</option>${(meta.stages || []).map((x) => `<option value="p:${x.k}"${state.sf === 'p:' + x.k ? ' selected' : ''}>لسه: ${e(x.label)}</option>${x.booking ? `<option value="b:${x.k}"${state.sf === 'b:' + x.k ? ' selected' : ''}>محجوز: ${e(x.label)}</option>` : ''}<option value="d:${x.k}"${state.sf === 'd:' + x.k ? ' selected' : ''}>تم: ${e(x.label)}</option>`).join('')}</select>
-        <button class="btn" id="tashBtn" title="ملف Excel لموقع تساهيل (للمحدّدين، أو كل المعروضين)">تصدير لتساهيل</button>
-        <button class="btn pri" id="queueBtn" hidden>املى المحدّدين بالتتابع</button>
-        <button class="btn pri" id="wafQueueBtn" hidden>احجز الفحص (وافد) للمحدّدين</button>
-        <button class="btn pri" id="labQueueBtn" hidden>احجز المعمل للمحدّدين</button>
-        <a href="#/people/new" class="btn pri" style="margin-inline-start:auto;text-decoration:none">+ شخص جديد</a></div></div>
-      <div id="upc"></div>
-      <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th style="width:30px"><input type="checkbox" id="selAll" title="تحديد الكل"></th><th>الاسم</th><th>الجواز</th><th>ملف الضبط</th><th>الحالة</th><th>النواقص</th><th>المراحل</th><th>رقم الطلب</th><th></th></tr></thead><tbody id="rows"><tr><td colspan="7" class="muted">جاري التحميل…</td></tr></tbody></table></div>`;
-    let shown = [];
-    const selectedIds = () => [...view.querySelectorAll('.sel:checked')].map((c) => c.dataset.id);
-    const syncQueue = () => { const n = selectedIds().length; const b = $('#queueBtn'); if (!b) return; b.hidden = n === 0; b.textContent = `املى المحدّدين بالتتابع (${n})`; const wq = $('#wafQueueBtn'); if (wq) { wq.hidden = n === 0; wq.textContent = `احجز الفحص (وافد) للمحدّدين (${n})`; } const lq = $('#labQueueBtn'); if (lq) { lq.hidden = n === 0; lq.textContent = `احجز المعمل للمحدّدين (${n})`; } const t = $('#tashBtn'); if (t) t.textContent = n ? `تصدير لتساهيل (${n})` : 'تصدير لتساهيل'; };
-    const load = async () => {
-      const st = { q: $('#q').value, st: $('#st').value, pf: $('#pf').value, ex: $('#exOnly').checked, sf: $('#sf').value }; sessionStorage.setItem('peopleFilter', JSON.stringify(st));
-      const r = await api('GET', `/people?q=${encodeURIComponent(st.q)}&status=${st.st}&profile=${st.pf}`);
-      shown = r.people.filter((p) => !st.ex || (p.expiry && (p.expiry.short || p.expiry.expired)));
-      if (st.sf) { const [mode, key] = st.sf.split(':'); shown = shown.filter((p) => { const c = (p.stages || {})[key] || {}; return mode === 'p' ? !c.state : mode === 'b' ? c.state === 'booked' : c.state === 'done'; }); }
-      $('#selAll').checked = false; syncQueue();
-      $('#rows').innerHTML = shown.map((p) => `<tr class="click" data-id="${p.id}"><td><input type="checkbox" class="sel" data-id="${p.id}"></td><td><b>${e(p.name || '—')}</b></td><td dir="ltr" style="text-align:right">${e(p.passportNo)}</td><td>${e(p.profileName || '—')}</td>
-        <td><span class="pill ${STATUS[p.status] ? STATUS[p.status][1] : ''}">${e((STATUS[p.status] || [p.status])[0])}</span></td>
-        <td>${p.ready ? '<span class="pill ok">كامل</span>' : `<span class="pill bad">${p.issues} ناقص</span>`} ${p.expiry && p.expiry.expired ? '<span class="pill bad">جواز منتهي</span>' : p.expiry && p.expiry.short ? `<span class="pill warn" title="أقل من 6 شهور من تاريخ الدخول">ينتهي بعد ${p.expiry.days} يوم</span>` : ''} ${p.hasPhoto ? '📷' : '<span class="muted" title="مفيش صورة شخصية">—</span>'}</td>
-        <td>${stageDots(p.stages)}</td>
-        <td dir="ltr" style="text-align:right">${e(p.appNumber || '')}</td><td><button class="btn small pri fill" data-id="${p.id}">املى الطلب</button></td></tr>`).join('') || '<tr><td colspan="9" class="muted">مفيش أشخاص.</td></tr>';
-    };
-    ['q', 'st', 'pf', 'exOnly', 'sf'].forEach((i) => { $('#' + i).oninput = () => load().catch(fail); });
-    $('#wafQueueBtn').onclick = async () => {
-      const ids = selectedIds(); if (!ids.length) return;
-      const items = ids.map((id) => { const p = shown.find((x) => String(x.id) === String(id)) || {}; return { id, name: p.name || '#' + id }; });
-      if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
-      if (!extReady) return toast('إضافة Chrome مش متركّبة.', 'err');
-      toast(`بدأ طابور وافد: ${items.length} شخص. بعد ما تخلّص كل واحد دوس «الشخص التالي» في صفحة وافد.`, 'ok');
-      wafidRequest(items[0].id, items.slice(1), items.length, true);
-    };
-    $('#labQueueBtn').onclick = async () => {
-      const ids = selectedIds(); if (!ids.length) return;
-      const items = ids.map((id) => { const p = shown.find((x) => String(x.id) === String(id)) || {}; return { id, name: p.name || '#' + id }; });
-      if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
-      if (!extReady) return toast('إضافة Chrome مش متركّبة.', 'err');
-      toast(`بدأ طابور المعمل: ${items.length} شخص. بعد ما تخلّص كل واحد دوس «الشخص التالي» في صفحة المعمل.`, 'ok');
-      labRequest(items[0].id, items.slice(1), items.length, true);
-    };
-    $('#tashBtn').onclick = () => { const ids = selectedIds().length ? selectedIds() : shown.map((p) => p.id); if (!ids.length) return toast('مفيش أشخاص للتصدير', 'err'); window.location.href = `/api/export/tasaheel.xls?ids=${ids.slice(0, 1500).join(',')}`; toast('بينزّل ملف تساهيل (' + ids.length + ' شخص)', 'ok'); };
-    api('GET', '/reports/summary').then((r) => { const u = (r.upcoming || []).slice(0, 6); const box = $('#upc'); if (box && u.length) box.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8"><b>📅 مواعيد خلال 7 أيام:</b> ${u.map((x) => `<a href="#/people/${x.personId}">${e(x.name || '#' + x.personId)}</a> — ${e(x.stage)} ${e(x.date)}`).join(' · ')}</div>`; }).catch(() => {});
-    $('#selAll').onchange = () => { view.querySelectorAll('.sel').forEach((c) => { c.checked = $('#selAll').checked; }); syncQueue(); };
-    $('#queueBtn').onclick = async () => {
-      const ids = selectedIds(); if (!ids.length) return;
-      const items = ids.map((id) => { const p = shown.find((x) => String(x.id) === String(id)) || {}; return { id, name: p.name || '#' + id, ready: !!p.ready }; });
-      const notReady = items.filter((x) => !x.ready).length;
-      if (notReady && !confirm(`${notReady} من المحدّدين ناقصين بيانات (هيتملي اللي موجود بس). تكمّل؟`)) return;
-      if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
-      if (!extReady) return toast('إضافة Chrome مش متركّبة.', 'err');
-      toast(`بدأ طابور ${items.length} شخص. بعد ما تحفظ كل واحد دوس «الشخص التالي» في المنصة.`, 'ok');
-      fillRequest(items[0].id, items.slice(1).map((x) => ({ id: x.id, name: x.name })), items.length, true);
-    };
-    view.onclick = (ev) => { if (ev.target.classList.contains('sel')) { syncQueue(); return; } if (ev.target.id === 'selAll') return; const b = ev.target.closest('.fill'); if (b) { ev.stopPropagation(); return fillRequest(b.dataset.id); } const tr = ev.target.closest('tr.click'); if (tr) location.hash = '#/people/' + tr.dataset.id; };
-    await load();
-  }
-
   async function pagePerson(id) {
     const isNew = id === 'new';
     const [profs] = await Promise.all([api('GET', '/profiles')]);
@@ -350,6 +290,18 @@
       return `<div class="card"><h2>مراحل الطلب</h2><div class="stages">${meta.stages.map((x) => { const c = st[x.k] || { state: '', date: '', note: '' };
         return `<div class="stg" data-stage="${x.k}"><b>${e(x.label)}</b><select class="stS">${['', ...(x.booking ? ['booked'] : []), 'done'].map((v) => `<option value="${v}"${c.state === v ? ' selected' : ''}>${STATE_AR[v]}</option>`).join('')}</select><input type="date" class="stD" value="${e(c.date || '')}"><input class="stN" placeholder="ملاحظة (مكان / رقم / …)" value="${e(c.note || '')}">
           ${x.k === 'sent' ? `<div class="stX small">رقم الطلب: <b dir="ltr">${e(person.appNumber || '—')}</b> <input id="appNo" placeholder="E123456789" dir="ltr"> <button class="btn small" id="appNoBtn">سجّل رقم الطلب</button>${(c.history || []).length ? `<div class="muted">أرقام سابقة (قبل إعادة الإرسال): ${c.history.map((h) => `<span dir="ltr">${e(h.app)}</span>`).join('، ')}</div>` : ''}</div>` : ''}</div>`; }).join('')}</div></div>`;
+    };
+    const servicesHtml = () => {
+      if (isNew) return '';
+      const sv = person.service || {}; const can2 = (p2) => can(p2);
+      const rows = [
+        ['mofa', 'منصة التأشيرات', can2('people.fill') ? '<button class="btn small pri" id="fill" title="يفتح منصة التأشيرات ويملا الطلب">املى الطلب</button>' : ''],
+        ['wafid', 'الفحص الطبي (وافد)', can2('people.fill') ? '<button class="btn small" id="wafid" title="يفتح وافد ويملا فورم الحجز">احجز الفحص</button>' : ''],
+        ['lab', 'المعمل (معامل الصحة العامة)', can2('people.fill') ? '<button class="btn small" id="lab" title="يفتح موقع المعامل ويملا فورم الحجز">احجز المعمل</button>' : ''],
+        ['suez', 'خطاب ترشيح — السويس', can2('people.fill') ? '<button class="btn small" id="letSuez" title="يحمّل خطاب Word بنفس تنسيق نموذج المكتب">حمّل الخطاب</button>' : ''],
+        ['cairo', 'خطاب ترشيح — القاهرة', can2('people.fill') ? '<button class="btn small" id="letCairo" title="يحمّل استمارة Word بنفس تنسيق نموذج المكتب">حمّل الخطاب</button>' : '']
+      ];
+      return `<div class="card"><h2>الخدمات والإجراءات</h2><div class="muted small" style="margin-bottom:6px">كل خدمة بتاخد بياناتها من نفس الملف: لو فيه ناقص هتشوفه هنا قبل ما تبدأ.</div>${rows.map(([k, label, btn]) => { const m = sv[k] || []; return `<div class="svcard"><span class="sn">${e(label)}</span>${m.length ? `<span class="chip bad">ناقص ${m.length}</span>` : '<span class="chip ok">جاهز ✓</span>'}<span class="miss">${m.length ? e(m.slice(0, 4).join('، ') + (m.length > 4 ? ' … +' + (m.length - 4) : '')) : ''}</span><span class="ac">${btn}</span></div>`; }).join('')}</div>`;
     };
     const sideHtml = () => {
       const src = pending.passport ? { url: objUrl(pending.passport), pdf: pending.passport.type === 'application/pdf' } : (!isNew && person.hasPassport ? { url: `/api/people/${id}/file/passport?t=${stamp}`, pdf: false } : null);
@@ -384,7 +336,9 @@
         ${isNew ? '' : `<label class="f" style="min-width:200px">الحالة
         <select id="stSel">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${person.status === k ? ' selected' : ''}>${e(v[0])}</option>`).join('')}</select></label>`}
         <a href="#/profiles" class="small">إدارة ملفات الضبط</a></div></div>
+      ${servicesHtml()}
       ${stagesHtml()}
+      ${isNew ? '' : '<div class="card"><div class="legend-tags"><b>علامات الخانات:</b> <i class="tag mofa">منصة</i> <i class="tag wafid">وافد</i> <i class="tag lab">معمل</i> <i class="tag letter">خطاب</i> <i class="tag tash">تساهيل</i> <span>كل علامة بتقولك الخانة دي بتتستخدم في أنهي خدمة.</span></div></div>'}
       <div class="card"><h2>صورة الجواز وقراءة MRZ</h2><div class="row" style="align-items:flex-start">
         <div style="min-width:240px"><input type="file" id="pasF" accept="image/jpeg,image/png,application/pdf">
           <div class="small muted" style="margin-top:6px">${isNew ? 'اختار صورة الجواز (بتترفع أول ما تحفظ).' : 'صورة الجواز للتوثيق والقراءة (مش بتتبعت للمنصة).'}</div>
@@ -398,7 +352,7 @@
         <div><input type="file" id="phF" accept="image/jpeg,image/png"><div class="small muted" style="margin-top:6px">${isNew ? 'بتترفع أول ما تحفظ.' : ''} بتتصغّر تلقائي لو أكبر من الحد. المنصة بتفحص مواصفات الصورة (خلفية فاتحة ووش واضح).</div>${!isNew && person.hasPhoto ? '<button class="btn small danger" id="phDel" style="margin-top:6px">حذف الصورة</button>' : ''}</div></div></div>
       <div class="card"><label class="f">ملاحظات<input data-k="notes" value="${e(data.notes || '')}"></label></div>
       ${resolved ? `<div class="card"><h2>الجاهزية</h2>${resolved.ready ? '<span class="pill ok">كل البيانات المطلوبة موجودة</span>' : `<ul class="list issues">${resolved.issues.map((x) => `<li>${e(x)}</li>`).join('')}</ul>`}${resolved.warns.length ? `<ul class="list warns">${resolved.warns.map((x) => `<li>${e(x)}</li>`).join('')}</ul>` : ''}</div>` : ''}
-      <div class="row actions"><button class="btn pri" id="save">حفظ</button>${!isNew ? '<button class="btn pri" id="fill">املى الطلب في المنصة</button><button class="btn" id="wafid" title="بيفتح موقع وافد ويملا فورم حجز الفحص الطبي">احجز الفحص الطبي (وافد)</button><button class="btn" id="lab" title="بيفتح موقع معامل الصحة العامة ويملا فورم حجز المعمل">احجز المعمل</button><button class="btn" id="letSuez" title="بيحمّل خطاب ترشيح Word للسويس بنفس تنسيق نموذج المكتب">خطاب ترشيح — السويس</button><button class="btn" id="letCairo" title="بيحمّل استمارة ترشيح Word للقاهرة بنفس تنسيق نموذج المكتب">خطاب ترشيح — القاهرة</button><button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>
+      <div class="row actions"><button class="btn pri" id="save">حفظ</button>${!isNew && can('people.delete') ? '<button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>
       </div><aside class="side">${sideHtml()}</aside></div>`;
       wire();
       wirePv();
@@ -631,9 +585,16 @@
   }
 
   async function pageProfiles() {
-    const [r, tpl] = await Promise.all([api('GET', '/profiles'), api('GET', '/settings/profile-template').catch(() => ({ auto: false }))]);
-    view.innerHTML = `<h1>ملفات الضبط</h1><p class="muted">كل ملف = جهة عمل/دفعة: نوع التأشيرة والممثلية وبيانات الكفيل وقيم افتراضية (المؤهل، الديانة…). أي شخص بيتربط بملف، وممكن يغلب أي قيمة بقيمته.</p>
-      <div class="row" style="margin-bottom:12px"><button class="btn pri" id="newP">+ ملف جديد</button><label title="لما يكون شغّال: أي ملف جديد بيبدأ بالقيم الثابتة من الملف الافتراضي (نوع الجواز، الديانة، المؤهل، العناوين، الوصول…) من غير رقم التأشيرة والرقم الموحد واسم ورقم الجهة وتعليم الإقرارات"><input type="checkbox" id="tplAuto"${tpl.auto ? ' checked' : ''}> الملف الجديد يبدأ بقيم الملف الافتراضي (تلقائي)</label></div><div id="plist">${r.profiles.map((p) => `<div class="card"><div class="row"><b>${e(p.name)}</b>${p.isDefault ? '<span class="pill ok">الافتراضي</span>' : ''}<button class="btn small edit" data-id="${p.id}" style="margin-inline-start:auto">تعديل</button></div></div>`).join('') || '<p class="muted">لسه مفيش ملفات.</p>'}</div><div id="peditor"></div>`;
+    const [r, tpl, ov] = await Promise.all([api('GET', '/profiles'), api('GET', '/settings/profile-template').catch(() => ({ auto: false })), can('stats.view') ? api('GET', '/stats/overview').catch(() => null) : Promise.resolve(null)]);
+    const vs = new Map(((ov && ov.visas) || []).map((v) => [v.id, v]));
+    const vcard = (p) => { const v = vs.get(p.id); const d = p.data || {};
+      const bar = (k, label) => { const s2 = v ? v.stages[k] : { done: 0, booked: 0, pending: 0 }; const t = Math.max(1, v ? v.total : 1); return `<div class="bar"><span class="lb" style="width:78px">${label}</span><span class="tr"><i class="i-done" style="width:${Math.round(s2.done / t * 100)}%"></i><i class="i-book" style="width:${Math.round(s2.booked / t * 100)}%"></i></span><span class="vl" style="width:60px">${s2.done}/${v ? v.total : 0}</span></div>`; };
+      return `<div class="vcard"><div class="vt"><b>${e(p.name)}</b>${p.isDefault ? '<span class="chip ok">الافتراضي</span>' : ''}<button class="btn small edit" data-id="${p.id}" style="margin-inline-start:auto">تعديل</button></div>
+        <div class="vm">${d.visaNumber ? `<span>تأشيرة <b dir="ltr">${e(d.visaNumber)}</b></span>` : ''}${d.sponsorName ? `<span>${e(d.sponsorName)}</span>` : ''}${d.jobText ? `<span>${e(d.jobText)}</span>` : ''}${d.visaDate ? `<span dir="ltr">${e(d.visaDate)}</span>` : ''}</div>
+        ${v ? `<div class="row"><span class="chip acc">${v.total} شخص</span>${v.expiring ? `<span class="chip warn">${v.expiring} جواز قريب الانتهاء</span>` : ''}</div>${bar('sent', 'المنصة')}${bar('medical', 'وافد')}${bar('lab', 'المعمل')}${bar('letter', 'خطاب')}` : ''}
+        <div class="row"><a class="btn small" href="#/people" data-pf="${p.id}" style="text-decoration:none">عرض الأشخاص</a></div></div>`; };
+    view.innerHTML = `<div class="page-head"><div><h1>دفعات التأشيرات</h1><div class="sub">كل دفعة = ملف ضبط: بيانات التأشيرة وجهة العمل والقيم الافتراضية. أي شخص بيتربط بدفعة، وممكن يغلب أي قيمة بقيمته. الأرقام «تم / الإجمالي».</div></div></div>
+      <div class="row" style="margin-bottom:12px"><button class="btn pri" id="newP">+ ملف جديد</button><label title="لما يكون شغّال: أي ملف جديد بيبدأ بالقيم الثابتة من الملف الافتراضي (نوع الجواز، الديانة، المؤهل، العناوين، الوصول…) من غير رقم التأشيرة والرقم الموحد واسم ورقم الجهة وتعليم الإقرارات"><input type="checkbox" id="tplAuto"${tpl.auto ? ' checked' : ''}> الملف الجديد يبدأ بقيم الملف الافتراضي (تلقائي)</label></div><div id="plist" class="vgrid">${r.profiles.map(vcard).join('') || '<div class="card empty"><div class="big">📦</div>لسه مفيش دفعات. دوس «+ ملف جديد» وابدأ.</div>'}</div><div id="peditor" style="margin-top:16px"></div>`;
     const edit = (p) => {
       let d = (p && p.data) || {}; let fromTpl = '';
       if (!p && $('#tplAuto') && $('#tplAuto').checked) {
@@ -661,19 +622,7 @@
     };
     $('#newP').onclick = () => edit(null);
     $('#tplAuto').onchange = async () => { try { await api('PUT', '/settings/profile-template', { auto: $('#tplAuto').checked }); toast($('#tplAuto').checked ? 'الملفات الجديدة هتبدأ بقيم الملف الافتراضي' : 'الملفات الجديدة هتبدأ فاضية', 'ok'); } catch (er) { $('#tplAuto').checked = !$('#tplAuto').checked; fail(er); } };
-    view.onclick = (ev) => { const b = ev.target.closest('.edit'); if (b) edit(r.profiles.find((x) => String(x.id) === b.dataset.id)); };
-  }
-
-  async function pageUsers() {
-    if (me.role !== 'admin') { view.innerHTML = '<p class="muted">ده للمدير بس.</p>'; return; }
-    const r = await api('GET', '/users');
-    view.innerHTML = `<h1>المستخدمين</h1><div class="card"><h2>مستخدم جديد</h2><div class="row"><input id="nu" placeholder="اسم المستخدم (إنجليزي)" style="padding:8px;border:1px solid var(--line);border-radius:8px"><input id="nn" placeholder="الاسم" style="padding:8px;border:1px solid var(--line);border-radius:8px"><input id="np" type="password" placeholder="كلمة السر (8+)" style="padding:8px;border:1px solid var(--line);border-radius:8px"><label><input type="checkbox" id="na"> مدير</label><button class="btn pri" id="nadd">إضافة</button></div></div>
-      <div class="card" style="padding:0"><table><thead><tr><th>المستخدم</th><th>الاسم</th><th>الدور</th><th>الحالة</th><th></th></tr></thead><tbody>${r.users.map((u) => `<tr><td dir="ltr" style="text-align:right">${e(u.username)}</td><td>${e(u.display_name)}</td><td>${u.role === 'admin' ? 'مدير' : 'موظف'}</td><td>${u.active ? '<span class="pill ok">شغال</span>' : '<span class="pill bad">موقوف</span>'}</td><td><button class="btn small tog" data-id="${u.id}" data-a="${u.active ? 0 : 1}">${u.active ? 'إيقاف' : 'تفعيل'}</button> <button class="btn small pw" data-id="${u.id}">كلمة سر جديدة</button></td></tr>`).join('')}</tbody></table></div>`;
-    $('#nadd').onclick = async () => { try { await api('POST', '/users', { username: $('#nu').value, name: $('#nn').value, password: $('#np').value, role: $('#na').checked ? 'admin' : 'user' }); toast('اتضاف', 'ok'); pageUsers(); } catch (er) { fail(er); } };
-    view.onclick = async (ev) => {
-      const t = ev.target.closest('.tog'), p = ev.target.closest('.pw');
-      try { if (t) { await api('PUT', `/users/${t.dataset.id}`, { active: t.dataset.a === '1' }); pageUsers(); } if (p) { const pw = prompt('كلمة السر الجديدة (8 حروف على الأقل)'); if (pw) { await api('PUT', `/users/${p.dataset.id}`, { password: pw }); toast('اتغيّرت', 'ok'); } } } catch (er) { fail(er); }
-    };
+    view.onclick = (ev) => { const b = ev.target.closest('.edit'); if (b) return edit(r.profiles.find((x) => String(x.id) === b.dataset.id)); const g = ev.target.closest('[data-pf]'); if (g) { ev.preventDefault(); NA.goPeople({ pf: g.dataset.pf }); } };
   }
 
   async function pageExtension() {
@@ -696,28 +645,44 @@
   }
 
   /* ===== التوجيه ===== */
-  const NAV = [['#/people', 'الأشخاص'], ['#/bulk', 'رفع جماعي'], ['#/profiles', 'ملفات الضبط'], ['#/reports', 'التقارير'], ['#/activity', 'السجل', 'admin'], ['#/users', 'المستخدمين', 'admin'], ['#/extension', 'الإضافة']];
+  const can = (perm) => !!(me && me.perms && me.perms.includes(perm));
+  /* القايمة الجانبية: مجموعات، وكل عنصر بصلاحيته */
+  const NAV = [
+    ['', [['#/', '🏠', 'لوحة التحكم']]],
+    ['الشغل اليومي', [['#/people', '👥', 'الأشخاص', 'people.view'], ['#/bulk', '📥', 'رفع جماعي', 'people.edit'], ['#/profiles', '📦', 'دفعات التأشيرات', 'people.view']]],
+    ['المتابعة', [['#/reports', '📊', 'التقارير', 'stats.view'], ['#/activity', '🧾', 'سجل النشاط', 'activity.view']]],
+    ['الإدارة', [['#/users', '🔐', 'المستخدمين والصلاحيات', 'users.manage'], ['#/extension', '🧩', 'إضافة Chrome']]]
+  ];
+  const drawNav = (h) => {
+    const on = (href) => (href === '#/' ? (h === '#/' || h === '') : h.startsWith(href));
+    $('#nav').innerHTML = NAV.map(([g, items]) => { const vis = items.filter((n) => !n[3] || can(n[3])); return vis.length ? (g ? `<div class="grp">${g}</div>` : '') + vis.map((n) => `<a href="${n[0]}" class="${on(n[0]) ? 'on' : ''}"><span class="ic">${n[1]}</span>${n[2]}</a>`).join('') : ''; }).join('');
+  };
   async function render() {
-    const h = location.hash || '#/people';
+    document.querySelectorAll(".modal-bg").forEach((x) => x.remove());
+    const h = location.hash || '#/';
     if (!me) { try { me = (await api('GET', '/me')).user; } catch (er) { /* مش داخل */ } }
     if (!me) return pageLogin();
     if (!meta) meta = await api('GET', '/meta');
-    $('#top').hidden = false; $('#whoName').textContent = me.name;
-    $('#nav').innerHTML = NAV.filter((n) => !n[2] || me.role === n[2]).map((n) => `<a href="${n[0]}" class="${h.startsWith(n[0]) ? 'on' : ''}">${n[1]}</a>`).join('');
-    setExt(); ping();
+    document.body.classList.add('app'); $('#top').hidden = false; $('#whoName').textContent = me.name; $('#whoAv').textContent = String(me.name || '?').trim().charAt(0);
+    $('#brandName').textContent = meta.brand || 'عين النسر'; $('#brandTag').textContent = 'نظام إدارة التأشيرات'; document.title = (meta.brand || 'عين النسر') + ' — نظام إدارة التأشيرات';
+    drawNav(h); setExt(); ping();
     try {
       let m;
       if ((m = h.match(/^#\/people\/(new|\d+)$/))) await pagePerson(m[1]);
+      else if (h.startsWith('#/people')) await NA.pages.people();
       else if (h.startsWith('#/bulk')) await pageBulk();
       else if (h.startsWith('#/reports')) await pageReports();
       else if (h.startsWith('#/activity')) await pageActivity();
       else if (h.startsWith('#/profiles')) await pageProfiles();
-      else if (h.startsWith('#/users')) await pageUsers();
+      else if (h.startsWith('#/users')) await NA.pages.users();
       else if (h.startsWith('#/extension')) await pageExtension();
-      else if (h === '#/login') { location.hash = '#/people'; }
-      else await pagePeople();
+      else if (h === '#/login') { location.hash = '#/'; }
+      else await NA.pages.dashboard();
     } catch (er) { if (er.status !== 401) view.innerHTML = `<div class="card issues">${e(er.message)}</div>`; }
   }
+  /* بنشارك الأدوات مع ملفات الصفحات (pages-*.js) */
+  Object.assign(NA, { api, e, $, view, toast, fail, STATUS, can, ping, fillRequest, wafidRequest, labRequest, stageDots, fmtDate });
+  Object.defineProperties(NA, { me: { get: () => me, configurable: true }, meta: { get: () => meta, configurable: true }, extReady: { get: () => extReady, configurable: true } });
   $('#logoutBtn').onclick = async () => { await api('POST', '/logout').catch(() => {}); me = null; location.hash = '#/login'; render(); };
   window.addEventListener('hashchange', render);
   render();

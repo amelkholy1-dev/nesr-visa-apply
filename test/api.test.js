@@ -151,6 +151,7 @@ const api = async (method, url, body, extra = {}) => {
   const ldoc = await fetch(base + `/api/people/${spid}/letter/suez`, { headers: { Cookie: cookie } }); const ldb = Buffer.from(await ldoc.arrayBuffer());
   assert.strictEqual(ldoc.status, 200); assert.strictEqual(ldb.slice(0, 2).toString(), 'PK'); assert.ok(String(ldoc.headers.get('content-disposition')).includes('nomination-suez-ST12345.docx'), 'اسم ملف الخطاب'); assert.ok(String(ldoc.headers.get('content-type')).includes('wordprocessingml'));
   assert.strictEqual((await api('GET', `/api/people/${spid}/letter/zzz`)).status, 404, 'نوع خطاب مش معروف');
+  assert.strictEqual((await api('GET', `/api/people/${spid}`)).json.person.stages.letter.state, 'done', 'تحميل الخطاب علّم مرحلة «خطاب الترشيح» لوحده'); assert.ok(lcheck.json.hints.length > 0);
   /* شخص مربوط بملف ضبط فيه بيانات التأشيرة: الخطاب لازم يطلع فيه رقم التأشيرة والباركودين */
   const lprof = await api('POST', '/api/profiles', { name: 'ملف خطابات', data: { visaNumber: '1306311796', unifiedNumber: '7001185532', sponsorName: 'شركة تجربة للنقل', visaDate: '1448/02/30', jobText: 'سائق حافلة', degree: 'دبلوم', boxNumber: '464', agencyNumber: '30000001' } });
   const lperson = await api('POST', '/api/people', { profileId: lprof.json.id, data: { nameAr: 'محمد أحمد علي', passportNo: 'LT1234567' } });
@@ -171,6 +172,45 @@ const api = async (method, url, body, extra = {}) => {
   assert.strictEqual(wp.json.wafid.autoDeclare, false, 'الإقرار مش متفعّل من غير الإعداد');
   assert.ok(wp.json.issues.some((x) => x.includes('مدينة الفحص')), 'مدينة الفحص ناقصة بتتعلّم');
   await api('DELETE', `/api/people/${spid}`);
+
+
+  // ===== تعليم جماعي + جاهزية الخدمات + إحصائيات =====
+  const mkp = async (n, pass) => (await api('POST', '/api/people', { profileId: lprof.json.id, data: { nameAr: n, passportNo: pass } })).json.id;
+  const b1 = await mkp('جماعي واحد', 'BK0000001'); const b2 = await mkp('جماعي اتنين', 'BK0000002');
+  let r = await api('POST', '/api/people/bulk/stage', { ids: [b1, b2], key: 'lab', state: 'booked', date: '2026-12-05' });
+  assert.deepStrictEqual([r.status, r.json.updated], [200, 2]);
+  const g3 = (await api('GET', `/api/people/${b1}`)).json.person.stages; assert.deepStrictEqual([g3.lab.state, g3.lab.date], ['booked', '2026-12-05']);
+  assert.strictEqual((await api('POST', '/api/people/bulk/stage', { ids: [b1], key: 'sent', state: 'booked' })).status, 400, 'الحجز للمراحل اللي ليها حجز بس');
+  assert.strictEqual((await api('POST', '/api/people/bulk/stage', { ids: [b1], key: 'zzz', state: 'done' })).status, 400);
+  assert.strictEqual((await api('POST', '/api/people/bulk/status', { ids: [b1, b2], status: 'waiting' })).json.updated, 2);
+  const lst = (await api('GET', '/api/people?status=waiting')).json.people; assert.ok(lst.length >= 2 && lst[0].service && Array.isArray(lst[0].service.wafid) && 'mofa' in lst[0].service && 'suez' in lst[0].service, 'جاهزية كل خدمة في القايمة');
+  const st = await api('GET', '/api/stats/overview'); assert.strictEqual(st.status, 200);
+  assert.ok(st.json.total >= 2 && st.json.stages.lab.booked >= 2 && st.json.byStatus.waiting >= 2 && Array.isArray(st.json.daily) && st.json.daily.length === 30, 'شكل الإحصائيات: ' + JSON.stringify({ t: st.json.total, lab: st.json.stages.lab, w: st.json.byStatus.waiting, d: st.json.daily.length }));
+  const visaRow = st.json.visas.find((v) => v.id === lprof.json.id); assert.ok(visaRow && visaRow.total >= 2 && visaRow.visaNumber === '1306311796' && visaRow.stages.lab.booked >= 2 && visaRow.service.suez >= 0, 'صف التأشيرة في الإحصائيات');
+  assert.strictEqual((await api('POST', '/api/people/bulk/profile', { ids: [b1], profileId: null })).json.updated, 1);
+  r = await api('POST', '/api/people/bulk/delete', { ids: [b1, b2] }); assert.deepStrictEqual([r.json.deleted, r.json.skipped], [2, 0]);
+  assert.strictEqual((await api('GET', '/api/brand')).json.brand.length > 0, true, 'اسم النظام');
+
+  // ===== الصلاحيات =====
+  const adminCookie2 = cookie; const pp = await mkp('شخص الصلاحيات', 'PP0000001');
+  const um = await api('GET', '/api/users'); assert.ok(um.json.roles.length >= 4 && um.json.perms['people.view'] && um.json.users.find((u) => u.username === 'admin').perms.includes('users.manage'));
+  const PW = 'Passw0rd!xx';
+  assert.strictEqual((await api('POST', '/api/users', { username: 'viewer1', password: PW, name: 'مشاهد', role: 'viewer' })).status, 200);
+  assert.strictEqual((await api('POST', '/api/users', { username: 'mark1', password: PW, name: 'معلّم', perms: ['people.view', 'people.mark'] })).status, 200);
+  assert.strictEqual((await api('POST', '/api/users', { username: 'staff1', password: PW, name: 'موظف', role: 'staff' })).status, 200);
+  const mk1 = (await api('GET', '/api/users')).json.users.find((u) => u.username === 'mark1'); assert.deepStrictEqual([mk1.role, mk1.custom], ['custom', true]);
+  const loginAs = async (u) => { cookie = ''; const x = await api('POST', '/api/login', { username: u, password: PW }); assert.strictEqual(x.status, 200); return x.json.user; };
+  let who = await loginAs('viewer1'); assert.strictEqual(who.role, 'viewer');
+  assert.strictEqual((await api('GET', '/api/people')).status, 200); assert.strictEqual((await api('GET', '/api/stats/overview')).status, 200);
+  for (const [m, u, b] of [['POST', '/api/people', { data: { nameAr: 'x', passportNo: 'ZZ1' } }], ['PUT', `/api/people/${pp}/stages/lab`, { state: 'done' }], ['POST', '/api/people/bulk/status', { ids: [pp], status: 'ready' }], ['GET', `/api/people/${pp}/letter/suez`], ['GET', '/api/activity'], ['GET', '/api/users'], ['POST', '/api/profiles', { name: 'x', data: {} }], ['GET', '/api/export/tasaheel.xls?ids=1']]) assert.strictEqual((await api(m, u, b)).status, 403, 'المشاهد ممنوع: ' + m + ' ' + u);
+  await loginAs('mark1');
+  assert.strictEqual((await api('POST', '/api/people/bulk/status', { ids: [pp], status: 'ready' })).status, 200, 'الصلاحية المخصّصة (تعليم) شغّالة');
+  assert.strictEqual((await api('POST', '/api/people', { data: { nameAr: 'x', passportNo: 'ZZ2' } })).status, 403); assert.strictEqual((await api('GET', `/api/people/${pp}/letter/suez`)).status, 403);
+  who = await loginAs('staff1'); assert.strictEqual(who.role, 'staff');
+  assert.strictEqual((await api('GET', `/api/people/${pp}/letter/suez?check=1`)).status, 200); assert.strictEqual((await api('GET', '/api/activity')).status, 403); assert.strictEqual((await api('GET', '/api/users')).status, 403);
+  cookie = adminCookie2;
+  assert.strictEqual((await api('PUT', `/api/users/${um.json.users.find((u) => u.username === 'admin').id}`, { role: 'viewer' })).status, 400, 'المدير مينزّلش صلاحية نفسه');
+  assert.strictEqual((await api('PUT', `/api/users/${mk1.id}`, { role: 'staff' })).status, 200); assert.strictEqual((await api('GET', '/api/users')).json.users.find((u) => u.username === 'mark1').role, 'staff');
 
   // حماية: طلب من مصدر تاني
   const csrf = await fetch(base + '/api/people', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'https://evil.example' }, body: '{}' });

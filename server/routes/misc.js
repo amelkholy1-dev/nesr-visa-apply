@@ -10,16 +10,17 @@ const S = require('../stages');
 
 const router = express.Router();
 const json = (v) => { try { return JSON.parse(v || '{}') || {}; } catch (e) { return {}; } };
-const admin = (req, res, next) => (req.user.role === 'admin' ? next() : res.status(403).json({ error: 'ده للمدير بس' }));
+const P = require('../perms');
+const admin = P.need('profiles.edit');
 
-router.get('/meta', (req, res) => res.json({ ...F.meta(), ocr: !!config.geminiKey, stages: S.STAGES }));
+router.get('/meta', (req, res) => res.json({ ...F.meta(), ocr: !!config.geminiKey, stages: S.STAGES, brand: config.brand, brandTag: config.brandTag, perms: P.PERMS }));
 
 /* ملفات الضبط (الدفعات): قيم مشتركة بتتطبّق على الأشخاص */
 router.get('/profiles', async (req, res) => {
   const rows = await db.query('SELECT id, name, data, is_default FROM profiles ORDER BY is_default DESC, id');
   res.json({ profiles: rows.map(r => ({ id: r.id, name: r.name, isDefault: !!r.is_default, data: json(r.data) })) });
 });
-router.post('/profiles', async (req, res) => {
+router.post('/profiles', P.need('profiles.edit'), async (req, res) => {
   try {
     const name = String((req.body && req.body.name) || '').trim().slice(0, 160);
     if (!name) return res.status(400).json({ error: 'اكتب اسم لملف الضبط' });
@@ -28,7 +29,7 @@ router.post('/profiles', async (req, res) => {
     res.json({ ok: true, id: r.insertId });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-router.put('/profiles/:id(\\d+)', async (req, res) => {
+router.put('/profiles/:id(\\d+)', P.need('profiles.edit'), async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10); const b = req.body || {};
     await db.query('UPDATE profiles SET name = COALESCE(?, name), data = ? WHERE id = ?', [b.name ? String(b.name).trim().slice(0, 160) : null, JSON.stringify(F.sanitizeProfile(b.data)), id]);
@@ -36,7 +37,7 @@ router.put('/profiles/:id(\\d+)', async (req, res) => {
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-router.delete('/profiles/:id(\\d+)', admin, async (req, res) => {
+router.delete('/profiles/:id(\\d+)', P.need('users.manage'), async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const n = (await db.query('SELECT COUNT(*) AS n FROM people WHERE profile_id = ?', [id]))[0].n;

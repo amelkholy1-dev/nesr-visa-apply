@@ -1,8 +1,10 @@
 'use strict';
 /* مراحل الطلب بعد الإرسال: كل مرحلة ليها حالة (لسه / محجوز / تم) وتاريخ وملاحظة */
 const STAGES = [
-  { k: 'sent', label: 'الطلب في المنصة (إنجاز)' },
-  { k: 'medical', label: 'الفحص الطبي', booking: true }
+  { k: 'sent', label: 'الطلب في المنصة (إنجاز)', short: 'المنصة' },
+  { k: 'medical', label: 'الفحص الطبي (وافد)', short: 'وافد', booking: true },
+  { k: 'lab', label: 'المعمل (معامل الصحة العامة)', short: 'المعمل', booking: true },
+  { k: 'letter', label: 'خطاب الترشيح', short: 'خطاب' }
 ];
 const STATES = ['', 'booked', 'done'];
 const iso = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');

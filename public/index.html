@@ -3,18 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>طلبات التأشيرات — نسر الخليج</title>
+  <title>عين النسر — نظام إدارة التأشيرات</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header id="top" class="top" hidden>
-    <div class="brand">طلبات التأشيرات</div>
+  <aside id="top" class="sidebar" hidden>
+    <a class="brand" href="#/">
+      <span class="logo"><svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true"><path d="M3 24C9 13 16 8 24 8s15 5 21 16c-6 11-13 16-21 16S9 35 3 24z" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/><circle cx="24" cy="24" r="9.5" fill="#e0b24a"/><circle cx="24" cy="24" r="4.4" fill="#0f3438"/><path d="M33 14l6-6M40 12l-4-4" stroke="#e0b24a" stroke-width="2.2" stroke-linecap="round"/></svg></span>
+      <span class="bt"><b id="brandName">عين النسر</b><small id="brandTag">نظام إدارة التأشيرات</small></span>
+    </a>
     <nav id="nav"></nav>
-    <div class="who"><span id="extState" class="pill" title="حالة إضافة Chrome"></span><span id="whoName"></span><button id="logoutBtn" class="btn small">خروج</button></div>
-  </header>
+    <div class="who">
+      <span id="extState" class="pill" title="حالة إضافة Chrome"></span>
+      <div class="me"><span class="av" id="whoAv"></span><span id="whoName"></span></div>
+      <button id="logoutBtn" class="btn small">خروج</button>
+    </div>
+  </aside>
   <main id="view"></main>
   <div id="toast" class="toast" hidden></div>
   <script src="mrz-ocr.js"></script>
+  <script src="pages-dashboard.js"></script>
+  <script src="pages-people.js"></script>
+  <script src="pages-admin.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
