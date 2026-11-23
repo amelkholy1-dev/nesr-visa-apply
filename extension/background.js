@@ -2,6 +2,7 @@
 /* الوسيط بين نظام طلبات التأشيرات وصفحة الفورم في المنصة. كل البيانات بتتنقل جوه المتصفح بين تبويبين، مفيش أي سيرفر تالت. */
 const FORM_URL = 'https://visa.mofa.gov.sa/SmartForm/TraditionalApp';
 const WAFID_URL = 'https://wafid.com/ar/book-appointment/';
+const LAB_URL = 'https://clab.mohp.gov.eg/booking';
 const LOGIN_URL = 'https://visa.mofa.gov.sa/Account/Login/enjazcompany';
 const store = chrome.storage.session;
 const APP_TAB_RE = /^https:\/\/[a-z0-9-]+\.nisrelkhaleeg\.com\//;
@@ -42,6 +43,29 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       reply({ ok: true });
     } else if (msg.kind === 'get-wafid-ctx') {
       const key = 'wctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); reply({ ctx: o[key] || null });
+    } else if (msg.kind === 'open-lab') {
+      /* حجز المعمل (معامل الصحة العامة): تبويب جديد بنفس أسلوب وافد */
+      const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now() };
+      const tab = await chrome.tabs.create({ url: LAB_URL, active: true });
+      await store.set({ ['lctx_' + tab.id]: ctx });
+      reply({ ok: true });
+    } else if (msg.kind === 'get-lab-ctx') {
+      const key = 'lctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); reply({ ctx: o[key] || null });
+    } else if (msg.kind === 'lab-set') {
+      /* خانة تاريخ في صفحة المعمل (APEX): بنحطها بدالة الصفحة نفسها عشان أحداثها تشتغل. بنقبل خانة واحدة معروفة وقيمة تاريخ بس */
+      const id = String(msg.id || ''); const value = String(msg.value || '');
+      if (id !== 'P2_DATE_OF_BIRTH' || !/^\d{2}-\d{2}-\d{4}$/.test(value)) { reply({ ok: false, why: 'قيمة غلط' }); return; }
+      try {
+        const [res] = await chrome.scripting.executeScript({ target: { tabId: sender.tab.id }, world: 'MAIN', args: [id, value], func: (elId, v) => {
+          try {
+            const el = document.getElementById(elId); if (!el) return { ok: false, why: 'الخانة مش موجودة' };
+            if (window.apex && window.apex.item) window.apex.item(elId).setValue(v);
+            else { el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); }
+            return { ok: !!el.value, value: el.value };
+          } catch (e) { return { ok: false, why: String(e && e.message || e) }; }
+        } });
+        reply(res && res.result ? res.result : { ok: false, why: 'مفيش رد' });
+      } catch (e) { reply({ ok: false, why: String(e && e.message || e) }); }
     } else if (msg.kind === 'wafid-date') {
       /* تاريخ في تقويم وافد: بنستخدم تقويم الصفحة نفسه (في عالم الصفحة) عشان الشكل يطلع زي ما الموقع عايزه */
       const id = String(msg.id || ''); const iso = String(msg.iso || '');
@@ -70,13 +94,13 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       } catch (e) { reply({ ok: false, why: String(e && e.message || e) }); }
     } else if (msg.kind === 'next') {
       /* الطابور: الشخص التالي بيتطلب من صفحة النظام (هي اللي معاها الصلاحية تجيب بياناته) */
-      const tid = sender.tab && sender.tab.id; const o = await store.get(['ctx_' + tid, 'wctx_' + tid]);
-      const isWafid = !!o['wctx_' + tid] && !o['ctx_' + tid]; const ctx = o['ctx_' + tid] || o['wctx_' + tid] || {};
+      const tid = sender.tab && sender.tab.id; const o = await store.get(['ctx_' + tid, 'wctx_' + tid, 'lctx_' + tid]);
+      const target = o['lctx_' + tid] ? 'lab' : (o['wctx_' + tid] && !o['ctx_' + tid]) ? 'wafid' : 'mofa'; const ctx = o['ctx_' + tid] || o['wctx_' + tid] || o['lctx_' + tid] || {};
       const queue = Array.isArray(ctx.queue) ? ctx.queue : [];
       if (!queue.length) { reply({ ok: false, error: 'الطابور خلص' }); return; }
       const t = await findAppTab(ctx.originTabId);
       if (!t) { reply({ ok: false, error: 'افتح صفحة نظام طلبات التأشيرات في تبويب (visa.nisrelkhaleeg.com) وجرّب تاني' }); return; }
-      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-next', data: { personId: queue[0].id, queue: queue.slice(1), total: ctx.queueTotal || (queue.length + 1), target: isWafid ? 'wafid' : 'mofa' } }); reply({ ok: true }); }
+      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-next', data: { personId: queue[0].id, queue: queue.slice(1), total: ctx.queueTotal || (queue.length + 1), target } }); reply({ ok: true }); }
       catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ. اعمل F5 فيها وجرّب تاني' }); }
     } else if (msg.kind === 'app-ready') {
       const o = await chrome.storage.local.get('pendingResult');
@@ -104,4 +128,4 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
     if (next !== ctx.stage) await store.set({ [key]: { ...ctx, stage: next } });
   } catch (e) { /* مش مهم */ }
 });
-chrome.tabs.onRemoved.addListener((id) => { store.remove(['ctx_' + id, 'wctx_' + id]).catch(() => {}); });
+chrome.tabs.onRemoved.addListener((id) => { store.remove(['ctx_' + id, 'wctx_' + id, 'lctx_' + id]).catch(() => {}); });

@@ -122,7 +122,7 @@ const api = async (method, url, body, extra = {}) => {
   assert.ok(csv2.includes('"\'=HYPERLINK') && !csv2.includes(',"=HYPERLINK'), 'حماية من صيغ Excel');
   await api('DELETE', `/api/people/${evil.json.id}`);
 
-  // مراحل الطلب + إعادة الإرسال + تصدير تسهيل + إعدادات الطباعة
+  // مراحل الطلب + إعادة الإرسال + تصدير تساهيل + إعدادات الطباعة
   const sp = await api('POST', '/api/people', { data: { nameAr: 'مراحل تجربة', passportNo: 'ST12345', birthDate: '1990-02-03', issueDate: '2024-01-02', expiryDate: '2031-01-01', sex: '1', phone: '01000000000', nameEnFirst: 'ALI', nameEnFather: 'OMAR', nameEnFamily: 'SAID', birthPlace: 'Cairo', email: 'a@b.com' } });
   const spid = sp.json.id;
   assert.strictEqual((await api('PUT', `/api/people/${spid}/stages/medical`, { state: 'booked', date: '2026-12-01', note: 'مستشفى كذا' })).status, 200);
@@ -136,8 +136,12 @@ const api = async (method, url, body, extra = {}) => {
   const g2 = (await api('GET', `/api/people/${spid}`)).json.person;
   assert.strictEqual(g2.stages.sent.state, 'done'); assert.strictEqual(g2.appNumber, 'E222222222'); assert.deepStrictEqual(g2.stages.sent.history.map((h) => h.app), ['E111111111'], 'رقم الطلب القديم اتحفظ');
   assert.ok(((await api('GET', '/api/people')).json.people.find((p) => p.id === spid) || {}).stages.medical.state === 'booked', 'المراحل في القايمة');
-  const tx = await fetch(base + `/api/export/tasheel.xlsx?ids=${spid}&fmt=DD-Mon-YYYY`, { headers: { Cookie: cookie } }); const txb = Buffer.from(await tx.arrayBuffer());
-  assert.strictEqual(tx.status, 200); assert.strictEqual(txb.slice(0, 2).toString(), 'PK'); fs.writeFileSync(path.join(os.tmpdir(), 'tasheel-test.xlsx'), txb);
+  const tx = await fetch(base + `/api/export/tasaheel.xlsx?ids=${spid}&fmt=DD-Mon-YYYY`, { headers: { Cookie: cookie } }); const txb = Buffer.from(await tx.arrayBuffer());
+  assert.strictEqual(tx.status, 200); assert.strictEqual(txb.slice(0, 2).toString(), 'PK'); fs.writeFileSync(path.join(os.tmpdir(), 'tasaheel-test.xlsx'), txb);
+  assert.ok(String(tx.headers.get('content-disposition')).includes('ST12345.xlsx'), 'شخص واحد: اسم الملف رقم الجواز زي مثال تساهيل');
+  const labp = await api('GET', `/api/people/${spid}/lab`); assert.strictEqual(labp.status, 200);
+  assert.deepStrictEqual([labp.json.lab.natType, labp.json.lab.destination, labp.json.lab.passport, labp.json.lab.fullName, labp.json.lab.phone, labp.json.lab.netNumber], ['1', '2182', 'ST12345', 'ALI OMAR SAID', '+201000000000', 'E222222222'], 'بيانات حجز المعمل');
+  assert.ok(labp.json.issues.some((x) => x.includes('الرقم القومي')), 'الرقم القومي ناقص بيتعلّم');
   const ps = await api('GET', '/api/settings/print'); assert.strictEqual(ps.status, 200); assert.ok(ps.json.dateFormat);
   assert.strictEqual((await api('PUT', '/api/settings/print', { company: 'شركة تجربة', dateFormat: 'YYYY-MM-DD' })).status, 200);
   assert.strictEqual((await api('GET', '/api/settings/print')).json.company, 'شركة تجربة');

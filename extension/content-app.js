@@ -17,6 +17,14 @@
       } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
       return;
     }
+    if (m.type === 'VA_LAB' && m.data && m.data.lab) {
+      try {
+        chrome.runtime.sendMessage({ kind: 'open-lab', payload: { personId: String(m.data.personId || ''), name: String(m.data.name || '').slice(0, 120), lab: m.data.lab, issues: m.data.issues || [], warns: m.data.warns || [], queue: Array.isArray(m.data.queue) ? m.data.queue.slice(0, 200).map((x) => ({ id: String(x.id), name: String(x.name || '').slice(0, 80) })) : [], queueTotal: Number(m.data.queueTotal) || 0 } }, (r) => {
+          if (chrome.runtime.lastError || !r || !r.ok) post('VA_ERROR', { message: 'الإضافة اتحدّثت أو اتقفلت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); else post('VA_ACK', {});
+        });
+      } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
+      return;
+    }
     if (m.type === 'VA_FILL' && m.data && m.data.mofa) {
       try {
         chrome.runtime.sendMessage({ kind: 'open-fill', payload: { personId: String(m.data.personId || ''), name: String(m.data.name || '').slice(0, 120), mofa: m.data.mofa, issues: m.data.issues || [], warns: m.data.warns || [], photo: typeof m.data.photo === 'string' && m.data.photo.startsWith('data:image/') ? m.data.photo : '', queue: Array.isArray(m.data.queue) ? m.data.queue.slice(0, 200).map((x) => ({ id: String(x.id), name: String(x.name || '').slice(0, 80) })) : [], queueTotal: Number(m.data.queueTotal) || 0 } }, (r) => {

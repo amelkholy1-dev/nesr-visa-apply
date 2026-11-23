@@ -1,5 +1,5 @@
 'use strict';
-/* تصدير لتسهيل (Excel) + إعدادات الطباعة */
+/* تصدير لتساهيل (Excel) + إعدادات الطباعة */
 const express = require('express');
 const db = require('../db');
 const F = require('../fields');
@@ -29,19 +29,14 @@ router.put('/settings/print', admin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-function fmtDate(iso, fmt) {
-  const m = /^(\d{4})[-/](\d{2})[-/](\d{2})$/.exec(String(iso || '')); if (!m) return '';
-  const [, y, mo, d] = m;
-  if (fmt === 'DD-Mon-YYYY') return `${d}-${MON[+mo - 1]}-${y}`;
-  if (fmt === 'YYYY-MM-DD') return `${y}-${mo}-${d}`;
-  if (fmt === 'MM/DD/YYYY') return `${mo}/${d}/${y}`;
-  return `${d}/${mo}/${y}`;
-}
 const COUNTRY_EN = { 'مصر': 'Egypt', EGY: 'Egypt' };
+const COUNTRIES = require('../tasaheel-countries.json'); /* قايمة الجنسيات اللي في ملف تساهيل الأصلي (ورقة hiddenSheet) */
+const toIso = (v) => String(v || '').replace(/\//g, '-');
+/* أعمدة ملف تساهيل الأصلي (Bio_Applicant_Details) بنفس الترتيب والأسماء */
+const TASAHEEL_HEAD = ['E.No', 'First Name*', 'Second Name', 'Last Name*', 'Passport Number*', 'Date of Birth* ', 'Nationality*', 'Date of Issue*', 'Gender*', 'Place of Issue*', 'Expiry Date*', 'Applicant Mobile No.*', 'Email ID*'];
 
-/* تصدير لتسهيل: ?ids=1,2,3 أو ?status=… ، وبيرجّع ملف xlsx بورقة «Bio Applicant Details» */
-router.get('/export/tasheel.xlsx', async (req, res) => {
+/* تصدير لتساهيل: ?ids=1,2,3 أو ?status=… ، وبيرجّع ملف Excel بنفس شكل ملف تساهيل (ورقة Bio_Applicant_Details + ورقة hiddenSheet المخفية) */
+router.get('/export/tasaheel.xlsx', async (req, res) => {
   try {
     const ids = String(req.query.ids || '').split(',').map((x) => parseInt(x, 10)).filter(Boolean).slice(0, 2000);
     const where = [], vals = [];
@@ -49,18 +44,21 @@ router.get('/export/tasheel.xlsx', async (req, res) => {
     else if (req.query.status) { where.push('status = ?'); vals.push(String(req.query.status)); }
     const rows = await db.query(`SELECT * FROM people ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY id`, vals);
     const profs = new Map((await db.query('SELECT id, data FROM profiles')).map((p) => [p.id, json(p.data)]));
-    const fmt = ['DD/MM/YYYY', 'DD-Mon-YYYY', 'YYYY-MM-DD', 'MM/DD/YYYY'].includes(req.query.fmt) ? req.query.fmt : (await printSettings()).dateFormat;
-    const head = ['First Name', 'Second Name', 'Last Name', 'Passport Number', 'Date of Birth', 'Nationality', 'Date of Issue', 'Date of Expiry', 'Gender', 'Place of Issue', 'Applicant Mobile No', 'Email ID'];
-    const toIso = (v) => String(v || '').replace(/\//g, '-');
-    const data = rows.map((r) => {
-      const d = json(r.data); const m = F.resolve(d, profs.get(r.profile_id), {}).mofa;
-      return [m.EFIRSTNAME || '', [m.EFATHER, m.EGRAND].filter(Boolean).join(' '), m.EFAMILY || '', m.PASSPORTnumber || '', fmtDate(toIso(m.BIRTH_DATE), fmt), COUNTRY_EN[m.NATIONALITY] || m.NATIONALITY || '',
-        fmtDate(toIso(m.PASSPORT_ISSUE_DATE), fmt), fmtDate(toIso(m.PASSPORT_EXPIRY_DATe), fmt), m.Sex === '1' ? 'Male' : m.Sex === '2' ? 'Female' : '', COUNTRY_EN[m.PASSPORT_ISSUE_PLACE] || m.PASSPORT_ISSUE_PLACE || '', d.phone || '', m.Personal_Email || ''];
+    const passports = [];
+    const data = rows.map((r, i) => {
+      const d = json(r.data); const rs = F.resolve(d, profs.get(r.profile_id), {}); const m = rs.mofa; passports.push(m.PASSPORTnumber || '');
+      return [i + 1, m.EFIRSTNAME || '', [m.EFATHER, m.EGRAND].filter(Boolean).join(' '), m.EFAMILY || '', m.PASSPORTnumber || '', { date: toIso(m.BIRTH_DATE) }, COUNTRY_EN[m.NATIONALITY] || m.NATIONALITY || '',
+        { date: toIso(m.PASSPORT_ISSUE_DATE) }, m.Sex === '1' ? 'Male' : m.Sex === '2' ? 'Female' : '', rs.values.issuePlace || COUNTRY_EN[m.PASSPORT_ISSUE_PLACE] || m.PASSPORT_ISSUE_PLACE || 'Egypt', { date: toIso(m.PASSPORT_EXPIRY_DATe) },
+        String(d.phone || '').replace(/\D/g, ''), m.Personal_Email || ''];
     });
-    const buf = await xlsx.build(head, data, 'Bio Applicant Details');
-    audit.log(req, 'export', null, '', 'تسهيل: ' + data.length + ' شخص');
+    const buf = await xlsx.build([
+      { name: 'Bio_Applicant_Details', headers: TASAHEEL_HEAD, rows: data, widths: [5.13, 15.28, 14.56, 12.28, 16.28, 11.7, 10.41, 12.56, 15.7, 13.56, 11.42, 19.14, 24], lists: [{ col: 6, source: 'hiddenSheet!$A$1:$A$' + COUNTRIES.length }, { col: 8, source: 'Male,Female' }] },
+      { name: 'hiddenSheet', hidden: true, rows: COUNTRIES.map((c) => [c]), widths: [24] }
+    ]);
+    audit.log(req, 'export', null, '', 'تساهيل: ' + data.length + ' شخص');
+    const fname = data.length === 1 && /^[A-Za-z0-9]+$/.test(passports[0]) ? passports[0] : 'tasaheel-' + new Date().toISOString().slice(0, 10); /* شخص واحد: باسم رقم جوازه زي مثال تساهيل */
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodeURIComponent('tasheel-' + new Date().toISOString().slice(0, 10) + '.xlsx'));
+    res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(fname + '.xlsx'));
     res.send(buf);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

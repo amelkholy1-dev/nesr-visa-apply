@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "نسر الخليج — تعبئة طلب التأشيرة",
-  "description": "بيملا فورم «طلب تأشيرة» في منصة التأشيرات وفورم حجز الفحص الطبي في وافد من نظام طلبات التأشيرات. الكابتشا والإقرارات (إلا اللي فعّلته بنفسك) والحفظ بتتم بإيدك.",
-  "version": "1.5.0",
+  "description": "بيملا فورم «طلب تأشيرة» في منصة التأشيرات وفورم حجز الفحص الطبي في وافد وفورم حجز المعمل (معامل الصحة العامة) من نظام طلبات التأشيرات. الكابتشا والإقرارات (إلا اللي فعّلته بنفسك) والحفظ بتتم بإيدك.",
+  "version": "1.6.0",
   "permissions": [
     "storage",
     "scripting"
@@ -10,7 +10,8 @@
   "host_permissions": [
     "https://visa.mofa.gov.sa/*",
     "https://*.nisrelkhaleeg.com/*",
-    "https://wafid.com/*"
+    "https://wafid.com/*",
+    "https://clab.mohp.gov.eg/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -31,6 +32,15 @@
       ],
       "js": [
         "content-wafid.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://clab.mohp.gov.eg/*"
+      ],
+      "js": [
+        "content-lab.js"
       ],
       "run_at": "document_idle"
     },

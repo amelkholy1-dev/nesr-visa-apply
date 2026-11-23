@@ -43,6 +43,21 @@ const WMOCK = `<script>
 })();
 </script>`;
 
+const labFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'lab-booking.html'), 'utf8');
+/* بيحاكي سلوك APEX في صفحة المعمل: الأقسام مخفية لحد اختيار نوع الجنسية، والرقم القومي بيحسب تاريخ الميلاد والجنس */
+const LMOCK = `<script>
+(function(){
+  document.addEventListener('DOMContentLoaded', function(){
+    var $=function(i){return document.getElementById(i)};
+    var regions=document.querySelectorAll('.t-Region'); var hold=[];
+    regions.forEach(function(r){ if(r.querySelector('#P2_NATIONAL_ID')){ hold.push(r); r.style.display='none'; } });
+    document.querySelectorAll('input[name=P2_NATIONALITY_TYPE]').forEach(function(r){ r.addEventListener('change', function(){ setTimeout(function(){ hold.forEach(function(x){ x.style.display=''; }); },300); }); });
+    $('P2_NATIONAL_ID').addEventListener('change', function(){ var v=this.value; setTimeout(function(){ if(!/^[23]\\d{13}$/.test(v)) return; var y=(v[0]==='2'?1900:2000)+Number(v.slice(1,3)); $('P2_DATE_OF_BIRTH').value=v.slice(5,7)+'-'+v.slice(3,5)+'-'+y; $('P2_SEX').value=(Number(v[12])%2)?'1':'2'; },400); });
+    window.apex={item:function(id){ return { setValue:function(v){ document.getElementById(id).value=v; } }; }};
+  });
+})();
+</script>`;
+
 const appHtml = `<!doctype html><meta charset=utf-8><body><script>
 window.got=[];window.nexts=[];window.ready=false;window.acks=0;
 window.addEventListener('message',function(e){ if(e.source!==window)return; var m=e.data; if(!m||m.source!=='nesr-visaapply-ext')return;
@@ -181,6 +196,22 @@ const MOFA = {
   await app.waitForFunction((n) => window.nexts.length > n, nBefore, { timeout: 10000 });
   const nx2 = await app.evaluate(() => window.nexts[window.nexts.length - 1]);
   assert.deepStrictEqual([nx2.personId, nx2.target, nx2.queue.length, nx2.total], ['23', 'wafid', 0, 2]);
+  /* سيناريو 9: حجز المعمل (clab.mohp.gov.eg) — الرقم القومي بيحسب الميلاد والجنس، ويوم/ساعة الحجز والتحاليل والدفع و«تأكيد» مبتتلمسش */
+  await ctx.route('https://clab.mohp.gov.eg/**', (r) => r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: labFixture.replace('</body>', LMOCK + '</body>') }));
+  const LAB = { natType: '1', destination: '2182', nationalId: '28901011234571', passport: 'A45449365', fullName: 'ATEF MOHAMED ELSHAHAWY', occupation: '65', phone: '+201000000000', email: 'a@b.com', netNumber: 'E123456789', dob: '1989-01-01', sex: '1' };
+  const [lpage] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_LAB', data: d }, location.origin), { personId: '31', name: 'تجربة معمل', lab: LAB, issues: [], warns: [], queue: [{ id: '32', name: 'تاني معمل' }], queueTotal: 2 })]);
+  await lpage.waitForSelector('#nesr-lab-bar', { timeout: 30000 });
+  await lpage.waitForFunction(() => /اتملى \d+ خانة/.test((document.getElementById('nesr-lab-bar') || {}).innerText || ''), null, { timeout: 90000 });
+  const l9 = await lpage.evaluate(() => { const v = (id) => document.getElementById(id).value; return { type: document.querySelector('input[name=P2_NATIONALITY_TYPE]:checked') && document.querySelector('input[name=P2_NATIONALITY_TYPE]:checked').value, fac: v('P2_FACILITY_ID'), dest: v('P2_DESTINATION_COUNTRY'), nid: v('P2_NATIONAL_ID'), pass: v('P2_PASSPORT_NUMBER'), name: v('P2_FULL_NAME'), job: v('P2_OCCUPATION'), tel: v('P2_TEL_NO'), email: v('P2_EMAIL'), dob: v('P2_DATE_OF_BIRTH'), sex: v('P2_SEX'), bdate: v('P2_BOOKING_DATE'), bhour: v('P2_BOOKING_HOUR'), pay: !!document.querySelector('input[name=P2_PAYMENT_METHOD_TYPE]:checked'), bar: document.getElementById('nesr-lab-bar').innerText.replace(/\s+/g, ' ') }; });
+  console.log(JSON.stringify(l9));
+  assert.deepStrictEqual([l9.type, l9.fac, l9.dest, l9.nid, l9.pass, l9.name, l9.job, l9.tel, l9.email, l9.dob, l9.sex], ['1', '1', '2182', '28901011234571', 'A45449365', 'ATEF MOHAMED ELSHAHAWY', '65', '+201000000000', 'a@b.com', '01-01-1989', '1'], 'حجز المعمل اتملى');
+  assert.strictEqual(l9.bdate, '', 'يوم الحجز مش بيتلمس'); assert.strictEqual(l9.bhour, '', 'ساعة الحجز مش بتتلمس'); assert.strictEqual(l9.pay, false, 'طريقة الدفع مش بتتلمس');
+  assert.ok(l9.bar.includes('تأكيد') && l9.bar.includes('الشخص 1 من 2') && l9.bar.includes('تاني معمل'), 'شريط المعمل + الطابور: ' + l9.bar);
+  const nBefore2 = await app.evaluate(() => window.nexts.length);
+  await lpage.click('#nesr-lab-next');
+  await app.waitForFunction((n) => window.nexts.length > n, nBefore2, { timeout: 10000 });
+  const nx3 = await app.evaluate(() => window.nexts[window.nexts.length - 1]);
+  assert.deepStrictEqual([nx3.personId, nx3.target, nx3.queue.length, nx3.total], ['32', 'lab', 0, 2]);
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

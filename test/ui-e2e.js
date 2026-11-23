@@ -86,7 +86,7 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.selectOption('#sf', 'b:medical'); await page.waitForTimeout(400);
     assert.ok((await page.locator('#rows tr.click').count()) >= 1, 'فلتر المراحل');
     await page.selectOption('#sf', '');
-    await page.goto(base + '#/settings'); await page.waitForSelector('#sSave'); await page.selectOption('#sDf', 'YYYY-MM-DD'); await page.click('#sSave'); await page.waitForTimeout(500);
+    await page.goto(base + '#/settings'); await page.waitForSelector('#view .card, main .card'); assert.ok((await page.textContent('body')).includes('تساهيل'), 'صفحة الإعدادات بتشرح شكل ملف تساهيل');
     await page.goto(base + '#/reports'); await page.waitForSelector('#rbody .card'); assert.ok((await page.textContent('#rbody')).includes('الوضع الحالي'));
     assert.ok((await page.getAttribute('#rx', 'href')).includes('/api/reports/export.csv'));
     await page.goto(base + '#/activity'); await page.waitForSelector('#arows tr'); assert.ok((await page.textContent('#arows')).includes('دخول'));
