@@ -22,8 +22,16 @@ const vars = { name: 'محمد أحمد علي حسن', passport: 'A12345678', j
   /* Code 128: رقم زوجي ← Code C، وغيره ← Code B */
   assert.deepStrictEqual(L.code128Values('1306311796'), [105, 13, 6, 31, 17, 96]);
   assert.strictEqual(L.code128Values('E823565987')[0], 104);
-  const bc = L.barcodePng('1306311796', 280, 100, true); assert.strictEqual(bc.slice(1, 4).toString(), 'PNG');
+  const bc = L.barcodePng('1306311796', 1714500 / 609600, true, 3); assert.strictEqual(bc.slice(1, 4).toString(), 'PNG');
 
+  /* كل خط في الباركود عرضه مضاعفات صحيحة من البكسل (وإلا الماسح مبيقراش): بنفك الـ PNG ونقيس */
+  for (const [val, ratio, text, mod] of [['E823565987', 1381125 / 209550, false, 4], ['1306311796', 1714500 / 609600, true, 3]]) {
+    const b = L.barcodePng(val, ratio, text, mod); let off = 8; const idat = []; let w = 0; let h = 0;
+    while (off < b.length) { const len = b.readUInt32BE(off); const type = b.slice(off + 4, off + 8).toString(); if (type === 'IHDR') { w = b.readUInt32BE(off + 8); h = b.readUInt32BE(off + 12); } if (type === 'IDAT') idat.push(b.slice(off + 8, off + 8 + len)); off += 12 + len; }
+    const raw = zlib.inflateSync(Buffer.concat(idat)); const row = raw.slice(1, 1 + w); let run = 1; const runs = [];
+    for (let x = 1; x <= w; x++) { if (x < w && row[x] === row[x - 1]) run++; else { runs.push(run); run = 1; } }
+    assert.ok(runs.every((r) => r % mod === 0), 'عرض كل خط مضاعف ' + mod + ' بكسل: ' + runs.slice(0, 8)); assert.ok(Math.abs(w / h - ratio) < 0.08, 'نسبة الصورة زي مكانها في الخطاب');
+  }
   for (const kind of ['suez', 'cairo']) {
     const z = unzip(await L.build(kind, vars, PHOTO)); const doc = z.get('word/document.xml').toString('utf8');
     assert.ok(z.has('[Content_Types].xml') && z.has('word/document.xml'), kind + ': ملفات docx الأساسية');

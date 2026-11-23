@@ -9,7 +9,7 @@ const archiver = require('archiver');
 
 const DIR = path.join(__dirname, 'letters');
 const KINDS = {
-  suez: { label: 'السويس', photoRid: 'rId2', barcodes: [{ rid: 'rId3', key: 'appNo', text: false, w: 290, h: 44 }, { rid: 'rId4', key: 'visaNo', text: true, w: 280, h: 100 }], required: [['name', 'الاسم'], ['job', 'المهنة'], ['visaNo', 'رقم التأشيرة'], ['visaDate', 'تاريخ التأشيرة'], ['sponsor', 'اسم جهة العمل'], ['appNo', 'رقم إنجاز (رقم الطلب)']] },
+  suez: { label: 'السويس', photoRid: 'rId2', barcodes: [{ rid: 'rId3', key: 'appNo', text: false, ratio: 1381125 / 209550, mod: 4 }, { rid: 'rId4', key: 'visaNo', text: true, ratio: 1714500 / 609600, mod: 3 }], required: [['name', 'الاسم'], ['job', 'المهنة'], ['visaNo', 'رقم التأشيرة'], ['visaDate', 'تاريخ التأشيرة'], ['sponsor', 'اسم جهة العمل'], ['appNo', 'رقم إنجاز (رقم الطلب)']] },
   cairo: { label: 'القاهرة', photoRid: 'rId8', barcodes: [], required: [['name', 'الاسم'], ['passport', 'رقم الجواز'], ['job', 'المهنة'], ['visaNo', 'رقم التأشيرة'], ['unifiedNo', 'رقم السجل (الرقم الموحد)'], ['sponsor', 'اسم جهة العمل'], ['appNo', 'رقم إنجاز (رقم الطلب)']], optional: [['box', 'رقم الصندوق'], ['agency', 'رقم الوكالة']] }
 };
 
@@ -37,14 +37,15 @@ function png(w, h, pix) {
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
 const DIGITS = { 0: ['01110', '10001', '10011', '10101', '11001', '10001', '01110'], 1: ['00100', '01100', '00100', '00100', '00100', '00100', '01110'], 2: ['01110', '10001', '00001', '00010', '00100', '01000', '11111'], 3: ['11110', '00001', '00001', '01110', '00001', '00001', '11110'], 4: ['00010', '00110', '01010', '10010', '11111', '00010', '00010'], 5: ['11111', '10000', '11110', '00001', '00001', '10001', '01110'], 6: ['00110', '01000', '10000', '11110', '10001', '10001', '01110'], 7: ['11111', '00001', '00010', '00100', '01000', '01000', '01000'], 8: ['01110', '10001', '10001', '01110', '10001', '10001', '01110'], 9: ['01110', '10001', '10001', '01111', '00001', '00010', '01100'] };
-/* صورة باركود: العرض/الارتفاع بالبكسل، ومعاه نص الرقم تحته (للأرقام بس) لو text */
-function barcodePng(value, w, h, text) {
-  const mods = code128Modules(value); const quiet = 10; const total = mods.length + quiet * 2;
+/* صورة باركود: كل خط عرضه عدد صحيح من البكسل (لازم، وإلا الماسح مبيقراش)، والارتفاع من نسبة المكان في الخطاب. text = رقم تحت الباركود (للأرقام بس) */
+function barcodePng(value, ratio, text, mod) {
+  const mods = code128Modules(value); const quiet = 2; const total = mods.length + quiet * 2; const m = mod || 3;
+  const w = total * m; const h = Math.max(24, Math.round(w / ratio));
   const pix = Buffer.alloc(w * h, 255);
-  const textH = text ? 26 : 0; const barH = h - textH - (text ? 4 : 0);
-  for (let x = 0; x < w; x++) { const m = Math.floor((x * total) / w) - quiet; if (m >= 0 && m < mods.length && mods[m]) for (let y = 0; y < barH; y++) pix[y * w + x] = 0; }
+  const sc = Math.max(2, Math.round(h / 36)); const textH = text ? 7 * sc + 4 : 0; const barH = h - textH - (text ? 2 : 0);
+  for (let i = 0; i < mods.length; i++) if (mods[i]) for (let x = (quiet + i) * m; x < (quiet + i + 1) * m; x++) for (let y = 0; y < barH; y++) pix[y * w + x] = 0;
   if (text) {
-    const s = String(value).replace(/\D/g, ''); const sc = 3; const gw = 6 * sc; const tw = s.length * gw; let x0 = Math.max(0, Math.floor((w - tw) / 2)); const y0 = barH + 4;
+    const s = String(value).replace(/\D/g, ''); const gw = 6 * sc; const tw = s.length * gw; let x0 = Math.max(0, Math.floor((w - tw) / 2)); const y0 = barH + 2;
     for (const ch of s) { const g = DIGITS[ch]; if (g) for (let r = 0; r < 7; r++) for (let c = 0; c < 5; c++) if (g[r][c] === '1') for (let dy = 0; dy < sc; dy++) for (let dx = 0; dx < sc; dx++) { const px = x0 + c * sc + dx; const py = y0 + r * sc + dy; if (px < w && py < h) pix[py * w + px] = 0; } x0 += gw; }
   }
   return png(w, h, pix);
@@ -106,7 +107,7 @@ function build(kind, vars, photo) {
   /* الصورة الشخصية: لو مفيش، بنشيلها (مش بنسيب صورة شخص تاني) */
   const info = photo && imageInfo(photo);
   xml = info ? setImage(files, xml, k.photoRid, photo, info.ext, true) : removeDrawing(files, xml, k.photoRid);
-  for (const b of k.barcodes) { const val = String(vars[b.key] || '').trim(); xml = val ? setImage(files, xml, b.rid, barcodePng(val, b.w, b.h, b.text), 'png', false) : removeDrawing(files, xml, b.rid); }
+  for (const b of k.barcodes) { const val = String(vars[b.key] || '').trim(); xml = val ? setImage(files, xml, b.rid, barcodePng(val, b.ratio, b.text, b.mod), 'png', false) : removeDrawing(files, xml, b.rid); }
   /* القاهرة: الجداول عايمة، فلو اسم جهة العمل طويل بنصغّر الخط عشان يفضل في سطر واحد (زي النموذج الأصلي) */
   if (kind === 'cairo') { const n = String(vars.sponsor || '').length; const sz = n > 44 ? 16 : n > 36 ? 18 : n > 28 ? 20 : 0; if (sz) xml = xml.replace('<w:rtl/></w:rPr><w:t>{{sponsor}}</w:t>', '<w:sz w:val="' + sz + '"/><w:szCs w:val="' + sz + '"/><w:rtl/></w:rPr><w:t>{{sponsor}}</w:t>'); }
   for (const [key, val] of Object.entries(vars)) xml = xml.split('{{' + key + '}}').join(esc(String(val == null ? '' : val).trim()));
