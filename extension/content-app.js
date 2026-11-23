@@ -27,7 +27,7 @@
     }
     if (m.type === 'VA_VISAINFO' && m.data) {
       try {
-        chrome.runtime.sendMessage({ kind: 'open-visainfo', payload: { name: String(m.data.name || '').slice(0, 120), visaNumber: String(m.data.visaNumber || '').replace(/\D/g, '').slice(0, 20), unifiedNumber: String(m.data.unifiedNumber || '').replace(/\D/g, '').slice(0, 10), embassy: String(m.data.embassy || '').replace(/\D/g, '').slice(0, 6) } }, (r) => {
+        chrome.runtime.sendMessage({ kind: 'open-visainfo', payload: { name: String(m.data.name || '').slice(0, 120), visaNumber: String(m.data.visaNumber || '').replace(/\D/g, '').slice(0, 20), unifiedNumber: String(m.data.unifiedNumber || '').replace(/\D/g, '').slice(0, 10), docNumber: String(m.data.docNumber || '').replace(/\D/g, '').slice(0, 20), embassy: String(m.data.embassy || '').replace(/\D/g, '').slice(0, 6) } }, (r) => {
           if (chrome.runtime.lastError || !r || !r.ok) post('VA_ERROR', { message: 'الإضافة اتحدّثت أو اتقفلت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); else post('VA_ACK', {});
         });
       } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
@@ -46,7 +46,7 @@
       } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
     }
   });
-  chrome.runtime.onMessage.addListener((msg) => { if (msg && msg.kind === 'va-result') post('VA_RESULT', msg.data); if (msg && msg.kind === 'va-next') post('VA_NEXT', msg.data); if (msg && msg.kind === 'va-visainfo') post('VA_VISAINFO_RESULT', msg.data); if (msg && msg.kind === 'va-visainfo-captcha') post('VA_VISAINFO_CAPTCHA', msg.data); });
+  chrome.runtime.onMessage.addListener((msg) => { if (msg && msg.kind === 'va-result') post('VA_RESULT', msg.data); if (msg && msg.kind === 'va-next') post('VA_NEXT', msg.data); if (msg && msg.kind === 'va-visainfo') post('VA_VISAINFO_RESULT', msg.data); if (msg && msg.kind === 'va-visainfo-captcha') post('VA_VISAINFO_CAPTCHA', msg.data); if (msg && msg.kind === 'va-visainfo-doc') post('VA_VISAINFO_DOC', msg.data); });
   const ready = () => { post('VA_READY'); chrome.runtime.sendMessage({ kind: 'app-ready' }, (r) => { if (r && r.pending) setTimeout(() => post('VA_RESULT', r.pending), 800); }); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready); else ready();
   setTimeout(() => post('VA_READY'), 1500); setTimeout(() => post('VA_READY'), 4000);

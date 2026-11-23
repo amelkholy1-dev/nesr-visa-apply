@@ -4,6 +4,7 @@ const FORM_URL = 'https://visa.mofa.gov.sa/SmartForm/TraditionalApp';
 const WAFID_URL = 'https://wafid.com/ar/book-appointment/';
 const LAB_URL = 'https://clab.mohp.gov.eg/booking';
 const VISAINFO_URL = 'https://visa.mofa.gov.sa/enjaz/getvisainformation/person';
+const VISADOC_URL = 'https://visa.mofa.gov.sa/Home/Index'; /* استعلام «مستند التأشيرة» (الخطوة 2) */
 const LOGIN_URL = 'https://visa.mofa.gov.sa/Account/Login/enjazcompany';
 const store = chrome.storage.session;
 const APP_TAB_RE = /^https:\/\/[a-z0-9-]+\.nisrelkhaleeg\.com\//;
@@ -50,7 +51,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       /* التبويب بيتفتح في الخلفية: إنت فاضل في النظام، والإضافة بتبعتلك صورة الكابتشا هناك وإنت اللي بتكتبها */
       const o = await store.get('visainfoTab'); if (o.visainfoTab) { try { await chrome.tabs.remove(o.visainfoTab); } catch (e) { /* اتقفل */ } }
       const tab = await chrome.tabs.create({ url: VISAINFO_URL, active: false });
-      await store.set({ ['vctx_' + tab.id]: { ...ctx, inline: true, stage: '' }, visainfoTab: tab.id });
+      await store.set({ ['vctx_' + tab.id]: { ...ctx, inline: true, stage: '', phase: 'enjaz', doc: true }, visainfoTab: tab.id });
       reply({ ok: true });
     } else if (msg.kind === 'visainfo-ctl') {
       /* أوامر من صفحة النظام لتبويب المنصة: submit (الكابتشا اللي كتبتها) · refresh (صورة تانية) · open (افتح التبويب) · cancel */
@@ -69,6 +70,12 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       const t = await findAppTab(ctx.originTabId);
       if (!t) { reply({ ok: false }); return; }
       try { await chrome.tabs.sendMessage(t.id, { kind: 'va-visainfo-captcha', data: msg.data }); reply({ ok: true }); } catch (e) { reply({ ok: false }); }
+    } else if (msg.kind === 'visainfo-doc') {
+      const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
+      const t = await findAppTab(ctx.originTabId);
+      if (!t) { reply({ ok: false, error: 'افتح صفحة نظام طلبات التأشيرات (visa.nisrelkhaleeg.com) في تبويب وجرّب تاني' }); return; }
+      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-visainfo-doc', data: msg.data }); reply({ ok: true }); if (ctx.inline && sender.tab) { await store.remove('visainfoTab'); try { await chrome.tabs.remove(sender.tab.id); } catch (e) { /* اتقفل */ } } }
+      catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ. اعمل F5 فيها وجرّب تاني' }); }
     } else if (msg.kind === 'visainfo-stage') {
       const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); if (o[key]) await store.set({ [key]: { ...o[key], stage: String(msg.stage || '') } }); reply({ ok: true });
     } else if (msg.kind === 'get-visainfo-ctx') {
@@ -77,7 +84,13 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
       const t = await findAppTab(ctx.originTabId);
       if (!t) { reply({ ok: false, error: 'افتح صفحة نظام طلبات التأشيرات (visa.nisrelkhaleeg.com) في تبويب وجرّب تاني' }); return; }
-      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-visainfo', data: msg.data }); reply({ ok: true }); if (ctx.inline && sender.tab) { await store.remove('visainfoTab'); try { await chrome.tabs.remove(sender.tab.id); } catch (e) { /* اتقفل */ } } }
+      try {
+        await chrome.tabs.sendMessage(t.id, { kind: 'va-visainfo', data: msg.data }); reply({ ok: true });
+        if (ctx.inline && sender.tab) {
+          if (ctx.doc && ctx.phase !== 'inquiry') { await store.set({ [key]: { ...ctx, phase: 'inquiry', stage: '' } }); await chrome.tabs.update(sender.tab.id, { url: VISADOC_URL }); } /* الخطوة 2 في نفس التبويب */
+          else { await store.remove('visainfoTab'); try { await chrome.tabs.remove(sender.tab.id); } catch (e) { /* اتقفل */ } }
+        }
+      }
       catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ. اعمل F5 فيها وجرّب تاني' }); }
     } else if (msg.kind === 'open-lab') {
       /* حجز المعمل (معامل الصحة العامة): تبويب جديد بنفس أسلوب وافد */

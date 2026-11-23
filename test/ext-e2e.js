@@ -44,6 +44,8 @@ const WMOCK = `<script>
 </script>`;
 
 const visaLookupFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-lookup.html'), 'utf8');
+const visaHomeFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-home.html'), 'utf8');
+const visaPrintFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-print.html'), 'utf8');
 const visaResultFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-result.html'), 'utf8');
 const labFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'lab-booking.html'), 'utf8');
 /* بيحاكي سلوك APEX في صفحة المعمل: الأقسام مخفية لحد اختيار نوع الجنسية، والرقم القومي بيحسب تاريخ الميلاد والجنس */
@@ -61,9 +63,9 @@ const LMOCK = `<script>
 </script>`;
 
 const appHtml = `<!doctype html><meta charset=utf-8><body><script>
-window.got=[];window.visa=[];window.caps=[];window.nexts=[];window.ready=false;window.acks=0;
+window.got=[];window.visa=[];window.docs=[];window.caps=[];window.nexts=[];window.ready=false;window.acks=0;
 window.addEventListener('message',function(e){ if(e.source!==window)return; var m=e.data; if(!m||m.source!=='nesr-visaapply-ext')return;
- if(m.type==='VA_READY')window.ready=true; if(m.type==='VA_ACK')window.acks++; if(m.type==='VA_RESULT')window.got.push(m.data); if(m.type==='VA_ERROR')window.got.push({error:m.data.message}); if(m.type==='VA_NEXT')window.nexts.push(m.data); if(m.type==='VA_VISAINFO_RESULT')window.visa.push(m.data); if(m.type==='VA_VISAINFO_CAPTCHA')window.caps.push(m.data); });
+ if(m.type==='VA_READY')window.ready=true; if(m.type==='VA_ACK')window.acks++; if(m.type==='VA_RESULT')window.got.push(m.data); if(m.type==='VA_ERROR')window.got.push({error:m.data.message}); if(m.type==='VA_NEXT')window.nexts.push(m.data); if(m.type==='VA_VISAINFO_RESULT')window.visa.push(m.data); if(m.type==='VA_VISAINFO_CAPTCHA')window.caps.push(m.data); if(m.type==='VA_VISAINFO_DOC')window.docs.push(m.data); });
 window.fill=function(d){ window.postMessage({source:'nesr-visaapply',type:'VA_FILL',data:d},location.origin); };
 window.postMessage({source:'nesr-visaapply',type:'VA_PING'},location.origin);
 </script></body>`;
@@ -92,6 +94,8 @@ const MOFA = {
     if (/GetOccupationsByClassificationId/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(/jobClassificationId=832/.test(rq.url()) ? [{ Value: 8321, Text: 'سائق سيارة' }, { Value: 8322, Text: 'سائق حافلة' }] : [{ Value: 1431, Text: 'مدير فندق' }]) });
     if (/\/enjaz\/getvisainformation\/person/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaLookupFixture });
     if (/\/enjaz\/ViewVisaDetails\/person/i.test(rq.url())) { if (rq.method() === 'POST') { global.__visaPost = rq.postData() || ''; if (!/Captcha=123456/.test(global.__visaPost)) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaLookupFixture }); } return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaResultFixture }); }
+    if (/\/Home\/PrintVisa/i.test(rq.url())) { global.__printUrl = rq.url(); return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaPrintFixture }); }
+    if (global.__inquiry && /\/Home\/Index/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaHomeFixture });
     const html = (b) => r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body>' + b + '</body>' });
     if (/\/Account\/Login/i.test(rq.url())) return html('<h2>دخول الشركات</h2><input id="user"><input id="pw" type="password">');
     if (/\/Home\/Index/i.test(rq.url())) return html('<h1>الرئيسية</h1>');
@@ -216,8 +220,9 @@ const MOFA = {
   await app.waitForFunction((n) => window.nexts.length > n, nBefore2, { timeout: 10000 });
   const nx3 = await app.evaluate(() => window.nexts[window.nexts.length - 1]);
   assert.deepStrictEqual([nx3.personId, nx3.target, nx3.queue.length, nx3.total], ['32', 'lab', 0, 2]);
+  global.__inquiry = true;
   /* سيناريو 10: «التفويض على تأشيرة» من ملف الضبط، من جوه النظام — التبويب بيتفتح في الخلفية، صورة الكابتشا بتتبعت للنظام، إنت بتكتبها (غلط ثم صح)، والنتيجة بترجع والتبويب بيتقفل */
-  const [vpage] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', embassy: '' })]); /* الممثلية فاضية ← الإضافة تختار السويس لوحدها */
+  const [vpage] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', docNumber: '1000000002', embassy: '' })]); /* الممثلية فاضية ← الإضافة تختار السويس لوحدها */
   await vpage.reload(); /* Playwright مبيلقطش أول طلب لتبويب اتفتح في الخلفية (مشكلة في الاختبار بس، مش في Chrome): بنعمل إعادة تحميل عشان الصفحة التجريبية تتحمّل */
   await app.waitForFunction(() => window.caps.length > 0, null, { timeout: 40000 });
   const c1 = await app.evaluate(() => window.caps[0]);
@@ -241,6 +246,20 @@ const MOFA = {
   assert.deepStrictEqual([vi.visaNumber, vi.visaDate, vi.sponsorName, vi.unifiedNumber, vi.embassyCode, vi.embassyName], ['1000000001', '1447/09/25', 'شركة تجربة للنقل', '7000000001', '320', 'السويس'], JSON.stringify(vi));
   assert.deepStrictEqual(vi.delegations, [{ number: '20000001', embassy: 'السويس', count: '14', job: 'سائق حافلة', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }, { number: '20000002', embassy: 'القاهرة', count: '5', job: 'فني', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }], 'التفاويض: السويس والقاهرة');
   assert.deepStrictEqual(vi.jobs, [{ count: '8', job: 'سائق حافلة', nationality: 'مصر', embassy: 'السويس', remaining: '3' }, { count: '5', job: 'فني', nationality: 'مصر', embassy: 'القاهرة', remaining: '0' }], 'المهن: السويس والقاهرة');
+  /* الخطوة 2: نفس التبويب بيروح لاستعلام «مستند التأشيرة» ← كابتشا تانية في النظام (step 2) ← كود غلط ثم صح ← نتيجة المستند */
+  await app.waitForFunction(() => window.caps.some((c) => c.step === 2), null, { timeout: 40000 });
+  const h2 = await vpage.evaluate(() => ({ type: document.getElementById('SearchingType').value, no: document.getElementById('ApplicationNumber').value, sp: document.getElementById('SponserID').value, cap: document.getElementById('Captcha').value }));
+  assert.deepStrictEqual([h2.type, h2.no, h2.sp, h2.cap], ['2', '1000000002', '7000000001', ''], 'استعلام المستند اتملا برقم المستند والكابتشا فاضية: ' + JSON.stringify(h2));
+  const nc2 = await app.evaluate(() => window.caps.length);
+  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '000000' } }, location.origin));
+  await app.waitForFunction((n) => window.caps.length > n, nc2, { timeout: 30000 });
+  const e2 = await app.evaluate(() => window.caps[window.caps.length - 1]); assert.ok(e2.step === 2 && e2.error === true, 'كود غلط في الخطوة 2: ' + JSON.stringify(e2).slice(0, 120));
+  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '123456' } }, location.origin));
+  await app.waitForFunction(() => window.docs.length > 0, null, { timeout: 40000 });
+  const doc = await app.evaluate(() => window.docs[0]);
+  assert.deepStrictEqual([doc.docNumber, doc.docDate, doc.sponsorName, doc.visaKindId], ['1000000002', '1447/09/25', 'شركة تجربة للنقل', '13'], JSON.stringify(doc));
+  assert.deepStrictEqual(doc.rows, [{ visaKind: 'عمل موسمي', embassy: 'السويس', gender: 'ذكر', nationality: 'مصر', job: 'سائق حافلة', entries: 'سفرة واحدة', residence: '90' }], 'صف مستند التأشيرة');
+  assert.ok(/t=2&n=1000000002&s=7000000001/.test(global.__printUrl), 'اتبعت للمنصة: ' + global.__printUrl);
   await vpage.waitForEvent('close', { timeout: 15000 }).catch(() => {}); assert.ok(vpage.isClosed(), 'تبويب المنصة اتقفل لوحده');
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);

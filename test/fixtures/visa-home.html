@@ -1,0 +1,14 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>منصة التأشيرات (نسخة اختبار)</title></head><body>
+<!-- نسخة مبسّطة بأرقام وهمية من نموذج «استعلام» في الصفحة الرئيسية (visa.mofa.gov.sa/Home/Index): نفس الـ ids. للاختبار بس. -->
+<form role="form" id="_Form" method="post" class="validate">
+ <select class="form-control required valid" id="SearchingType" name="SearchingType"><option value="">طريقة البحث</option><option selected="selected" value="1">رقم الطلب</option><option value="2">رقم مستند التأشيرة</option><option value="3">رقم طلب التأشيرة</option></select>
+ <label class="control-label" id="lblAppNo">رقم التأشيرة</label><input type="text" class="form-control required" placeholder="رقم التأشيرة" id="ApplicationNumber" name="ApplicationNumber">
+ <label class="control-label" id="lblSponserId">رقم السجل</label><input type="text" class="form-control required" id="SponserID" name="SponserID" placeholder="رقم السجل">
+ <div class="input-group input-group-capcha"><input type="text" class="form-control required hasCaptcha fake" id="Captcha" name="Captcha" maxlength="6" autocomplete="off"><img id="imgCaptcha" class="image-capcha" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="><span class="input-group-addon" id="btnRefreshCaptcha" style="cursor:pointer;">↻</span></div>
+ <button type="button" class="btn green" id="btnSearch">استعلام</button>
+</form>
+<script>
+var n=0, imgs=['data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==','data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='];
+document.getElementById('btnRefreshCaptcha').addEventListener('click', function(){ n++; document.getElementById('imgCaptcha').src = imgs[n%2]; });
+document.getElementById('btnSearch').addEventListener('click', function(){ var c=document.getElementById('Captcha').value; if (c==='123456') location.href='/Home/PrintVisa?t='+document.getElementById('SearchingType').value+'&n='+document.getElementById('ApplicationNumber').value+'&s='+document.getElementById('SponserID').value; else location.href='/Home/Index'; });
+</script></body></html>
