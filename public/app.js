@@ -743,7 +743,7 @@
     if (!me) { try { me = (await api('GET', '/me')).user; } catch (er) { /* مش داخل */ } }
     if (!me) return pageLogin();
     if (!meta) meta = await api('GET', '/meta');
-    document.body.classList.add('app'); $('#top').hidden = false; $('#whoName').textContent = me.name; $('#whoAv').textContent = String(me.name || '?').trim().charAt(0);
+    document.documentElement.dataset.theme = meta.theme || 'slate'; document.body.classList.add('app'); $('#top').hidden = false; $('#whoName').textContent = me.name; $('#whoAv').textContent = String(me.name || '?').trim().charAt(0);
     $('#brandName').textContent = meta.brand || 'إنجاز'; $('#brandTag').textContent = 'نظام إدارة التأشيرات'; document.title = (meta.brand || 'إنجاز') + ' — نظام إدارة التأشيرات';
     drawNav(h); setExt(); ping();
     try {

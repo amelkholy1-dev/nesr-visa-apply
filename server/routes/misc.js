@@ -18,7 +18,11 @@ const getSetting = async (k, def) => { const r = (await db.query('SELECT v FROM 
 const setSetting = (k, v) => db.query('INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)', [k, JSON.stringify(v)]);
 router.get('/meta', async (req, res) => {
   let photo = { mode: 'off' }; try { photo = await getSetting('photo', photo); } catch (e) { /* مش مهم */ }
-  res.json({ ...F.meta(), ocr: !!config.geminiKey, stages: S.STAGES, brand: config.brand, brandTag: config.brandTag, perms: P.PERMS, payMethods: A.PAY_METHODS, photoProcess: photo.mode === 'clean' ? 'clean' : 'off' });
+  let theme = 'slate'; try { theme = await getSetting('theme', theme); } catch (e) { /* مش مهم */ }
+  res.json({ ...F.meta(), ocr: !!config.geminiKey, stages: S.STAGES, brand: config.brand, brandTag: config.brandTag, perms: P.PERMS, payMethods: A.PAY_METHODS, photoProcess: photo.mode === 'clean' ? 'clean' : 'off', theme: ['slate', 'green', 'navy', 'warm'].includes(theme) ? theme : 'slate' });
+});
+router.put('/settings/theme', P.need('users.manage'), async (req, res) => {
+  try { const t = ['slate', 'green', 'navy', 'warm'].includes(req.body && req.body.theme) ? req.body.theme : 'slate'; await setSetting('theme', t); require('../audit').log(req, 'settings', null, '', 'المظهر: ' + t); res.json({ ok: true, theme: t }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 /* معالجة الصورة الشخصية عند الرفع: off = زي ما هي (بتتصغّر بس) · clean = خلفية بيضاء + إزالة تشويش (بتتم في المتصفح) */
 router.put('/settings/photo', P.need('users.manage'), async (req, res) => {

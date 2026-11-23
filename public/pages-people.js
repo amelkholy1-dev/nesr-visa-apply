@@ -3,6 +3,7 @@
 (function () {
   const NA = (window.NA = window.NA || { pages: {} });
   const SERVICES = [['mofa', 'المنصة'], ['wafid', 'وافد'], ['lab', 'المعمل'], ['suez', 'خطاب السويس'], ['cairo', 'خطاب القاهرة']];
+  const SHORT = { mofa: 'إنجاز', wafid: 'وافد', lab: 'معمل', suez: 'سويس', cairo: 'قاهرة' };
   const STATE_AR = { '': 'لسه', booked: 'محجوز', done: 'تم' };
 
   NA.goPeople = (filter) => { try { sessionStorage.setItem('peopleFilter', JSON.stringify(filter || {})); } catch (x) { /* مش مهم */ } if (location.hash === '#/people') window.dispatchEvent(new HashChangeEvent('hashchange')); else location.hash = '#/people'; };
@@ -30,7 +31,7 @@
         <button class="btn small" id="clrF" type="button">مسح الفلاتر</button>
       </div><div class="fchips" id="stChips"></div></div>
       <div id="bulk"></div>
-      <div class="card" style="padding:0"><div class="tbl-wrap"><table><thead><tr><th style="width:34px"><input type="checkbox" id="selAll" title="تحديد الكل"></th><th>الشخص</th><th>الدفعة</th><th>الحالة</th><th>الجاهزية (دوس على أي خدمة تشوف الناقص)</th><th>المراحل</th>${can('payments.view') ? '<th>الدفع</th>' : ''}<th></th></tr></thead>
+      <div class="card" style="padding:0"><div class="tbl-wrap"><table><thead><tr><th style="width:34px"><input type="checkbox" id="selAll" title="تحديد الكل"></th><th>الشخص</th><th>الدفعة</th><th>الحالة</th><th title="الرقم = عدد الناقص. وقّف الماوس على أي خدمة تشوف الناقص">الجاهزية (الرقم = الناقص)</th><th>المراحل</th>${can('payments.view') ? '<th>الدفع</th>' : ''}<th></th></tr></thead>
       <tbody id="rows"><tr><td colspan="9" class="muted">جاري التحميل…</td></tr></tbody></table></div></div>`;
 
     let all = [], shown = [];
@@ -77,7 +78,7 @@
       const bd = $('#bkDel'); if (bd) bd.onclick = () => run(async () => { if (!confirm(`تحذف ${ids().length} شخص نهائياً؟ (مش هتقدر ترجّعهم)`)) throw new Error('اتلغت'); const r = await api('POST', '/people/bulk/delete', { ids: ids() }); toast(`اتحذف ${r.deleted}${r.skipped ? ' (و' + r.skipped + ' مش مسموحلك تحذفهم)' : ''}`, r.deleted ? 'ok' : 'err'); });
     };
 
-    const svcChips = (p) => SERVICES.map(([k, l]) => { const miss = (p.service || {})[k] || []; return miss.length ? `<span class="chip bad" title="${e('ناقص: ' + miss.join('، '))}">${l} −${miss.length}</span>` : `<span class="chip ok" title="جاهز">${l} ✓</span>`; }).join('');
+    const svcChips = (p) => SERVICES.map(([k, l]) => { const miss = (p.service || {})[k] || []; return miss.length ? `<span class="chip" title="${e(l + ' — ناقص: ' + miss.join('، '))}">${SHORT[k]} <b>${miss.length}</b></span>` : `<span class="chip ok" title="${e(l)}: جاهز">${SHORT[k]} ✓</span>`; }).join('');
     const stageCells = (p) => `<span class="stlist">${stages.map((x) => { const c = (p.stages || {})[x.k] || {}; return `<span class="sg" title="${e(x.label + ': ' + STATE_AR[c.state || ''] + (c.date ? ' ' + c.date : ''))}"><span class="dots"><i class="dot ${c.state || ''}"></i></span>${e(x.short || x.k)}</span>`; }).join('')}</span>`;
     /* قايمة إجراءات الصف: كل حاجة تتعمل من القايمة من غير ما تدخل على الشخص */
     const closeMenu = () => { view.querySelectorAll('.amenu-list').forEach((m) => m.remove()); };
@@ -116,7 +117,7 @@
     const draw = () => {
       $('#rows').innerHTML = shown.map((p) => `<tr class="click" data-id="${p.id}"><td><input type="checkbox" class="sel" data-id="${p.id}"></td>
         <td class="pcell"><b>${e(p.name || '—')}</b><small>${e(p.passportNo)}${p.appNumber ? ' • ' + e(p.appNumber) : ''}</small>${p.hasPhoto ? '' : ' <span class="chip warn" title="الصورة الشخصية ناقصة">بدون صورة</span>'}${p.expiry && p.expiry.expired ? ' <span class="chip bad">جواز منتهي</span>' : p.expiry && p.expiry.short ? ` <span class="chip warn" title="أقل من 6 شهور من تاريخ الدخول">ينتهي بعد ${p.expiry.days} يوم</span>` : ''}</td>
-        <td>${e(p.profileName || '—')}</td><td><span class="pill ${STATUS[p.status] ? STATUS[p.status][1] : ''}">${e((STATUS[p.status] || [p.status])[0])}</span></td>
+        <td class="bcell" title="${e(p.profileName || '')}">${e(p.profileName || '—')}</td><td><span class="pill ${STATUS[p.status] ? STATUS[p.status][1] : ''}">${e((STATUS[p.status] || [p.status])[0])}</span></td>
         <td><span class="svc">${svcChips(p)}</span></td><td>${stageCells(p)}</td>
         ${can('payments.view') ? `<td>${p.pay ? NA.payState(p.pay) : ''}</td>` : ''}
         <td><div class="amenu"><button class="btn small act" data-id="${p.id}" type="button">الإجراءات</button></div></td></tr>`).join('')
