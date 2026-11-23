@@ -43,6 +43,8 @@ const WMOCK = `<script>
 })();
 </script>`;
 
+const visaLookupFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-lookup.html'), 'utf8');
+const visaResultFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-result.html'), 'utf8');
 const labFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'lab-booking.html'), 'utf8');
 /* بيحاكي سلوك APEX في صفحة المعمل: الأقسام مخفية لحد اختيار نوع الجنسية، والرقم القومي بيحسب تاريخ الميلاد والجنس */
 const LMOCK = `<script>
@@ -59,9 +61,9 @@ const LMOCK = `<script>
 </script>`;
 
 const appHtml = `<!doctype html><meta charset=utf-8><body><script>
-window.got=[];window.nexts=[];window.ready=false;window.acks=0;
+window.got=[];window.visa=[];window.nexts=[];window.ready=false;window.acks=0;
 window.addEventListener('message',function(e){ if(e.source!==window)return; var m=e.data; if(!m||m.source!=='nesr-visaapply-ext')return;
- if(m.type==='VA_READY')window.ready=true; if(m.type==='VA_ACK')window.acks++; if(m.type==='VA_RESULT')window.got.push(m.data); if(m.type==='VA_ERROR')window.got.push({error:m.data.message}); if(m.type==='VA_NEXT')window.nexts.push(m.data); });
+ if(m.type==='VA_READY')window.ready=true; if(m.type==='VA_ACK')window.acks++; if(m.type==='VA_RESULT')window.got.push(m.data); if(m.type==='VA_ERROR')window.got.push({error:m.data.message}); if(m.type==='VA_NEXT')window.nexts.push(m.data); if(m.type==='VA_VISAINFO_RESULT')window.visa.push(m.data); });
 window.fill=function(d){ window.postMessage({source:'nesr-visaapply',type:'VA_FILL',data:d},location.origin); };
 window.postMessage({source:'nesr-visaapply',type:'VA_PING'},location.origin);
 </script></body>`;
@@ -88,6 +90,8 @@ const MOFA = {
     if (/\/Base\/GetEntryDurations/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(global.__only90 ? [{ Value: '', Text: '' }, { Value: 90, Text: '90' }] : [{ Value: 365, Text: '365' }]) });
     if (/\/Base\/GetResidenceDurations/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ Value: 90, Text: '90' }]) });
     if (/GetOccupationsByClassificationId/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(/jobClassificationId=832/.test(rq.url()) ? [{ Value: 8321, Text: 'سائق سيارة' }, { Value: 8322, Text: 'سائق حافلة' }] : [{ Value: 1431, Text: 'مدير فندق' }]) });
+    if (/\/enjaz\/getvisainformation\/person/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaLookupFixture });
+    if (/\/enjaz\/ViewVisaDetails\/person/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaResultFixture });
     const html = (b) => r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body>' + b + '</body>' });
     if (/\/Account\/Login/i.test(rq.url())) return html('<h2>دخول الشركات</h2><input id="user"><input id="pw" type="password">');
     if (/\/Home\/Index/i.test(rq.url())) return html('<h1>الرئيسية</h1>');
@@ -212,6 +216,17 @@ const MOFA = {
   await app.waitForFunction((n) => window.nexts.length > n, nBefore2, { timeout: 10000 });
   const nx3 = await app.evaluate(() => window.nexts[window.nexts.length - 1]);
   assert.deepStrictEqual([nx3.personId, nx3.target, nx3.queue.length, nx3.total], ['32', 'lab', 0, 2]);
+  /* سيناريو 10: «التفويض على تأشيرة» من ملف الضبط — الإضافة بتكتب الرقمين وتختار جهة القدوم (الكابتشا و«بحث» بإيدك)، وبعد النتيجة بترجّع البيانات للنظام */
+  const [vpage] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', embassy: '320' })]);
+  await vpage.waitForSelector('#nesr-vi-bar', { timeout: 30000 });
+  await vpage.waitForFunction(() => /اتكتبت الأرقام/.test((document.getElementById('nesr-vi-bar') || {}).innerText || ''), null, { timeout: 30000 });
+  const v10 = await vpage.evaluate(() => ({ visa: document.getElementById('VisaNumber').value, reg: document.getElementById('SponserID').value, emb: document.getElementById('Embassy').value, cap: document.getElementById('Captcha').value }));
+  assert.deepStrictEqual([v10.visa, v10.reg, v10.emb, v10.cap], ['1000000001', '7000000001', '320', ''], 'صفحة البحث اتملت والكابتشا فاضية: ' + JSON.stringify(v10));
+  await vpage.evaluate(() => { window.location.href = '/enjaz/ViewVisaDetails/person'; });
+  await app.waitForFunction(() => window.visa.length > 0, null, { timeout: 40000 });
+  const vi = await app.evaluate(() => window.visa[0]);
+  assert.deepStrictEqual([vi.visaNumber, vi.visaDate, vi.sponsorName, vi.unifiedNumber, vi.embassyCode, vi.embassyName], ['1000000001', '1447/09/25', 'شركة تجربة للنقل', '7000000001', '320', 'السويس'], JSON.stringify(vi));
+  assert.deepStrictEqual(vi.jobs, [{ count: '8', job: 'سائق حافلة', nationality: 'مصر', embassy: 'السويس', remaining: '3' }], 'جدول المهن');
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

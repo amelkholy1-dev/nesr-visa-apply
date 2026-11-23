@@ -18,6 +18,10 @@ const OPT = {
 
 /* scope: profile = بتتظبط في ملف الضبط · person = لكل شخص · both = افتراضي في الملف ويتغلب في الشخص */
 const GROUPS = [
+  { id: 'lookup', title: 'رقم التأشيرة والرقم الموحد', fields: [
+    { k: 'visaNumber', label: 'رقم التأشيرة (رقم الصادر)', type: 'text', scope: 'profile', max: 20, ltr: true, hint: 'مثلاً: 1306025676' },
+    { k: 'unifiedNumber', label: 'الرقم الموحد (رقم السجل)', type: 'text', scope: 'profile', max: 10, ltr: true, hint: 'مثلاً: 7011022865' }
+  ] },
   { id: 'visa', title: 'بيانات التأشيرة', fields: [
     { k: 'visaKind', label: 'نوع التأشيرة', type: 'select', opt: 'visaKind', scope: 'profile', req: true },
     { k: 'nationality', label: 'الجنسية', type: 'select', opt: 'nationality', scope: 'profile', req: true },
@@ -123,7 +127,7 @@ function resolve(person, profile, files = {}) {
     RELIGION: v.religion, SOCIAL_STATUS: v.social, Sex: v.sex,
     Classify_Occupations_Id: v.jobClass, jobText: v.jobText, DEGREE: v.degree, DEGREE_SOURCE: v.degreeSource,
     ADDRESS_HOME: v.homeAddress, Personal_Email: v.email,
-    SPONSER_NAME: v.sponsorName, SPONSER_NUMBER: v.sponsorNumber, SPONSER_ADDRESS: v.sponsorAddress, SPONSER_PHONE: v.sponsorPhone,
+    SPONSER_NAME: v.sponsorName, SPONSER_NUMBER: v.sponsorNumber || v.unifiedNumber, SPONSER_ADDRESS: v.sponsorAddress, SPONSER_PHONE: v.sponsorPhone,
     COMING_THROUGH: v.comingThrough, entryPointText: text(OPT.entryPoint, v.entryPoint) || v.entryPoint, ENTRY_POINT: v.entryPoint,
     ExpectedEntryDate: mofaDate(v.expectedEntryDate), porpose: v.purpose, car_number: v.carNumber
   };

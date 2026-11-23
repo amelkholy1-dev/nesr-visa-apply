@@ -1,0 +1,11 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>منصة التأشيرات (نسخة اختبار)</title></head><body>
+<!-- نسخة مبسّطة بأرقام وهمية من نتيجة «التفويض على تأشيرة» (visa.mofa.gov.sa/enjaz/ViewVisaDetails/person): نفس الـ ids والتركيب. جدول المهن بيتحمّل متأخّر زي jTable. للاختبار بس. -->
+<form action="/enjaz/ViewVisaDetails/person" method="post">
+ <div class="form-group"><label class="col-md-2 control-label"> رقم الصادر </label><div class="col-md-3 control-display-label"> 1000000001 </div><label class="control-label col-md-2"> تاريخ التأشيرة </label><div class="col-md-3 control-display-label"> 1447/09/25 </div></div>
+ <div class="form-group"><label class="col-md-2 control-label"> الاسم </label><div class="col-md-3 control-display-label"> شركة تجربة للنقل </div><label class="control-label col-md-2"> العنوان </label><div class="col-md-3 control-display-label"> 0, 111111111, 0, 1 </div></div>
+ <div class="form-group"><label class="col-md-2 control-label"> رقم الإقامة </label><div class="col-md-3 control-display-label"> 7000000001 </div></div>
+ <div class="form-group"><label class="col-md-2 control-label"> عرض التأشيرات الموجودة في ممثلية: </label><div class="col-md-3"><select class="required select2me" id="EmbassyID" name="EmbassyID"><option value="302">القاهرة</option><option value="320" selected>السويس</option></select></div></div>
+ <h3 class="form-section">قائمة المهن</h3><div id="dvJobsGrid"><div class="jtable-main-container"><table class="styled"><thead><tr><th>عدد الأشخاص</th><th>المهنة</th><th>الجنسية</th><th>جهة القدوم</th><th>العدد المتبقي</th><th>الاسم</th></tr></thead><tbody id="jb"></tbody></table></div></div>
+</form>
+<script>setTimeout(function(){ document.getElementById('jb').innerHTML='<tr class="jtable-data-row jtable-row-even"><td><span>8</span></td><td>سائق حافلة</td><td>مصر</td><td>السويس</td><td><span>3</span></td><td></td></tr>'; }, 900);</script>
+</body></html>

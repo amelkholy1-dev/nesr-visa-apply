@@ -3,6 +3,7 @@
 const FORM_URL = 'https://visa.mofa.gov.sa/SmartForm/TraditionalApp';
 const WAFID_URL = 'https://wafid.com/ar/book-appointment/';
 const LAB_URL = 'https://clab.mohp.gov.eg/booking';
+const VISAINFO_URL = 'https://visa.mofa.gov.sa/enjaz/getvisainformation/person';
 const LOGIN_URL = 'https://visa.mofa.gov.sa/Account/Login/enjazcompany';
 const store = chrome.storage.session;
 const APP_TAB_RE = /^https:\/\/[a-z0-9-]+\.nisrelkhaleeg\.com\//;
@@ -43,6 +44,20 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       reply({ ok: true });
     } else if (msg.kind === 'get-wafid-ctx') {
       const key = 'wctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); reply({ ctx: o[key] || null });
+    } else if (msg.kind === 'open-visainfo') {
+      /* «التفويض على تأشيرة»: بنفتح صفحة البحث، والإضافة بتكتب الأرقام، والكابتشا و«بحث» بإيدك، وبعدها بنقرا النتيجة ونرجّعها لملف الضبط */
+      const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now() };
+      const tab = await chrome.tabs.create({ url: VISAINFO_URL, active: true });
+      await store.set({ ['vctx_' + tab.id]: ctx });
+      reply({ ok: true });
+    } else if (msg.kind === 'get-visainfo-ctx') {
+      const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); reply({ ctx: o[key] || null });
+    } else if (msg.kind === 'visainfo-result') {
+      const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
+      const t = await findAppTab(ctx.originTabId);
+      if (!t) { reply({ ok: false, error: 'افتح صفحة نظام طلبات التأشيرات (visa.nisrelkhaleeg.com) في تبويب وجرّب تاني' }); return; }
+      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-visainfo', data: msg.data }); reply({ ok: true }); }
+      catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ. اعمل F5 فيها وجرّب تاني' }); }
     } else if (msg.kind === 'open-lab') {
       /* حجز المعمل (معامل الصحة العامة): تبويب جديد بنفس أسلوب وافد */
       const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now() };
@@ -128,4 +143,4 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
     if (next !== ctx.stage) await store.set({ [key]: { ...ctx, stage: next } });
   } catch (e) { /* مش مهم */ }
 });
-chrome.tabs.onRemoved.addListener((id) => { store.remove(['ctx_' + id, 'wctx_' + id, 'lctx_' + id]).catch(() => {}); });
+chrome.tabs.onRemoved.addListener((id) => { store.remove(['ctx_' + id, 'wctx_' + id, 'lctx_' + id, 'vctx_' + id]).catch(() => {}); });

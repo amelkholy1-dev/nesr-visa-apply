@@ -30,6 +30,7 @@
     if (m.type === 'VA_ACK') { bridge.pending.splice(0).forEach((f) => f(true)); }
     if (m.type === 'VA_ERROR') { toast(m.data && m.data.message || 'مشكلة في الإضافة', 'err'); bridge.pending.splice(0).forEach((f) => f(false)); }
     if (m.type === 'VA_RESULT' && m.data) onResult(m.data);
+    if (m.type === 'VA_VISAINFO_RESULT' && m.data) onVisaInfo(m.data);
     if (m.type === 'VA_NEXT' && m.data && m.data.personId) { if (m.data.target === 'wafid') wafidRequest(m.data.personId, m.data.queue || [], m.data.total || 0, true); else if (m.data.target === 'lab') labRequest(m.data.personId, m.data.queue || [], m.data.total || 0, true); else fillRequest(m.data.personId, m.data.queue || [], m.data.total || 0, true); }
   });
   const ping = () => window.postMessage({ source: 'nesr-visaapply', type: 'VA_PING' }, location.origin);
@@ -41,6 +42,25 @@
       else if (d.status === 'filled') { await api('POST', `/people/${d.personId}/result`, { status: 'filled' }); }
       if (/^#\/(people)?$/.test(location.hash) || location.hash === '#/people') render();
     } catch (er) { fail(er); }
+  }
+  /* نتيجة «التفويض على تأشيرة»: بتتحط في خانات ملف الضبط المفتوح (من غير حفظ، إنت اللي بتراجع وتدوس حفظ) */
+  function onVisaInfo(d) {
+    const ed = $('#peditor'); const has = (k) => ed && ed.querySelector(`[data-k="${k}"]`);
+    if (!has('sponsorName')) return toast('اتجابت بيانات التأشيرة بس مفيش ملف ضبط مفتوح: افتح الملف من «ملفات الضبط» وجرّب تاني.', 'err');
+    const put = (k, v) => { const el = has(k); if (!el || !v) return false; if (el.tagName === 'SELECT' && ![...el.options].some((o) => o.value === String(v))) return false; el.value = v; return true; };
+    const done = [];
+    if (put('sponsorName', d.sponsorName)) done.push('اسم جهة العمل');
+    if (put('sponsorNumber', d.unifiedNumber)) done.push('رقم الجهة');
+    put('unifiedNumber', d.unifiedNumber); if (!(has('visaNumber') || {}).value) put('visaNumber', d.visaNumber);
+    if (put('embassy', d.embassyCode)) done.push('الممثلية (' + (d.embassyName || d.embassyCode) + ')');
+    const jobs = (d.jobs || []).filter((j) => /مصر/.test(j.nationality)); const names = [...new Set((jobs.length ? jobs : d.jobs || []).map((j) => j.job).filter(Boolean))];
+    if (names.length === 1 && put('jobText', names[0])) done.push('المهنة (' + names[0] + ')');
+    const box = $('#visaInfoBox');
+    if (box) box.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8;margin-top:8px"><b>بيانات التأشيرة من المنصة${d.visaDate ? ' (تاريخ التأشيرة ' + e(d.visaDate) + ')' : ''}:</b>
+      <ul class="list">${done.length ? `<li>اتملّى في الملف: ${e(done.join('، '))}</li>` : ''}${names.length > 1 ? `<li>فيه أكتر من مهنة (${e(names.join('، '))}): اكتب المهنة اللي تناسب الدفعة بإيدك</li>` : ''}${!names.length ? '<li>مفيش مهنة في النتيجة: اكتب المهنة بإيدك</li>' : ''}
+      ${(d.jobs || []).map((j) => `<li>${e(j.job)} — ${e(j.nationality)} — ${e(j.embassy)}: العدد ${e(j.count)}، المتبقي <b>${e(j.remaining)}</b>${j.remaining === '0' ? ' ⚠️ مفيش تأشيرات متبقية' : ''}</li>`).join('')}</ul>
+      <div class="muted small">المنصة مبتبعتش: نوع التأشيرة، عدد الدخول، الصلاحية، عنوان وهاتف الجهة. كمّلهم بإيدك. دوس <b>حفظ</b> بعد المراجعة.</div></div>`;
+    toast('اتملّت بيانات التأشيرة في الملف: راجعها ودوس حفظ', 'ok');
   }
   async function fillRequest(id, queue, total, quiet) {
     try {
@@ -542,9 +562,17 @@
     const edit = (p) => {
       const d = (p && p.data) || {};
       $('#peditor').innerHTML = `<div class="card"><h2>${p ? 'تعديل: ' + e(p.name) : 'ملف جديد'}</h2><label class="f">اسم الملف<input id="pname" value="${e(p ? p.name : '')}"></label><br>
-        ${meta.groups.map((g) => `<h2 style="margin-top:14px">${e(g.title)}</h2><div class="grid">${g.fields.map((f) => fieldHtml(f, d[f.k])).join('')}</div>`).join('')}
+        ${meta.groups.map((g) => `<h2 style="margin-top:14px">${e(g.title)}</h2><div class="grid">${g.fields.map((f) => fieldHtml(f, d[f.k])).join('')}</div>${g.id === 'lookup' ? '<div class="row" style="margin-top:8px"><button class="btn" id="visaLookup" title="بيفتح صفحة «التفويض على تأشيرة» في المنصة ويكتب الرقمين، وإنت بتكتب الكابتشا وتدوس بحث">هات بيانات التأشيرة من المنصة</button></div><div id="visaInfoBox"></div>' : ''}`).join('')}
         <div class="row" style="margin-top:14px"><button class="btn pri" id="psave">حفظ</button><label><input type="checkbox" id="pdef"${p && p.isDefault ? ' checked' : ''}> الافتراضي</label>${p ? '<button class="btn danger" id="pdel" style="margin-inline-start:auto">حذف</button>' : ''}</div></div>`;
       $('#peditor').scrollIntoView({ behavior: 'smooth' });
+      $('#visaLookup').onclick = async () => {
+        const dd = collect($('#peditor'));
+        if (!dd.visaNumber || !dd.unifiedNumber) return toast('اكتب رقم التأشيرة والرقم الموحد الأول.', 'err');
+        if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
+        if (!extReady) return toast('إضافة Chrome مش متركّبة. من «الإضافة» نزّلها وركّبها الأول.', 'err');
+        const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: { name: $('#pname').value, visaNumber: dd.visaNumber, unifiedNumber: dd.unifiedNumber, embassy: dd.embassy } }, location.origin); setTimeout(() => res(false), 4000); });
+        toast(ok ? 'اتفتحت صفحة المنصة: اكتب الكابتشا ودوس «بحث»' : 'الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.7.0 أو أحدث).', ok ? 'ok' : 'err');
+      };
       $('#psave').onclick = async () => { try { const body = { name: $('#pname').value, data: collect($('#peditor')), isDefault: $('#pdef') ? $('#pdef').checked : false }; if (p) await api('PUT', `/profiles/${p.id}`, body); else await api('POST', '/profiles', body); toast('اتحفظ', 'ok'); pageProfiles(); } catch (er) { fail(er); } };
       if (p) $('#pdel').onclick = async () => { if (!confirm('تحذف الملف؟')) return; try { await api('DELETE', `/profiles/${p.id}`); pageProfiles(); } catch (er) { fail(er); } };
     };
