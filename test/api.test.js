@@ -147,6 +147,10 @@ const api = async (method, url, body, extra = {}) => {
   assert.strictEqual((await api('GET', '/api/settings/profile-template')).json.auto, false, 'الافتراضي مقفول');
   assert.strictEqual((await api('PUT', '/api/settings/profile-template', { auto: true })).status, 200); assert.strictEqual((await api('GET', '/api/settings/profile-template')).json.auto, true);
   assert.strictEqual((await api('PUT', '/api/settings/profile-template', { auto: false })).status, 200);
+  const lcheck = await api('GET', `/api/people/${spid}/letter/cairo?check=1`); assert.strictEqual(lcheck.status, 200); assert.ok(lcheck.json.issues.includes('رقم التأشيرة') && lcheck.json.issues.includes('رقم السجل (الرقم الموحد)'), 'نواقص خطاب القاهرة');
+  const ldoc = await fetch(base + `/api/people/${spid}/letter/suez`, { headers: { Cookie: cookie } }); const ldb = Buffer.from(await ldoc.arrayBuffer());
+  assert.strictEqual(ldoc.status, 200); assert.strictEqual(ldb.slice(0, 2).toString(), 'PK'); assert.ok(String(ldoc.headers.get('content-disposition')).includes('nomination-suez-ST12345.docx'), 'اسم ملف الخطاب'); assert.ok(String(ldoc.headers.get('content-type')).includes('wordprocessingml'));
+  assert.strictEqual((await api('GET', `/api/people/${spid}/letter/zzz`)).status, 404, 'نوع خطاب مش معروف');
   const ps = await api('GET', '/api/settings/print'); assert.strictEqual(ps.status, 200); assert.ok(ps.json.dateFormat);
   assert.strictEqual((await api('PUT', '/api/settings/print', { company: 'شركة تجربة', dateFormat: 'YYYY-MM-DD' })).status, 200);
   assert.strictEqual((await api('GET', '/api/settings/print')).json.company, 'شركة تجربة');

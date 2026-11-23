@@ -13,6 +13,7 @@ const audit = require('../audit');
 const S = require('../stages');
 const wafid = require('../wafid');
 const lab = require('../lab');
+const letters = require('../letters');
 
 const router = express.Router();
 const json = (v) => { try { return JSON.parse(v || '{}') || {}; } catch (e) { return {}; } };
@@ -194,6 +195,25 @@ router.get('/:id(\\d+)/lab', async (req, res) => {
     const r = lab.build(json(row.data), profile && profile.data, row.app_number);
     audit.log(req, 'fill', row.id, row.name_ar, 'حجز المعمل');
     res.json({ personId: row.id, name: row.name_ar, lab: r.payload, issues: r.issues, warns: r.warns });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* خطابات الترشيح (Word): kind = suez | cairo ؛ ?check=1 بيرجّع النواقص بس */
+router.get('/:id(\\d+)/letter/:kind(suez|cairo)', async (req, res) => {
+  try {
+    const row = (await db.query('SELECT * FROM people WHERE id = ?', [req.params.id]))[0];
+    if (!row) return res.status(404).json({ error: 'الشخص مش موجود' });
+    const profile = await loadProfile(row.profile_id); const v = F.resolve(json(row.data), profile && profile.data, {}).values;
+    const vars = { name: v.nameAr || row.name_ar || '', passport: String(v.passportNo || '').toUpperCase(), job: v.jobText || '', degree: v.degree || 'لايوجد', visaNo: v.visaNumber || '', visaDate: v.visaDate || '', sponsor: v.sponsorName || '',
+      unifiedNo: v.unifiedNumber || v.sponsorNumber || '', box: v.boxNumber || '', agency: v.agencyNumber || '', appNo: row.app_number || '' };
+    const c = letters.check(req.params.kind, vars);
+    if (req.query.check) return res.json({ ...c, hasPhoto: !!row.personal_photo });
+    let photo = null; try { if (row.personal_photo) photo = fs.readFileSync(fullPath(row.id, row.personal_photo)); } catch (e) { photo = null; }
+    const buf = await letters.build(req.params.kind, vars, photo);
+    audit.log(req, 'fill', row.id, row.name_ar, 'خطاب ترشيح ' + letters.KINDS[req.params.kind].label);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodeURIComponent('nomination-' + req.params.kind + '-' + (vars.passport || row.id) + '.docx'));
+    res.send(buf);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

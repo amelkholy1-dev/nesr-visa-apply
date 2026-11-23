@@ -83,11 +83,12 @@
     const done = [];
     if (put('sponsorName', d.sponsorName)) done.push('اسم جهة العمل');
     if (put('sponsorNumber', d.unifiedNumber)) done.push('رقم الجهة');
+    if (put('visaDate', d.visaDate)) done.push('تاريخ التأشيرة');
     put('unifiedNumber', d.unifiedNumber); if (!(has('visaNumber') || {}).value) put('visaNumber', d.visaNumber);
     if (put('embassy', d.embassyCode)) done.push('الممثلية (' + (d.embassyName || d.embassyCode) + ')' + ((d.triedEmbassies || []).length > 1 ? ' — جرّبنا: ' + d.triedEmbassies.join('، ') : ''));
     if ((d.jobs || []).some((j) => /مصر/.test(j.nationality)) && put('nationality', 'EGY')) done.push('الجنسية (مصر)');
     const remainingOf = (job, emb) => { const j = (d.jobs || []).find((x) => x.job === job && (!emb || x.embassy === emb)) || (d.jobs || []).find((x) => x.job === job); return j ? j.remaining : ''; };
-    const rows = ((d.delegations || []).length ? d.delegations.map((x) => ({ number: x.number, embassy: x.embassy, count: x.count, job: x.job, agency: x.agencyName })) : (d.jobs || []).map((j) => ({ number: '', embassy: j.embassy, count: j.count, job: j.job, agency: '' })));
+    const rows = ((d.delegations || []).length ? d.delegations.map((x) => ({ number: x.number, embassy: x.embassy, count: x.count, job: x.job, agency: x.agencyName, agencyNumber: x.agencyNumber })) : (d.jobs || []).map((j) => ({ number: '', embassy: j.embassy, count: j.count, job: j.job, agency: '' })));
     const box = $('#visaInfoBox'); if (!box) return;
     const rem = (r) => { const m = remainingOf(r.job, r.embassy); return m === '' ? '' : `${e(m)}${m === '0' ? ' ⚠️' : ''}`; };
     box.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8;margin-top:8px"><b>بيانات التأشيرة من المنصة${d.visaDate ? ' (تاريخ التأشيرة ' + e(d.visaDate) + ')' : ''}</b>
@@ -97,6 +98,7 @@
     const apply = (r) => {
       const ok = [];
       if (put('jobText', r.job)) ok.push('المهنة (' + r.job + ')');
+      if (r.agencyNumber && put('agencyNumber', r.agencyNumber)) ok.push('رقم الوكالة (' + r.agencyNumber + ')');
       const code = (opt('embassy').find((o) => o.t === r.embassy) || {}).v; if (code && put('embassy', code)) ok.push('الممثلية (' + r.embassy + ')');
       if (remainingOf(r.job, r.embassy) === '0') toast('تنبيه: العدد المتبقي لـ «' + r.job + '» صفر', 'err');
       return ok;
@@ -396,7 +398,7 @@
         <div><input type="file" id="phF" accept="image/jpeg,image/png"><div class="small muted" style="margin-top:6px">${isNew ? 'بتترفع أول ما تحفظ.' : ''} بتتصغّر تلقائي لو أكبر من الحد. المنصة بتفحص مواصفات الصورة (خلفية فاتحة ووش واضح).</div>${!isNew && person.hasPhoto ? '<button class="btn small danger" id="phDel" style="margin-top:6px">حذف الصورة</button>' : ''}</div></div></div>
       <div class="card"><label class="f">ملاحظات<input data-k="notes" value="${e(data.notes || '')}"></label></div>
       ${resolved ? `<div class="card"><h2>الجاهزية</h2>${resolved.ready ? '<span class="pill ok">كل البيانات المطلوبة موجودة</span>' : `<ul class="list issues">${resolved.issues.map((x) => `<li>${e(x)}</li>`).join('')}</ul>`}${resolved.warns.length ? `<ul class="list warns">${resolved.warns.map((x) => `<li>${e(x)}</li>`).join('')}</ul>` : ''}</div>` : ''}
-      <div class="row actions"><button class="btn pri" id="save">حفظ</button>${!isNew ? '<button class="btn pri" id="fill">املى الطلب في المنصة</button><button class="btn" id="wafid" title="بيفتح موقع وافد ويملا فورم حجز الفحص الطبي">احجز الفحص الطبي (وافد)</button><button class="btn" id="lab" title="بيفتح موقع معامل الصحة العامة ويملا فورم حجز المعمل">احجز المعمل</button><button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>
+      <div class="row actions"><button class="btn pri" id="save">حفظ</button>${!isNew ? '<button class="btn pri" id="fill">املى الطلب في المنصة</button><button class="btn" id="wafid" title="بيفتح موقع وافد ويملا فورم حجز الفحص الطبي">احجز الفحص الطبي (وافد)</button><button class="btn" id="lab" title="بيفتح موقع معامل الصحة العامة ويملا فورم حجز المعمل">احجز المعمل</button><button class="btn" id="letSuez" title="بيحمّل خطاب ترشيح Word للسويس بنفس تنسيق نموذج المكتب">خطاب ترشيح — السويس</button><button class="btn" id="letCairo" title="بيحمّل استمارة ترشيح Word للقاهرة بنفس تنسيق نموذج المكتب">خطاب ترشيح — القاهرة</button><button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>
       </div><aside class="side">${sideHtml()}</aside></div>`;
       wire();
       wirePv();
@@ -515,6 +517,16 @@
         } catch (er) { fail(er); } finally { oc.disabled = false; oc.textContent = 'قراءة تلقائية من الصورة'; }
       };
       const wf = $('#wafid'); if (wf) wf.onclick = async () => { try { await save(); wafidRequest(id); } catch (er) { fail(er); } };
+      const letter = async (kind) => {
+        try {
+          await save();
+          const c = await api('GET', `/people/${id}/letter/${kind}?check=1`);
+          const warn = [...(c.issues || []).map((x) => x + ' (ناقص)'), ...(c.warns || []), ...(c.hasPhoto ? [] : ['الصورة الشخصية ناقصة: الخطاب هيطلع من غير صورة'])];
+          if (warn.length && !confirm('قبل ما نحمّل الخطاب:\n- ' + warn.join('\n- ') + '\n\nتحمّله كده؟')) return;
+          window.location.href = `/api/people/${id}/letter/${kind}`; toast('بيتحمّل خطاب الترشيح (Word)…', 'ok');
+        } catch (er) { fail(er); }
+      };
+      const ls = $('#letSuez'); if (ls) ls.onclick = () => letter('suez'); const lc = $('#letCairo'); if (lc) lc.onclick = () => letter('cairo');
       const lb = $('#lab'); if (lb) lb.onclick = async () => { try { await save(); labRequest(id); } catch (er) { fail(er); } };
       const fl = $('#fill'); if (fl) fl.onclick = async () => { try { await save(); fillRequest(id); } catch (er) { fail(er); } };
       const dl = $('#del'); if (dl) dl.onclick = async () => { if (!confirm('تحذف الشخص ده نهائياً؟')) return; try { await api('DELETE', `/people/${id}`); location.hash = '#/people'; } catch (er) { fail(er); } };

@@ -22,6 +22,11 @@ const GROUPS = [
     { k: 'visaNumber', label: 'رقم التأشيرة (رقم الصادر)', type: 'text', scope: 'profile', max: 20, ltr: true, hint: 'مثلاً: 1306025676' },
     { k: 'unifiedNumber', label: 'الرقم الموحد (رقم السجل)', type: 'text', scope: 'profile', max: 10, ltr: true, hint: 'مثلاً: 7011022865' }
   ] },
+  { id: 'letters', title: 'خطابات الترشيح (السويس / القاهرة)', fields: [
+    { k: 'visaDate', label: 'تاريخ التأشيرة (هجري)', type: 'text', scope: 'profile', max: 12, ltr: true, hint: 'مثلاً: 1448/02/30 — بيتملي من «بحث وجلب المهن»' },
+    { k: 'boxNumber', label: 'رقم الصندوق (خطاب القاهرة)', type: 'text', scope: 'profile', max: 10, ltr: true },
+    { k: 'agencyNumber', label: 'رقم الوكالة (خطاب القاهرة)', type: 'text', scope: 'profile', max: 20, ltr: true, hint: 'بيتملي من اختيار التفويض' }
+  ] },
   { id: 'visa', title: 'بيانات التأشيرة', fields: [
     { k: 'visaKind', label: 'نوع التأشيرة', type: 'select', opt: 'visaKind', scope: 'profile', req: true },
     { k: 'nationality', label: 'الجنسية', type: 'select', opt: 'nationality', scope: 'profile', req: true },

@@ -54,6 +54,7 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.fill('[data-k=birthPlace]', 'Cairo'); await page.fill('[data-k=issueDate]', '2024-07-01');
     await page.click('#save'); await page.waitForURL(/#\/people\/\d+/); await page.waitForSelector('#phF');
     const id = page.url().match(/people\/(\d+)/)[1];
+    assert.ok(await page.isVisible('#letSuez') && await page.isVisible('#letCairo'), 'زرارين خطاب الترشيح (السويس / القاهرة) ظاهرين في صفحة الشخص');
     assert.ok((await page.textContent('body')).includes('الصورة الشخصية ناقصة'), 'الناقص ظاهر');
     // رفع صورة كبيرة ← بتتصغّر تحت 1 ميجا
     if (BIG) {
@@ -106,10 +107,12 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
       jobs: [{ count: '8', job: 'سائق حافلة', nationality: 'مصر', embassy: 'السويس', remaining: '0' }, { count: '5', job: 'فني', nationality: 'مصر', embassy: 'القاهرة', remaining: '2' }],
       delegations: [{ number: '20000001', embassy: 'السويس', count: '8', job: 'سائق حافلة', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }, { number: '20000002', embassy: 'القاهرة', count: '5', job: 'فني', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }] } }, location.origin));
     await page.waitForFunction(() => document.querySelector('#peditor [data-k=sponsorName]').value === 'شركة تجربة للنقل');
+    assert.strictEqual(await page.evaluate(() => document.querySelector('#peditor [data-k=visaDate]').value), '1447/09/25', 'تاريخ التأشيرة اتملى للخطابات');
     assert.deepStrictEqual(await page.evaluate(() => ['sponsorNumber', 'unifiedNumber', 'visaNumber', 'embassy', 'jobText', 'nationality'].map((k) => document.querySelector('#peditor [data-k=' + k + ']').value)), ['7000000001', '7000000001', '1000000001', '320', '', 'EGY'], 'بيانات الجهة اتملّت والمهنة مستنية الاختيار');
     assert.strictEqual(await page.locator('input[name=visaPickRow]').count(), 2, 'قايمة التفاويض للاختيار');
     assert.ok((await page.textContent('#visaInfoBox')).includes('وكالة تجربة'));
     await page.click('input[name=visaPickRow][value="1"]'); await page.click('#visaPick');
+    assert.strictEqual(await page.evaluate(() => document.querySelector('#peditor [data-k=agencyNumber]').value), '30000001', 'رقم الوكالة اتملى من التفويض المختار');
     assert.deepStrictEqual(await page.evaluate(() => ['jobText', 'embassy'].map((k) => document.querySelector('#peditor [data-k=' + k + ']').value)), ['فني', '302'], 'المهنة والممثلية (القاهرة) اللي اتختارت');
     await page.click('input[name=visaPickRow][value="0"]'); await page.click('#visaPick');
     assert.deepStrictEqual(await page.evaluate(() => ['jobText', 'embassy'].map((k) => document.querySelector('#peditor [data-k=' + k + ']').value)), ['سائق حافلة', '320']);
