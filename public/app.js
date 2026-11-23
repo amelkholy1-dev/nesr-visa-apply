@@ -77,6 +77,7 @@
     if (put('sponsorNumber', d.unifiedNumber)) done.push('رقم الجهة');
     put('unifiedNumber', d.unifiedNumber); if (!(has('visaNumber') || {}).value) put('visaNumber', d.visaNumber);
     if (put('embassy', d.embassyCode)) done.push('الممثلية (' + (d.embassyName || d.embassyCode) + ')');
+    if ((d.jobs || []).some((j) => /مصر/.test(j.nationality)) && put('nationality', 'EGY')) done.push('الجنسية (مصر)');
     const remainingOf = (job, emb) => { const j = (d.jobs || []).find((x) => x.job === job && (!emb || x.embassy === emb)) || (d.jobs || []).find((x) => x.job === job); return j ? j.remaining : ''; };
     const rows = ((d.delegations || []).length ? d.delegations.map((x) => ({ number: x.number, embassy: x.embassy, count: x.count, job: x.job, agency: x.agencyName })) : (d.jobs || []).map((j) => ({ number: '', embassy: j.embassy, count: j.count, job: j.job, agency: '' })));
     const box = $('#visaInfoBox'); if (!box) return;
@@ -85,7 +86,7 @@
       <div class="muted small">${done.length ? 'اتملّى في الملف: ' + e(done.join('، ')) : 'مفيش بيانات جديدة اتملّت'}</div>
       ${rows.length ? `<h3 style="margin:10px 0 4px">اختار التفويض / المهنة</h3><div style="overflow:auto"><table><thead><tr><th></th><th>رقم التفويض</th><th>جهة القدوم</th><th>عدد الأشخاص</th><th>المهنة</th><th>المتبقي</th><th>اسم الوكالة</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td><input type="radio" name="visaPickRow" value="${i}"${rows.length === 1 ? ' checked' : ''}></td><td dir="ltr" style="text-align:right">${e(r.number)}</td><td>${e(r.embassy)}</td><td>${e(r.count)}</td><td><b>${e(r.job)}</b></td><td>${rem(r)}</td><td>${e(r.agency)}</td></tr>`).join('')}</tbody></table></div>
       <div class="row" style="margin-top:8px"><button class="btn pri" id="visaPick">موافق</button><span class="muted small">بيحط المهنة (والممثلية) في الملف</span></div>` : '<div style="margin-top:6px">مفيش تفاويض ولا مهن في النتيجة: اكتب المهنة بإيدك.</div>'}
-      <div class="muted small" style="margin-top:6px">المنصة مبتبعتش: نوع التأشيرة، عدد الدخول، الصلاحية، عنوان وهاتف الجهة. كمّلهم بإيدك، ودوس <b>حفظ</b> بعد المراجعة.</div></div>`;
+      <div class="muted small" style="margin-top:6px">الصفحة دي مفيهاش: نوع التأشيرة، عدد الدخول، الصلاحية، مدة الإقامة، عنوان وهاتف الجهة، وسيلة الوصول والمنفذ وتاريخ الدخول، والقيم الافتراضية للأشخاص. كمّلهم بإيدك، ودوس <b>حفظ</b> بعد المراجعة.</div></div>`;
     const apply = (r) => {
       const ok = [];
       if (put('jobText', r.job)) ok.push('المهنة (' + r.job + ')');

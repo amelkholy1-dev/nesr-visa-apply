@@ -98,7 +98,7 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
       jobs: [{ count: '8', job: 'سائق حافلة', nationality: 'مصر', embassy: 'السويس', remaining: '0' }, { count: '5', job: 'فني', nationality: 'مصر', embassy: 'القاهرة', remaining: '2' }],
       delegations: [{ number: '20000001', embassy: 'السويس', count: '8', job: 'سائق حافلة', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }, { number: '20000002', embassy: 'القاهرة', count: '5', job: 'فني', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }] } }, location.origin));
     await page.waitForFunction(() => document.querySelector('#peditor [data-k=sponsorName]').value === 'شركة تجربة للنقل');
-    assert.deepStrictEqual(await page.evaluate(() => ['sponsorNumber', 'unifiedNumber', 'visaNumber', 'embassy', 'jobText'].map((k) => document.querySelector('#peditor [data-k=' + k + ']').value)), ['7000000001', '7000000001', '1000000001', '320', ''], 'بيانات الجهة اتملّت والمهنة مستنية الاختيار');
+    assert.deepStrictEqual(await page.evaluate(() => ['sponsorNumber', 'unifiedNumber', 'visaNumber', 'embassy', 'jobText', 'nationality'].map((k) => document.querySelector('#peditor [data-k=' + k + ']').value)), ['7000000001', '7000000001', '1000000001', '320', '', 'EGY'], 'بيانات الجهة اتملّت والمهنة مستنية الاختيار');
     assert.strictEqual(await page.locator('input[name=visaPickRow]').count(), 2, 'قايمة التفاويض للاختيار');
     assert.ok((await page.textContent('#visaInfoBox')).includes('وكالة تجربة'));
     await page.click('input[name=visaPickRow][value="1"]'); await page.click('#visaPick');
