@@ -28,7 +28,7 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.fill('#p', 'Admin#12345'); await page.click('#go');
     await page.waitForSelector('.kpis');
     assert.ok(await page.isVisible('#top'), 'القائمة الجانبية ظاهرة بعد الدخول');
-    assert.ok((await page.textContent('#top')).includes('عين النسر'), 'اسم السيستم المميّز ظاهر');
+    assert.ok((await page.textContent('#top')).includes('فيزاتك'), 'اسم السيستم المميّز ظاهر');
     assert.ok((await page.textContent('.page-head')).includes('لوحة التحكم'), 'الصفحة الرئيسية = لوحة التحكم');
 
     // ملف ضبط
