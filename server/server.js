@@ -49,8 +49,17 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
 
 const pub = path.join(__dirname, '..', 'public');
 /* ملفات الواجهة (app.js وغيره) بيتأكد منها المتصفح في كل مرة (ETag) عشان أي تحديث يوصل فوراً؛ مكتبة OCR الكبيرة (vendor) بتتخزّن أسبوع */
+/* الصفحة الرئيسية: بنضيف رقم إصدار (من تاريخ آخر تعديل للملفات) على ملفات الواجهة، عشان أي كاش (متصفح أو استضافة) ياخد النسخة الجديدة فوراً */
+const sendIndex = (req, res) => {
+  try {
+    const ver = ['style.css', 'app.js', 'pages-dashboard.js', 'pages-people.js', 'pages-admin.js', 'index.html'].reduce((m, f) => Math.max(m, fs.statSync(path.join(pub, f)).mtimeMs), 0).toString(36);
+    const html = fs.readFileSync(path.join(pub, 'index.html'), 'utf8').replace(/(href|src)="((?!https?:|\/)[^"?]+\.(?:css|js))"/g, `$1="$2?v=${ver}"`);
+    res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }).send(html);
+  } catch (e) { res.sendFile(path.join(pub, 'index.html')); }
+};
+app.get(['/', '/index.html'], sendIndex);
 app.use(express.static(pub, { maxAge: 0, etag: true, setHeaders: (res, file) => { if (/[\\/]vendor[\\/]/.test(file)) res.setHeader('Cache-Control', 'public, max-age=604800'); else res.setHeader('Cache-Control', 'no-cache'); } }));
-app.get('*', (req, res) => res.sendFile(path.join(pub, 'index.html')));
+app.get('*', sendIndex);
 
 const server = app.listen(config.port, () => console.log(`🚀 نظام طلبات التأشيرات شغّال على بورت ${config.port}`));
 try { fs.mkdirSync(config.dataDir, { recursive: true }); } catch (e) { console.error('تعذر إنشاء فولدر البيانات:', e.message); }
