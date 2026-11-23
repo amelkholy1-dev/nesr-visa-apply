@@ -59,6 +59,7 @@
     if (!img) {
       capCard(`<b>${e(d.message || 'مقدرتش أجيب صورة الكابتشا من المنصة.')}</b><div class="row" style="margin-top:8px"><button class="btn" id="capOpen">افتح تبويب المنصة واكتب الكابتشا هناك</button><button class="btn" id="capRetry">جرّب تاني</button></div>`);
       $('#capOpen').onclick = () => visaCtl('open'); $('#capRetry').onclick = () => { const b = $('#visaLookup'); if (b) b.click(); };
+      if (d.empty) { const pb = document.createElement('button'); pb.className = 'btn'; pb.id = 'capPlus'; pb.type = 'button'; pb.textContent = 'جرّب برقم المستند (رقم التأشيرة + 1)'; pb.title = 'غالباً رقم المستند = رقم الصادر + 1 (مثلاً 1306025676 ← 1306025677)'; pb.onclick = () => { const b = $('#visaDocOnly'); if (b) b.dispatchEvent(new CustomEvent('plus1')); }; $('#capRetry').after(pb); }
       return;
     }
     const step = d.step === 2 ? 2 : 1;
@@ -638,17 +639,18 @@
         ${meta.groups.map((g) => `<h2 style="margin-top:14px">${e(g.title)}</h2><div class="grid">${g.fields.map((f) => fieldHtml(f, d[f.k])).join('')}${g.id === 'lookup' ? '<div class="f" style="align-self:end"><button class="btn pri" id="visaLookup" title="بيدوّر في المنصة من الخلفية وبيعرضلك الكابتشا هنا تكتبها، وبعدها تختار المهنة هنا">بحث وجلب المهن</button><button class="btn" id="visaDocOnly" type="button" style="margin-inline-start:6px" title="بيجيب نوع التأشيرة وعدد الدخول والمهنة من مستند التأشيرة بس (كابتشا واحدة)">مستند التأشيرة فقط</button></div>' : ''}</div>${g.id === 'lookup' ? '<div id="visaCapBox"></div><div id="visaInfoBox"></div><div id="visaDocBox"></div><div id="visaLog" class="muted small" style="margin-top:6px"></div>' : ''}`).join('')}
         <div class="row" style="margin-top:14px"><button class="btn pri" id="psave">حفظ</button><label><input type="checkbox" id="pdef"${p && p.isDefault ? ' checked' : ''}> الافتراضي</label>${p ? '<button class="btn danger" id="pdel" style="margin-inline-start:auto">حذف</button>' : ''}</div></div>`;
       $('#peditor').scrollIntoView({ behavior: 'smooth' });
-      const startLookup = async (mode) => {
+      const startLookup = async (mode, plus) => {
         const dd = collect($('#peditor'));
+        if (plus && /^\d+$/.test(dd.visaNumber)) dd.visaNumber = String(BigInt(dd.visaNumber) + 1n); /* تجربة رقم المستند: رقم الصادر + 1 (من غير ما نغيّر الخانة) */
         if (!dd.visaNumber || !dd.unifiedNumber) return toast('اكتب رقم التأشيرة والرقم الموحد الأول.', 'err');
         if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
         if (!extReady) return toast('إضافة Chrome مش متركّبة. من «الإضافة» نزّلها وركّبها الأول.', 'err');
         visaReset(); visaLogAdd(mode === 'doc' ? 'بدأ جلب مستند التأشيرة' : 'بدأ البحث');
         const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: { name: $('#pname').value, visaNumber: dd.visaNumber, unifiedNumber: dd.unifiedNumber, mode, embassy: dd.embassy } }, location.origin); setTimeout(() => res(false), 4000); });
-        if (ok) { visaLogAdd('الإضافة فتحت المنصة في الخلفية'); capWait(mode === 'doc' ? 'بنفتح استعلام مستند التأشيرة في الخلفية…' : 'بنفتح المنصة في الخلفية ونجيب الكابتشا…', 25000, 'مفيش كابتشا وصلت من المنصة خلال 25 ثانية. شوف السجل تحت، أو افتح تبويب المنصة.'); } else toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.9.2 أو أحدث).', 'err');
+        if (ok) { visaLogAdd('الإضافة فتحت المنصة في الخلفية'); capWait(mode === 'doc' ? 'بنفتح استعلام مستند التأشيرة في الخلفية…' : 'بنفتح المنصة في الخلفية ونجيب الكابتشا…', 25000, 'مفيش كابتشا وصلت من المنصة خلال 25 ثانية. شوف السجل تحت، أو افتح تبويب المنصة.'); } else toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.9.3 أو أحدث).', 'err');
       };
       $('#visaLookup').onclick = () => startLookup('');
-      $('#visaDocOnly').onclick = () => startLookup('doc');
+      $('#visaDocOnly').onclick = () => startLookup('doc'); $('#visaDocOnly').addEventListener('plus1', () => startLookup('doc', true));
       $('#psave').onclick = async () => { try { const body = { name: $('#pname').value, data: collect($('#peditor')), isDefault: $('#pdef') ? $('#pdef').checked : false }; if (p) await api('PUT', `/profiles/${p.id}`, body); else await api('POST', '/profiles', body); toast('اتحفظ', 'ok'); pageProfiles(); } catch (er) { fail(er); } };
       if (p) $('#pdel').onclick = async () => { if (!confirm('تحذف الملف؟')) return; try { await api('DELETE', `/profiles/${p.id}`); pageProfiles(); } catch (er) { fail(er); } };
     };

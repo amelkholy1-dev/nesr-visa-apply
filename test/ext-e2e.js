@@ -46,6 +46,7 @@ const WMOCK = `<script>
 const visaLookupFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-lookup.html'), 'utf8');
 const visaHomeFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-home.html'), 'utf8');
 const visaPrintFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-print.html'), 'utf8');
+const printEmptyFixture = visaPrintFixture.replace(/setTimeout\(function\(\)\{[\s\S]*?\}, 700\);/, () => 'document.getElementById("tb").innerHTML = \'<tr class="jtable-no-data-row"><td colspan="11">لا توجد بيانات!</td></tr>\';');
 const visaResultFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-result.html'), 'utf8');
 const labFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'lab-booking.html'), 'utf8');
 /* بيحاكي سلوك APEX في صفحة المعمل: الأقسام مخفية لحد اختيار نوع الجنسية، والرقم القومي بيحسب تاريخ الميلاد والجنس */
@@ -94,7 +95,7 @@ const MOFA = {
     if (/GetOccupationsByClassificationId/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(/jobClassificationId=832/.test(rq.url()) ? [{ Value: 8321, Text: 'سائق سيارة' }, { Value: 8322, Text: 'سائق حافلة' }] : [{ Value: 1431, Text: 'مدير فندق' }]) });
     if (/\/enjaz\/getvisainformation\/person/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaLookupFixture });
     if (/\/enjaz\/ViewVisaDetails\/person/i.test(rq.url())) { if (rq.method() === 'POST') { global.__visaPost = rq.postData() || ''; if (!/Captcha=123456/.test(global.__visaPost)) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaLookupFixture }); } return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaResultFixture }); }
-    if (/\/Home\/PrintVisa/i.test(rq.url())) { global.__printUrl = rq.url(); return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaPrintFixture }); }
+    if (/\/Home\/PrintVisa/i.test(rq.url())) { global.__printUrl = rq.url(); return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: global.__printEmpty ? printEmptyFixture : visaPrintFixture }); }
     if (global.__inquiry === 'broken' && /\/Home\/Index/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h1>صفحة غريبة</h1></body>' });
     if (global.__inquiry && /\/Home\/Index/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaHomeFixture });
     const html = (b) => r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body>' + b + '</body>' });
@@ -273,6 +274,15 @@ const MOFA = {
   await app.waitForFunction((n) => window.docs.length > n, nDocs, { timeout: 40000 });
   assert.ok(/t=2&n=1000000001/.test(global.__printUrl), 'اتبعت للمنصة: ' + global.__printUrl);
   await vp4.waitForEvent('close', { timeout: 15000 }).catch(() => {}); assert.ok(vp4.isClosed(), 'التبويب اتقفل بعد المستند');
+  /* سيناريو 13: مستند التأشيرة رجع من غير بيانات ← النظام بياخد السبب (نص الجدول) بدل ما يسكت */
+  global.__inquiry = true; global.__printEmpty = true;
+  const nCaps5 = await app.evaluate(() => window.caps.length);
+  const [vp5] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', mode: 'doc', embassy: '' })]);
+  await vp5.waitForTimeout(1500); await vp5.reload().catch(async () => { await vp5.waitForTimeout(2000); await vp5.reload(); });
+  await app.waitForFunction((n) => window.caps.length > n, nCaps5, { timeout: 40000 });
+  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '123456' } }, location.origin));
+  await app.waitForFunction(() => window.caps.some((c) => c.empty === true && /لا توجد بيانات/.test(c.message || '')), null, { timeout: 40000 });
+  global.__printEmpty = false;
   /* سيناريو 11: صفحة الاستعلام في المنصة مش زي المتوقع (تحويل/دخول…) ← النظام بيتقاله بدل ما يفضل مستني */
   global.__inquiry = 'broken';
   const nCaps3 = await app.evaluate(() => window.caps.length); const nVisa3 = await app.evaluate(() => window.visa.length);

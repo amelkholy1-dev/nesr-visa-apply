@@ -122,7 +122,7 @@
   }
 
   /* الخطوة 2: نتيجة «مستند تأشيرة»: نوع التأشيرة وعدد الدخول ومدة الإقامة والمهنة وجهة القدوم */
-  async function runDoc() {
+  async function runDoc(ctx) {
     bar('<span>🔎 بقرا مستند التأشيرة…</span>');
     await waitFor(() => document.querySelector('#gridDocumentVisaList tr.jtable-data-row, #gridDocumentVisaList tr.jtable-no-data-row'), 15000);
     const heads = [...document.querySelectorAll('#tblDocumentVisaList thead th')].map((th) => norm(th.textContent));
@@ -132,7 +132,16 @@
     /* رقم نوع التأشيرة بيتكتب في سكربت الصفحة: var VisaKindID = '13' (نفس أرقام قايمة «نوع التأشيرة» عندنا) */
     const m = /var\s+VisaKindID\s*=\s*'(\d+)'/.exec([...document.scripts].map((x) => x.textContent).join('\n'));
     const info = { docNumber: cut(labelValue('رقم المستند'), 20).replace(/\D/g, ''), docDate: cut(labelValue('تاريخ المستند'), 12), sponsorName: cut(labelValue('اسم الجهة الطالبة'), 100), visaKindId: m ? m[1] : '', rows };
-    if (!rows.length) { bar('<div>⚠️ مفيش بيانات في مستند التأشيرة. تأكد من رقم المستند ورقم السجل.</div>'); return; }
+    await send({ kind: 'visainfo-status', data: { text: 'قريت جدول المستند: ' + rows.length + ' صف' + (document.querySelector('#gridDocumentVisaList tr.jtable-no-data-row') ? ' (الجدول فاضي: ' + cut((document.querySelector('#gridDocumentVisaList tr.jtable-no-data-row') || {}).textContent, 60) + ')' : '') } });
+    if (!rows.length) {
+      /* بنقول للنظام السبب بنص المنصة بدل ما نسكت */
+      const dlg = [...document.querySelectorAll('.ui-dialog-content, #dlgMessageContent, .alert-danger, .field-validation-error')].map((x) => cut(x.textContent, 100)).filter(Boolean)[0] || '';
+      const gridTxt = cut((document.querySelector('#gridDocumentVisaList tr.jtable-no-data-row') || document.querySelector('#gridDocumentVisaList') || {}).textContent, 80);
+      const msg = 'مستند التأشيرة رجع من غير بيانات' + (gridTxt ? ' (الجدول: «' + gridTxt + '»)' : ' (الجدول ما اتحمّلش)') + (dlg ? ' — المنصة قالت: ' + dlg : '') + '.';
+      bar('<div>⚠️ ' + esc(msg) + '</div>');
+      await send({ kind: 'visainfo-captcha', data: { step: 2, only: ctx.mode === 'doc', image: '', error: true, empty: true, message: msg } });
+      return;
+    }
     const r = await send({ kind: 'visainfo-doc', data: info });
     bar('<div><b>' + (r && r.ok ? '✅ بيانات المستند اتبعتت لملف الضبط' : '⚠️ مقدرتش أرجّع بيانات المستند') + '</b></div>' + (r && r.ok ? '' : '<div>' + esc((r && r.error) || 'جرّب تاني') + '</div>') + '<ul style="margin:4px 18px;padding:0">' + rows.map((x) => '<li>' + esc(x.visaKind) + ' — ' + esc(x.job) + ' — ' + esc(x.embassy) + ' — ' + esc(x.entries) + (x.residence ? ' — ' + esc(x.residence) + ' يوم' : '') + '</li>').join('') + '</ul>');
   }
@@ -150,7 +159,7 @@
       if (!(await waitFor(want, 12000))) { await status('الصفحة مش اللي متوقعينها'); await tell('صفحة المنصة مش زي المتوقع (' + location.pathname + '). افتح تبويب المنصة وشوف إيه اللي ظاهر.'); return; }
       await status('الصفحة ظاهرة زي المتوقع، بجيب الكابتشا…');
       if (phase === 'enjaz') { if (isEnjazSearch()) await runSearch(ctx); else await runResult(); }
-      else if (isHomeSearch()) await runHomeSearch(ctx); else await runDoc();
+      else if (isHomeSearch()) await runHomeSearch(ctx); else await runDoc(ctx);
     } catch (e) { await tell('حصل خطأ في الإضافة: ' + String(e && e.message || e).slice(0, 120)); }
   })();
 })();
