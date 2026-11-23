@@ -95,6 +95,7 @@ const MOFA = {
     if (/\/enjaz\/getvisainformation\/person/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaLookupFixture });
     if (/\/enjaz\/ViewVisaDetails\/person/i.test(rq.url())) { if (rq.method() === 'POST') { global.__visaPost = rq.postData() || ''; if (!/Captcha=123456/.test(global.__visaPost)) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaLookupFixture }); } return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaResultFixture }); }
     if (/\/Home\/PrintVisa/i.test(rq.url())) { global.__printUrl = rq.url(); return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaPrintFixture }); }
+    if (global.__inquiry === 'broken' && /\/Home\/Index/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h1>صفحة غريبة</h1></body>' });
     if (global.__inquiry && /\/Home\/Index/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaHomeFixture });
     const html = (b) => r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body>' + b + '</body>' });
     if (/\/Account\/Login/i.test(rq.url())) return html('<h2>دخول الشركات</h2><input id="user"><input id="pw" type="password">');
@@ -261,6 +262,15 @@ const MOFA = {
   assert.deepStrictEqual(doc.rows, [{ visaKind: 'عمل موسمي', embassy: 'السويس', gender: 'ذكر', nationality: 'مصر', job: 'سائق حافلة', entries: 'سفرة واحدة', residence: '90' }], 'صف مستند التأشيرة');
   assert.ok(/t=2&n=1000000002&s=7000000001/.test(global.__printUrl), 'اتبعت للمنصة: ' + global.__printUrl);
   await vpage.waitForEvent('close', { timeout: 15000 }).catch(() => {}); assert.ok(vpage.isClosed(), 'تبويب المنصة اتقفل لوحده');
+  /* سيناريو 11: صفحة الاستعلام في المنصة مش زي المتوقع (تحويل/دخول…) ← النظام بيتقاله بدل ما يفضل مستني */
+  global.__inquiry = 'broken';
+  const nCaps3 = await app.evaluate(() => window.caps.length); const nVisa3 = await app.evaluate(() => window.visa.length);
+  const [vp3] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', embassy: '' })]);
+  await vp3.waitForTimeout(1500); await vp3.reload().catch(async () => { await vp3.waitForTimeout(2000); await vp3.reload(); });
+  await app.waitForFunction((n) => window.caps.length > n, nCaps3, { timeout: 40000 });
+  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '123456' } }, location.origin));
+  await app.waitForFunction((n) => window.visa.length > n, nVisa3, { timeout: 40000 });
+  await app.waitForFunction(() => window.caps.some((c) => c.step === 2 && c.image === '' && /Home\/Index/.test(c.message || '')), null, { timeout: 40000 });
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

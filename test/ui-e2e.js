@@ -114,7 +114,7 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.click('input[name=visaPickRow][value="0"]'); await page.click('#visaPick');
     assert.deepStrictEqual(await page.evaluate(() => ['jobText', 'embassy'].map((k) => document.querySelector('#peditor [data-k=' + k + ']').value)), ['سائق حافلة', '320']);
     /* الخطوة 2 (مستند التأشيرة): بتملا نوع التأشيرة وعدد الدخول ومدة الإقامة */
-    await page.evaluate(() => window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_VISAINFO_DOC', data: { docNumber: '1000000002', docDate: '1447/09/25', sponsorName: 'شركة تجربة للنقل', visaKindId: '13', rows: [{ visaKind: 'عمل موسمي', embassy: 'السويس', gender: 'ذكر', nationality: 'مصر', job: 'سائق حافلة', entries: 'سفرة واحدة', residence: '90' }] } }, location.origin));
+    await page.evaluate(() => window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_VISAINFO_DOC', data: { docNumber: '1000000002', docDate: '1447/09/25', sponsorName: 'شركة تجربة للنقل', visaKindId: '', rows: [{ visaKind: 'عمل موسمي', embassy: 'السويس', gender: 'ذكر', nationality: 'مصر', job: 'سائق حافلة', entries: 'سفرة واحدة', residence: '90' }] } }, location.origin));
     await page.waitForFunction(() => document.querySelector('#peditor [data-k=visaKind]').value === '13');
     assert.deepStrictEqual(await page.evaluate(() => ['entriesText', 'residence', 'nationality'].map((k) => document.querySelector('#peditor [data-k=' + k + ']').value)), ['سفرة واحدة', '90', 'EGY'], 'عدد الدخول ومدة الإقامة والجنسية من المستند');
     assert.ok((await page.textContent('#visaDocBox')).includes('نوع التأشيرة'), 'ملخص المستند');

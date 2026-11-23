@@ -49,7 +49,7 @@
   let capTimer = null;
   const visaCtl = (op, captcha) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op, captcha: captcha || '' } }, location.origin);
   const capCard = (html) => { const b = $('#visaCapBox'); if (b) b.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8;margin-top:8px">${html}</div>`; };
-  const capWait = (msg, ms) => { clearTimeout(capTimer); capCard(`<b>${e(msg)}</b>`); capTimer = setTimeout(() => onVisaCaptcha({ message: 'المنصة اتأخرت في الرد.' }), ms || 30000); };
+  const capWait = (msg, ms, late) => { clearTimeout(capTimer); capCard(`<b>${e(msg)}</b>`); capTimer = setTimeout(() => onVisaCaptcha({ message: late || 'المنصة اتأخرت في الرد.' }), ms || 30000); };
   function onVisaCaptcha(d) {
     clearTimeout(capTimer); if (!$('#visaCapBox')) return;
     const img = typeof d.image === 'string' && d.image.startsWith('data:image/png;base64,') ? d.image : '';
@@ -87,7 +87,7 @@
     box.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8;margin-top:8px"><b>بيانات التأشيرة من المنصة${d.visaDate ? ' (تاريخ التأشيرة ' + e(d.visaDate) + ')' : ''}</b>
       <div class="muted small">${done.length ? 'اتملّى في الملف: ' + e(done.join('، ')) : 'مفيش بيانات جديدة اتملّت'}</div>
       ${rows.length ? `<h3 style="margin:10px 0 4px">اختار التفويض / المهنة</h3><div style="overflow:auto"><table><thead><tr><th></th><th>رقم التفويض</th><th>جهة القدوم</th><th>عدد الأشخاص</th><th>المهنة</th><th>المتبقي</th><th>اسم الوكالة</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td><input type="radio" name="visaPickRow" value="${i}"${rows.length === 1 ? ' checked' : ''}></td><td dir="ltr" style="text-align:right">${e(r.number)}</td><td>${e(r.embassy)}</td><td>${e(r.count)}</td><td><b>${e(r.job)}</b></td><td>${rem(r)}</td><td>${e(r.agency)}</td></tr>`).join('')}</tbody></table></div>
-      <div class="row" style="margin-top:8px"><button class="btn pri" id="visaPick">موافق</button><span class="muted small">بيحط المهنة (والممثلية) في الملف</span></div>` : '<div style="margin-top:6px">مفيش تفاويض ولا مهن في النتيجة: اكتب المهنة بإيدك.</div>'}
+      <div class="row" style="margin-top:8px"><button class="btn pri" id="visaPick">موافق</button><span class="muted small">بيحط المهنة (والممثلية) في الملف</span></div>` : '<div style="margin-top:6px">مفيش تفاويض ولا مهن في النتيجة: اكتب المهنة بإيدك. (لو الرقم اللي في «رقم التأشيرة» هو <b>رقم المستند</b>، اكتب هنا <b>رقم الصادر</b> وحط رقم المستند في الخانة اللي جنبه.)</div>'}
       <div class="muted small" style="margin-top:6px">الصفحة دي مفيهاش: نوع التأشيرة، عدد الدخول، الصلاحية، مدة الإقامة، عنوان وهاتف الجهة، وسيلة الوصول والمنفذ وتاريخ الدخول، والقيم الافتراضية للأشخاص. كمّلهم بإيدك، ودوس <b>حفظ</b> بعد المراجعة.</div></div>`;
     const apply = (r) => {
       const ok = [];
@@ -100,7 +100,7 @@
     const pk = $('#visaPick');
     if (pk) pk.onclick = () => { const c = box.querySelector('input[name=visaPickRow]:checked'); if (!c) return toast('اختار صف الأول', 'err'); const ok = apply(rows[Number(c.value)]); toast(ok.length ? 'اتحطّت: ' + ok.join('، ') + '. دوس حفظ بعد المراجعة' : 'ماحطّيتش حاجة', ok.length ? 'ok' : 'err'); };
     toast(rows.length > 1 ? 'اتجابت البيانات: اختار التفويض/المهنة وادوس موافق' : 'اتملّت بيانات التأشيرة في الملف: راجعها ودوس حفظ', 'ok');
-    capWait('الخطوة 2 من 2: بنفتح استعلام مستند التأشيرة…', 30000); /* الإضافة بتكمّل في نفس التبويب الخلفي */
+    capWait('الخطوة 2 من 2: بنفتح استعلام مستند التأشيرة…', 40000, 'الخطوة 2 (مستند التأشيرة) ما ردّتش. افتح تبويب المنصة وشوف إيه اللي ظاهر.'); /* الإضافة بتكمّل في نفس التبويب الخلفي */
   }
   /* الخطوة 2: «مستند تأشيرة»: نوع التأشيرة، عدد الدخول، مدة الإقامة، المهنة، جهة القدوم */
   function onVisaDoc(d) {
@@ -110,8 +110,10 @@
     const put = (k, v) => { const el = has(k); if (!el || !v) return false; if (el.tagName === 'SELECT' && ![...el.options].some((o) => o.value === String(v))) return false; el.value = v; return true; };
     const rows = d.rows || []; const uniq = (k) => [...new Set(rows.map((r) => r[k]).filter(Boolean))];
     const done = [], skipped = [];
-    const kind = (opt('visaKind').find((o) => o.v === String(d.visaKindId)) || {}).t;
-    if (put('visaKind', d.visaKindId)) done.push('نوع التأشيرة (' + (kind || d.visaKindId) + ')'); else skipped.push('نوع التأشيرة' + (rows[0] && rows[0].visaKind ? ' («' + rows[0].visaKind + '» مش في القايمة)' : ''));
+    /* «عمل موسمي» في المستند = «تأشيرة العمل المؤقت لخدمات الحج والعمرة» عندنا (13) */
+    const kindId = rows.some((r) => /موسمي/.test(r.visaKind)) ? '13' : String(d.visaKindId || '');
+    const kind = (opt('visaKind').find((o) => o.v === kindId) || {}).t;
+    if (put('visaKind', kindId)) done.push('نوع التأشيرة (' + (kind || kindId) + ')'); else skipped.push('نوع التأشيرة' + (rows[0] && rows[0].visaKind ? ' («' + rows[0].visaKind + '» مش في القايمة)' : ''));
     const ent = uniq('entries'); if (ent.length === 1 && put('entriesText', ent[0])) done.push('عدد الدخول (' + ent[0] + ')'); else if (ent.length > 1) skipped.push('عدد الدخول (فيه أكتر من قيمة: ' + ent.join('، ') + ')');
     const res = uniq('residence'); if (res.length === 1 && put('residence', res[0])) done.push('مدة الإقامة (' + res[0] + ')'); else if (!res.length) skipped.push('مدة الإقامة (فاضية في المستند)');
     if (rows.some((r) => /مصر/.test(r.nationality)) && put('nationality', 'EGY')) done.push('الجنسية (مصر)');
@@ -638,7 +640,7 @@
         if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
         if (!extReady) return toast('إضافة Chrome مش متركّبة. من «الإضافة» نزّلها وركّبها الأول.', 'err');
         const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: { name: $('#pname').value, visaNumber: dd.visaNumber, unifiedNumber: dd.unifiedNumber, docNumber: dd.docNumber, embassy: dd.embassy } }, location.origin); setTimeout(() => res(false), 4000); });
-        if (ok) capWait('بنفتح المنصة في الخلفية ونجيب الكابتشا…', 25000); else toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.9.0 أو أحدث).', 'err');
+        if (ok) capWait('بنفتح المنصة في الخلفية ونجيب الكابتشا…', 25000); else toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.9.1 أو أحدث).', 'err');
       };
       $('#psave').onclick = async () => { try { const body = { name: $('#pname').value, data: collect($('#peditor')), isDefault: $('#pdef') ? $('#pdef').checked : false }; if (p) await api('PUT', `/profiles/${p.id}`, body); else await api('POST', '/profiles', body); toast('اتحفظ', 'ok'); pageProfiles(); } catch (er) { fail(er); } };
       if (p) $('#pdel').onclick = async () => { if (!confirm('تحذف الملف؟')) return; try { await api('DELETE', `/profiles/${p.id}`); pageProfiles(); } catch (er) { fail(er); } };

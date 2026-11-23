@@ -10,7 +10,6 @@
   const isHomeSearch = () => !!byId('SearchingType') && !!byId('btnSearch') && !!byId('SponserID') && !byId('VisaNumber'); /* الخطوة 2: استعلام مستند التأشيرة (الصفحة الرئيسية) */
   const isDocResult = () => !!byId('gridDocumentVisaList');                           /* الخطوة 2: «مستند تأشيرة» (PrintVisa) */
   const isSearch = () => isEnjazSearch() || isHomeSearch();
-  if (!isSearch() && !isEnjazResult() && !isDocResult()) return;
   const send = (msg) => new Promise((res) => { try { chrome.runtime.sendMessage(msg, (r) => res(r || {})); } catch (e) { res({}); } });
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -141,7 +140,14 @@
   (async function run() {
     const { ctx } = await send({ kind: 'get-visainfo-ctx' }); if (!ctx) return;
     const phase = ctx.phase === 'inquiry' ? 'inquiry' : 'enjaz'; /* inquiry = الخطوة 2 */
-    if (phase === 'enjaz') { if (isEnjazSearch()) await runSearch(ctx); else if (isEnjazResult()) await runResult(); }
-    else if (isHomeSearch()) await runHomeSearch(ctx); else if (isDocResult()) await runDoc();
+    const step = phase === 'inquiry' ? 2 : 1;
+    /* لو الصفحة مش اللي متوقعينها (دخول، تحويل، تغيير في المنصة…): بنقول للنظام بدل ما يفضل مستني */
+    const tell = (message) => send({ kind: 'visainfo-captcha', data: { step, image: '', error: true, message } });
+    try {
+      const want = phase === 'enjaz' ? () => isEnjazSearch() || isEnjazResult() : () => isHomeSearch() || isDocResult();
+      if (!(await waitFor(want, 12000))) { await tell('صفحة المنصة مش زي المتوقع (' + location.pathname + '). افتح تبويب المنصة وشوف إيه اللي ظاهر.'); return; }
+      if (phase === 'enjaz') { if (isEnjazSearch()) await runSearch(ctx); else await runResult(); }
+      else if (isHomeSearch()) await runHomeSearch(ctx); else await runDoc();
+    } catch (e) { await tell('حصل خطأ في الإضافة: ' + String(e && e.message || e).slice(0, 120)); }
   })();
 })();
