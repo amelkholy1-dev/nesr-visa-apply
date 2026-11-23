@@ -91,7 +91,7 @@
     const remainingOf = (job, emb) => { const j = (d.jobs || []).find((x) => x.job === job && (!emb || x.embassy === emb)) || (d.jobs || []).find((x) => x.job === job); return j ? j.remaining : ''; };
     const rows = ((d.delegations || []).length ? d.delegations.map((x) => ({ number: x.number, embassy: x.embassy, count: x.count, job: x.job, agency: x.agencyName, agencyNumber: x.agencyNumber })) : (d.jobs || []).map((j) => ({ number: '', embassy: j.embassy, count: j.count, job: j.job, agency: '' })));
     const box = $('#visaInfoBox'); if (!box) return;
-    const rem = (r) => { const m = remainingOf(r.job, r.embassy); return m === '' ? '' : `${e(m)}${m === '0' ? ' ⚠️' : ''}`; };
+    const rem = (r) => { const m = remainingOf(r.job, r.embassy); return m === '' ? '' : `${e(m)}${m === '0' ? '' : ''}`; };
     box.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8;margin-top:8px"><b>بيانات التأشيرة من المنصة${d.visaDate ? ' (تاريخ التأشيرة ' + e(d.visaDate) + ')' : ''}</b>
       <div class="muted small">${done.length ? 'اتملّى في الملف: ' + e(done.join('، ')) : 'مفيش بيانات جديدة اتملّت'}</div>
       ${rows.length ? `<h3 style="margin:10px 0 4px">اختار التفويض / المهنة</h3><div style="overflow:auto"><table><thead><tr><th></th><th>رقم التفويض</th><th>جهة القدوم</th><th>عدد الأشخاص</th><th>المهنة</th><th>المتبقي</th><th>اسم الوكالة</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td><input type="radio" name="visaPickRow" value="${i}"${rows.length === 1 ? ' checked' : ''}></td><td dir="ltr" style="text-align:right">${e(r.number)}</td><td>${e(r.embassy)}</td><td>${e(r.count)}</td><td><b>${e(r.job)}</b></td><td>${rem(r)}</td><td>${e(r.agency)}</td></tr>`).join('')}</tbody></table></div>
@@ -168,6 +168,15 @@
     } catch (er) { fail(er); }
   }
 
+  /* خطاب الترشيح (Word): بيفحص الناقص الأول وبيسأل قبل التحميل */
+  async function letterDownload(id, kind) {
+    try {
+      const c = await api('GET', `/people/${id}/letter/${kind}?check=1`);
+      const warn = [...(c.hints && c.hints.length ? c.hints : (c.issues || []).map((x) => x + ' (ناقص)')), ...(c.warns || []), ...(c.hasPhoto ? [] : ['الصورة الشخصية ناقصة: الخطاب هيطلع من غير صورة'])];
+      if (warn.length && !confirm('الخطاب هيطلع ناقص:\n- ' + warn.join('\n- ') + '\n\nتحمّله كده؟ (دوس إلغاء، كمّل البيانات، وجرّب تاني)')) return;
+      window.location.href = `/api/people/${id}/letter/${kind}`; toast('بيتحمّل خطاب الترشيح (Word)…', 'ok');
+    } catch (er) { fail(er); }
+  }
   /* ===== أدوات ===== */
   const opt = (name) => (meta.options[name] || []);
   const optText = (name, v) => { const o = opt(name).find((x) => String(x.v) === String(v)); return o ? o.t : v || ''; };
@@ -177,10 +186,11 @@
   const TAGN = { mofa: 'منصة', wafid: 'وافد', lab: 'معمل', letter: 'خطاب', tash: 'تساهيل' };
   function fieldHtml(f, val, ph) {
     const uses = (meta.uses && meta.uses[f.k]) || [];
-    const label = `${e(f.label)}${f.req ? ' <span class="req">*</span>' : ''}${f.max ? ` <span class="hint">(حد ${f.max})</span>` : ''}${uses.length ? `<span class="tags">${uses.map((t) => `<i class="tag ${t}" title="بتتستخدم في: ${TAGN[t]}">${TAGN[t]}</i>`).join('')}</span>` : ''}`;
+    const label = `${e(f.label)}${f.req ? ' <span class="req">*</span>' : ''}${f.max ? ` <span class="hint">(حد ${f.max})</span>` : ''}${uses.filter((t) => TAGN[t]).length ? `<span class="tags">${uses.filter((t) => TAGN[t]).map((t) => `<i class="tag ${t}" title="بتتستخدم في: ${TAGN[t]}">${TAGN[t]}</i>`).join('')}</span>` : ''}`;
     let inner;
     if (f.type === 'select') inner = selectHtml(f.opt, f.k, val, ph ? 'من ملف الضبط: ' + optText(f.opt, ph) : '');
     else if (f.type === 'date') inner = `<input type="date" data-k="${f.k}" value="${e(val || '')}">`;
+    else if (f.type === 'number') inner = `<input type="number" min="0" step="any" inputmode="decimal" data-k="${f.k}" value="${e(val || '')}"${ph ? ` placeholder="${e(ph)}"` : f.hint ? ` placeholder="${e(f.hint)}"` : ''}>`;
     else inner = `<input type="text" data-k="${f.k}" value="${e(val || '')}"${f.max ? ` maxlength="${f.max + 30}"` : ''}${f.ltr ? ' class="ltr"' : ''}${ph ? ` placeholder="${e(ph)}"` : f.hint ? ` placeholder="${e(f.hint)}"` : ''}>`;
     return `<label class="f">${label}${inner}<span class="over" data-over="${f.k}"></span></label>`;
   }
@@ -188,6 +198,11 @@
   const splitArabic = (full) => { const w = String(full || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean); if (!w.length) return {}; if (w.length === 1) return { first: w[0] }; if (w.length === 2) return { first: w[0], family: w[1] }; if (w.length === 3) return { first: w[0], father: w[1], family: w[2] }; return { first: w[0], father: w[1], grand: w.slice(2, -1).join(' '), family: w[w.length - 1] }; };
   const fmtDate = (d) => { try { return d ? new Date(d).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : ''; } catch (x) { return ''; } };
 
+  /* الصورة الشخصية: لو «معالجة الصورة» شغّالة (من الإعدادات) بتتحط على خلفية بيضاء وبيتشال التشويش، وبعدها بتتصغّر تحت 1 ميجا */
+  async function preparePhoto(file) {
+    if (meta.photoProcess === 'clean' && file.type !== 'application/pdf') { try { const r = await NA.photo.clean(file); toast(r.note, r.applied ? 'ok' : ''); file = r.blob; } catch (er) { toast('معالجة الصورة فشلت (' + er.message + '): هرفعها زي ما هي', 'err'); } }
+    return compress(file, 1048576, 900);
+  }
   /* ضغط الصورة قبل الرفع: الشخصية أقل من 1 ميجا (شرط المنصة) */
   async function compress(file, maxBytes, maxSide) {
     if (file.type === 'application/pdf') return file;
@@ -212,7 +227,7 @@
     $('#top').hidden = true; document.body.classList.remove('app');
     const br = await fetch('/api/brand').then((r) => r.json()).catch(() => ({}));
     document.title = (br.brand || 'إنجاز') + ' — ' + (br.tag || 'نظام إدارة التأشيرات');
-    view.innerHTML = `<div class="login-wrap"><div class="login-card"><div class="lg"><svg viewBox="0 0 48 48" width="46" height="46"><path d="M3 24C9 13 16 8 24 8s15 5 21 16c-6 11-13 16-21 16S9 35 3 24z" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/><circle cx="24" cy="24" r="9.5" fill="#e0b24a"/><circle cx="24" cy="24" r="4.4" fill="#0f3438"/><path d="M33 14l6-6M40 12l-4-4" stroke="#e0b24a" stroke-width="2.2" stroke-linecap="round"/></svg></div>
+    view.innerHTML = `<div class="login-wrap"><div class="login-card">
       <h1>${e(br.brand || 'إنجاز')}</h1><span class="tag">${e(br.tag || 'نظام إدارة التأشيرات')}</span>
       <label class="f">اسم المستخدم<input id="u" autocomplete="username"></label><br>
       <label class="f">كلمة السر<input id="p" type="password" autocomplete="current-password"></label><br>
@@ -284,25 +299,37 @@
     if (!isNew) { const r = await api('GET', `/people/${id}`); person = r.person; data = r.person.data; profileId = r.person.profileId || ''; resolved = r.resolved; }
     const profileData = () => (profs.profiles.find((p) => String(p.id) === String(profileId)) || { data: {} }).data;
     const stamp = Date.now(); const pv = { z: 1 };
-    const stagesHtml = () => {
-      if (isNew || !meta.stages) return '';
-      const st = person.stages || {};
-      return `<div class="card"><h2>مراحل الطلب</h2><div class="stages">${meta.stages.map((x) => { const c = st[x.k] || { state: '', date: '', note: '' };
-        return `<div class="stg" data-stage="${x.k}"><b>${e(x.label)}</b><select class="stS">${['', ...(x.booking ? ['booked'] : []), 'done'].map((v) => `<option value="${v}"${c.state === v ? ' selected' : ''}>${STATE_AR[v]}</option>`).join('')}</select><input type="date" class="stD" value="${e(c.date || '')}"><input class="stN" placeholder="ملاحظة (مكان / رقم / …)" value="${e(c.note || '')}">
-          ${x.k === 'sent' ? `<div class="stX small">رقم الطلب: <b dir="ltr">${e(person.appNumber || '—')}</b> <input id="appNo" placeholder="E123456789" dir="ltr"> <button class="btn small" id="appNoBtn">سجّل رقم الطلب</button> ${can('people.fill') ? '<button class="btn small pri" id="appNoFetch" type="button" title="يفتح «البحث عن طلب مقدم» في المنصة ويجيب رقم الطلب (إنجاز) بعد ما تكتب الكابتشا">هات رقم إنجاز من المنصة</button>' : ''}${(c.history || []).length ? `<div class="muted">أرقام سابقة (قبل إعادة الإرسال): ${c.history.map((h) => `<span dir="ltr">${e(h.app)}</span>`).join('، ')}</div>` : ''}</div>` : ''}</div>`; }).join('')}</div></div>`;
+    const allFields = meta.groups.flatMap((g) => g.fields);
+    const bothFields = allFields.filter((f) => f.scope === 'both'); const profFields = allFields.filter((f) => f.scope === 'profile');
+    const tabOfK = (k) => (meta.tabOf || {})[k] || 'personal';
+    const TABS = meta.tabs.filter((t) => !(t.id === 'accounts' && (isNew || !can('payments.view'))));
+    let curTab = 'personal'; try { curTab = sessionStorage.getItem('personTab') || 'personal'; } catch (x) { /* مش مهم */ } if (!TABS.some((t) => t.id === curTab)) curTab = 'personal';
+    const SVC_OF = { visa: ['mofa'], wafid: ['wafid'], lab: ['lab'], letters: ['suez', 'cairo'] };
+    const STAGE_OF = { visa: 'sent', wafid: 'medical', lab: 'lab', letters: 'letter' };
+    const missOf = (tab) => [...new Set((SVC_OF[tab] || []).flatMap((k) => ((person && person.service) || {})[k] || []))];
+    /* صف مرحلة واحدة (لسه / محجوز / تم + تاريخ + ملاحظة) جوه تبويب الخدمة بتاعتها */
+    const stageRow = (k) => {
+      const x = (meta.stages || []).find((z) => z.k === k); if (!x || isNew) return '';
+      const c = ((person.stages || {})[k]) || { state: '', date: '', note: '' };
+      return `<div class="stg" data-stage="${x.k}"><b>حالة الإجراء</b><select class="stS">${['', ...(x.booking ? ['booked'] : []), 'done'].map((v) => `<option value="${v}"${c.state === v ? ' selected' : ''}>${STATE_AR[v]}</option>`).join('')}</select><input type="date" class="stD" value="${e(c.date || '')}"><input class="stN" placeholder="ملاحظة (مكان / رقم / …)" value="${e(c.note || '')}">
+        ${x.k === 'sent' ? `<div class="stX small">رقم الطلب (إنجاز): <b dir="ltr">${e(person.appNumber || '—')}</b>${person.stages && person.stages.sent && person.stages.sent.appDate ? ` <span class="muted">(تاريخ الطلب ${e(person.stages.sent.appDate)})</span>` : ''} <input id="appNo" placeholder="E123456789" dir="ltr"> <button class="btn small" id="appNoBtn">سجّل الرقم</button> ${can('people.fill') ? '<button class="btn small pri" id="appNoFetch" type="button" title="يفتح «البحث عن طلب مقدم» في المنصة بنوع تأشيرة الشخص ويجيب أحدث رقم طلب بعد ما تكتب الكابتشا">هات رقم إنجاز من المنصة</button>' : ''}${(c.history || []).length ? `<div class="muted">أرقام سابقة (قبل إعادة الإرسال): ${c.history.map((h) => `<span dir="ltr">${e(h.app)}</span>`).join('، ')}</div>` : ''}</div>` : ''}</div>`;
     };
-    const servicesHtml = () => {
-      if (isNew) return '';
-      const sv = person.service || {}; const can2 = (p2) => can(p2);
-      const rows = [
-        ['mofa', 'منصة التأشيرات', can2('people.fill') ? '<button class="btn small pri" id="fill" title="يفتح منصة التأشيرات ويملا الطلب">املى الطلب</button>' : ''],
-        ['wafid', 'الفحص الطبي (وافد)', can2('people.fill') ? '<button class="btn small" id="wafid" title="يفتح وافد ويملا فورم الحجز">احجز الفحص</button>' : ''],
-        ['lab', 'المعمل (معامل الصحة العامة)', can2('people.fill') ? '<button class="btn small" id="lab" title="يفتح موقع المعامل ويملا فورم الحجز">احجز المعمل</button>' : ''],
-        ['suez', 'خطاب ترشيح — السويس', can2('people.fill') ? '<button class="btn small" id="letSuez" title="يحمّل خطاب Word بنفس تنسيق نموذج المكتب">حمّل الخطاب</button>' : ''],
-        ['cairo', 'خطاب ترشيح — القاهرة', can2('people.fill') ? '<button class="btn small" id="letCairo" title="يحمّل استمارة Word بنفس تنسيق نموذج المكتب">حمّل الخطاب</button>' : '']
-      ];
-      return `<div class="card"><h2>الخدمات والإجراءات</h2><div class="muted small" style="margin-bottom:6px">كل خدمة بتاخد بياناتها من نفس الملف: لو فيه ناقص هتشوفه هنا قبل ما تبدأ.</div>${rows.map(([k, label, btn]) => { const m = sv[k] || []; return `<div class="svcard"><span class="sn">${e(label)}</span>${m.length ? `<span class="chip bad">ناقص ${m.length}</span>` : '<span class="chip ok">جاهز ✓</span>'}<span class="miss">${m.length ? e(m.slice(0, 4).join('، ') + (m.length > 4 ? ' … +' + (m.length - 4) : '')) : ''}</span><span class="ac">${btn}</span></div>`; }).join('')}</div>`;
+    /* رأس تبويب الخدمة: الجاهزية + الناقص + الأزرار + مرحلة الإجراء */
+    const svcHead = (tab, title, actions, note) => {
+      if (isNew) return `<div class="card muted small">${e(title)}: احفظ الشخص الأول عشان تظهر الأزرار وحالة الإجراء.</div>`;
+      const miss = missOf(tab);
+      return `<div class="card svh"><div class="svh-top"><div class="svh-t"><h2>${e(title)}</h2><span class="chip ${miss.length ? 'bad' : 'ok'}">${miss.length ? 'ناقص ' + miss.length : 'البيانات كاملة'}</span></div><div class="svh-act">${can('people.fill') ? actions : ''}</div></div>
+        ${miss.length ? `<div class="miss-list"><b>ناقص:</b> ${miss.map(e).join('، ')}</div>` : ''}${note ? `<div class="muted small" style="margin-top:6px">${note}</div>` : ''}${stageRow(STAGE_OF[tab])}</div>`;
     };
+    /* بيانات جاية من الدفعة (قراءة بس) */
+    const summaryCard = (title, keys) => {
+      const pd = profileData(); const fs = keys.map((k) => allFields.find((f) => f.k === k)).filter(Boolean);
+      const val = (f) => (f.type === 'select' ? (pd[f.k] ? optText(f.opt, pd[f.k]) : '') : (pd[f.k] || ''));
+      return `<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h2 style="flex:1;margin:0">${e(title)}</h2>${profileId ? `<a class="btn small" href="#/profiles/${profileId}" style="text-decoration:none">تعديل في الدفعة</a>` : ''}</div>
+        <div class="kv">${fs.map((f) => `<div><span>${e(f.label.replace(/\s*\(.*$/, ''))}</span><b${f.ltr ? ' dir="ltr"' : ''}>${val(f) ? e(val(f)) : '<i class="muted">—</i>'}</b></div>`).join('')}</div></div>`;
+    };
+    const fieldsCard = (title, fs, hint) => (fs.length ? `<div class="card"><h2>${e(title)}</h2>${hint ? `<div class="muted small" style="margin:-6px 0 10px">${hint}</div>` : ''}<div class="grid">${fs.map((f) => fieldHtml(f, data[f.k], profileData()[f.k] || '')).join('')}</div></div>` : '');
+    const tabBtn = (t) => { const m = SVC_OF[t.id] && !isNew ? missOf(t.id) : null; return `<button type="button" class="tabb${t.id === curTab ? ' on' : ''}" data-tab="${t.id}">${e(t.title)}${m ? `<span class="tbadge ${m.length ? 'bad' : 'ok'}">${m.length ? 'ناقص ' + m.length : 'جاهز'}</span>` : ''}</button>`; };
     const sideHtml = () => {
       const src = pending.passport ? { url: objUrl(pending.passport), pdf: pending.passport.type === 'application/pdf' } : (!isNew && person.hasPassport ? { url: `/api/people/${id}/file/passport?t=${stamp}`, pdf: false } : null);
       const photoSrc = pending.photo ? objUrl(pending.photo) : (!isNew && person.hasPhoto ? `/api/people/${id}/file/photo?t=${stamp}` : '');
@@ -328,35 +355,49 @@
     const draw = () => {
       const pd = profileData();
       const personFields = meta.personGroups.map((g) => `<div class="card"><h2>${e(g.title)}</h2><div class="grid">${g.fields.map((f) => fieldHtml(f, data[f.k], f.k.startsWith('nameAr') && f.k !== 'nameAr' ? (splitArabic(data.nameAr)[{ nameArFirst: 'first', nameArFather: 'father', nameArGrand: 'grand', nameArFamily: 'family' }[f.k]] || '') : '')).join('')}</div></div>`).join('');
-      const inherit = meta.groups.flatMap((g) => g.fields).filter((f) => f.scope === 'both');
-      view.innerHTML = `<h1>${isNew ? 'شخص جديد' : e(data.nameAr || 'شخص') + ' <span class="pill ' + ((STATUS[person.status] || [0, ''])[1]) + '">' + e((STATUS[person.status] || [person.status])[0]) + '</span>'}</h1>
-      <div class="split"><div class="main">
-      <div class="card"><div class="row"><label class="f" style="min-width:260px">ملف الضبط (جهة العمل ونوع التأشيرة…)
-        <select id="prof"><option value="">— من غير —</option>${profs.profiles.map((p) => `<option value="${p.id}"${String(p.id) === String(profileId) ? ' selected' : ''}>${e(p.name)}</option>`).join('')}</select></label>
-        ${isNew ? '' : `<label class="f" style="min-width:200px">الحالة
-        <select id="stSel">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${person.status === k ? ' selected' : ''}>${e(v[0])}</option>`).join('')}</select></label>`}
-        <a href="#/profiles" class="small">إدارة ملفات الضبط</a></div></div>
-      ${servicesHtml()}
-      ${stagesHtml()}
-      ${isNew ? '' : '<div class="card"><div class="legend-tags"><b>علامات الخانات:</b> <i class="tag mofa">منصة</i> <i class="tag wafid">وافد</i> <i class="tag lab">معمل</i> <i class="tag letter">خطاب</i> <i class="tag tash">تساهيل</i> <span>كل علامة بتقولك الخانة دي بتتستخدم في أنهي خدمة.</span></div></div>'}
-      <div class="card"><h2>صورة الجواز وقراءة MRZ</h2><div class="row" style="align-items:flex-start">
-        <div style="min-width:240px"><input type="file" id="pasF" accept="image/jpeg,image/png,application/pdf">
-          <div class="small muted" style="margin-top:6px">${isNew ? 'اختار صورة الجواز (بتترفع أول ما تحفظ).' : 'صورة الجواز للتوثيق والقراءة (مش بتتبعت للمنصة).'}</div>
-          <div class="row" style="margin-top:6px"><button class="btn small pri" id="ocrLocal">قراءة MRZ من الصورة</button></div></div>
-        <div style="flex:1;min-width:280px"><label class="f">سطري MRZ (آخر سطرين في صفحة بيانات الجواز) — اتملوا لوحدهم من «قراءة MRZ من الصورة»، أو الصقهم هنا<textarea id="mrz" class="mrz" placeholder="P&lt;EGY....&#10;A12345678...."></textarea></label>
-          <div class="row" style="margin-top:6px"><button class="btn" id="mrzBtn">حلّل MRZ واملى البيانات</button><span id="mrzMsg" class="small"></span></div></div></div></div>
-      ${personFields}
-      <div class="card"><h2>بيانات بتتورّث من ملف الضبط (اكتب هنا لو الشخص ده مختلف)</h2><div class="grid">${inherit.map((f) => fieldHtml(f, data[f.k], pd[f.k] ? (f.type === 'select' ? pd[f.k] : pd[f.k]) : '')).join('')}</div></div>
-      <div class="card"><h2>الصورة الشخصية (لازم أقل من 1 ميجا)</h2><div class="row" style="align-items:flex-start">
-        <div>${pending.photo ? `<img class="photo" src="${objUrl(pending.photo)}">` : (!isNew && person.hasPhoto ? `<img class="photo" src="/api/people/${id}/file/photo?t=${Date.now()}">` : '<div class="photo"></div>')}</div>
-        <div><input type="file" id="phF" accept="image/jpeg,image/png"><div class="small muted" style="margin-top:6px">${isNew ? 'بتترفع أول ما تحفظ.' : ''} بتتصغّر تلقائي لو أكبر من الحد. المنصة بتفحص مواصفات الصورة (خلفية فاتحة ووش واضح).</div>${!isNew && person.hasPhoto ? '<button class="btn small danger" id="phDel" style="margin-top:6px">حذف الصورة</button>' : ''}</div></div></div>
-      <div class="card"><label class="f">ملاحظات<input data-k="notes" value="${e(data.notes || '')}"></label></div>
-      ${resolved ? `<div class="card"><h2>الجاهزية</h2>${resolved.ready ? '<span class="pill ok">كل البيانات المطلوبة موجودة</span>' : `<ul class="list issues">${resolved.issues.map((x) => `<li>${e(x)}</li>`).join('')}</ul>`}${resolved.warns.length ? `<ul class="list warns">${resolved.warns.map((x) => `<li>${e(x)}</li>`).join('')}</ul>` : ''}</div>` : ''}
-      <div class="row actions"><button class="btn pri" id="save">حفظ</button>${!isNew && can('people.delete') ? '<button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}<a href="#/people" class="btn" style="text-decoration:none">رجوع</a></div>
-      </div><aside class="side">${sideHtml()}</aside></div>`;
+      const visible = (batch) => batch.filter((p) => !p.archived || String(p.id) === String(profileId));
+      const PANELS = {
+        personal: () => `<div class="split"><div class="main">
+          <div class="card"><div class="row"><label class="f" style="min-width:260px">الدفعة (ملف الضبط)
+            <select id="prof"><option value="">— من غير —</option>${visible(profs.profiles).map((p) => `<option value="${p.id}"${String(p.id) === String(profileId) ? ' selected' : ''}>${e(p.name)}</option>`).join('')}</select></label>
+            ${isNew ? '' : `<label class="f" style="min-width:200px">الحالة
+            <select id="stSel">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${person.status === k ? ' selected' : ''}>${e(v[0])}</option>`).join('')}</select></label>`}
+            <a href="#/profiles" class="small">كل الدفعات</a></div></div>
+          <div class="card"><h2>صورة الجواز وقراءة MRZ</h2><div class="row" style="align-items:flex-start">
+            <div style="min-width:240px"><input type="file" id="pasF" accept="image/jpeg,image/png,application/pdf">
+              <div class="small muted" style="margin-top:6px">${isNew ? 'اختار صورة الجواز (بتترفع أول ما تحفظ).' : 'صورة الجواز للتوثيق والقراءة (مش بتتبعت للمنصة).'}</div>
+              <div class="row" style="margin-top:6px"><button class="btn small pri" id="ocrLocal">قراءة MRZ من الصورة</button></div></div>
+            <div style="flex:1;min-width:280px"><label class="f">سطري MRZ (آخر سطرين في صفحة بيانات الجواز) — اتملوا لوحدهم من «قراءة MRZ من الصورة»، أو الصقهم هنا<textarea id="mrz" class="mrz" placeholder="P&lt;EGY....&#10;A12345678...."></textarea></label>
+              <div class="row" style="margin-top:6px"><button class="btn" id="mrzBtn">حلّل MRZ واملى البيانات</button><span id="mrzMsg" class="small"></span></div></div></div></div>
+          ${personFields}
+          ${fieldsCard('بيانات إضافية', bothFields.filter((f) => tabOfK(f.k) === 'personal'), 'بتتورّث من الدفعة. اكتب هنا بس لو الشخص ده مختلف.')}
+          <div class="card"><h2>الصورة الشخصية (لازم أقل من 1 ميجا)</h2><div class="row" style="align-items:flex-start">
+            <div>${pending.photo ? `<img class="photo" src="${objUrl(pending.photo)}">` : (!isNew && person.hasPhoto ? `<img class="photo" src="/api/people/${id}/file/photo?t=${Date.now()}">` : '<div class="photo"></div>')}</div>
+            <div><input type="file" id="phF" accept="image/jpeg,image/png"><div class="small muted" style="margin-top:6px">${isNew ? 'بتترفع أول ما تحفظ.' : ''} بتتصغّر تلقائي لو أكبر من الحد.${meta.photoProcess === 'clean' ? ' <b>معالجة الصورة شغّالة:</b> بتتحط على خلفية بيضاء وبيتشال التشويش.' : ''}</div>${!isNew && person.hasPhoto ? '<button class="btn small danger" id="phDel" style="margin-top:8px">حذف الصورة</button>' : ''}</div></div></div>
+          <div class="card"><label class="f">ملاحظات<input data-k="notes" value="${e(data.notes || '')}"></label></div>
+        </div><aside class="side">${sideHtml()}</aside></div>`,
+        visa: () => `${svcHead('visa', 'التأشيرة (إنجاز)', '<button class="btn pri" id="fill" title="يفتح منصة التأشيرات ويعمل الطلب بالبيانات دي">عمل إنجاز</button>')}
+          ${resolved && resolved.warns.length ? `<div class="card"><ul class="list warns">${resolved.warns.map((x) => `<li>${e(x)}</li>`).join('')}</ul></div>` : ''}
+          ${summaryCard('بيانات التأشيرة (من الدفعة)', profFields.filter((f) => tabOfK(f.k) === 'visa').map((f) => f.k))}
+          ${fieldsCard('الوصول والمهنة', bothFields.filter((f) => tabOfK(f.k) === 'visa'), 'القيم دي بتتورّث من الدفعة. اكتب هنا بس لو الشخص ده مختلف.')}`,
+        wafid: () => `${svcHead('wafid', 'الفحص الطبي (وافد)', '<button class="btn pri" id="wafid" title="يفتح وافد ويملا فورم الحجز">احجز الفحص</button>', 'رقم الموبايل ومكان إصدار الجواز والرقم القومي بتتكتب في تبويب «بيانات الشخص».')}
+          ${fieldsCard('بيانات حجز وافد', bothFields.filter((f) => tabOfK(f.k) === 'wafid'), 'بتتورّث من الدفعة. اكتب هنا بس لو الشخص ده مختلف.')}`,
+        lab: () => `${svcHead('lab', 'المعامل (معامل الصحة العامة)', '<button class="btn pri" id="lab" title="يفتح موقع المعامل ويملا فورم الحجز">احجز المعمل</button>', 'رقم الموبايل والرقم القومي بتتكتب في تبويب «بيانات الشخص»، ورقم الطلب (إنجاز) في تبويب التأشيرة.')}
+          ${fieldsCard('بيانات حجز المعمل', bothFields.filter((f) => tabOfK(f.k) === 'lab'), 'بتتورّث من الدفعة. اكتب هنا بس لو الشخص ده مختلف.')}`,
+        letters: () => `${svcHead('letters', 'الخطابات (خطاب الترشيح)', '<button class="btn pri" id="letSuez" title="يحمّل خطاب Word بنفس تنسيق نموذج المكتب">خطاب السويس</button><button class="btn pri" id="letCairo" title="يحمّل استمارة Word بنفس تنسيق نموذج المكتب">خطاب القاهرة</button>')}
+          ${summaryCard('بيانات الخطابات (من الدفعة)', ['visaNumber', 'unifiedNumber', 'sponsorName', 'jobText', 'visaDate', 'boxNumber', 'agencyNumber'])}`,
+        accounts: () => `${fieldsCard('تكلفة الفرد', bothFields.filter((f) => tabOfK(f.k) === 'accounts'), 'لو سيبتها فاضية بتاخد تكلفة الدفعة.')}<div id="payBox"><div class="card muted">بيحمّل الحسابات…</div></div>`
+      };
+      view.innerHTML = `<div class="page-head"><div><h1>${isNew ? 'شخص جديد' : e(data.nameAr || 'شخص') + ' <span class="pill ' + ((STATUS[person.status] || [0, ''])[1]) + '">' + e((STATUS[person.status] || [person.status])[0]) + '</span>'}</h1>${!isNew && person.appNumber ? `<div class="sub">رقم الطلب (إنجاز): <b dir="ltr">${e(person.appNumber)}</b></div>` : ''}</div></div>
+      <div class="tabs" id="ptabs">${TABS.map(tabBtn).join('')}</div>
+      ${TABS.map((t) => `<section class="tp" data-tab="${t.id}"${t.id === curTab ? '' : ' hidden'}>${PANELS[t.id]()}</section>`).join('')}
+      <div class="row actions"><button class="btn pri" id="save">حفظ</button><a href="#/people" class="btn" style="text-decoration:none">رجوع</a>${!isNew && can('people.delete') ? '<button class="btn danger" id="del" style="margin-inline-start:auto">حذف الشخص</button>' : ''}</div>`;
+      const setTab = (t) => { curTab = t; try { sessionStorage.setItem('personTab', t); } catch (x) { /* مش مهم */ } view.querySelectorAll('.tabb').forEach((b) => b.classList.toggle('on', b.dataset.tab === t)); view.querySelectorAll('.tp').forEach((p) => { p.hidden = p.dataset.tab !== t; }); if (t === 'accounts' && NA.payPanel) NA.payPanel($('#payBox'), id, { onChange: () => {} }); };
+      view.querySelectorAll('.tabb').forEach((b) => { b.onclick = () => setTab(b.dataset.tab); });
       wire();
       wirePv();
       overCheck();
+      if (curTab === 'accounts' && NA.payPanel) NA.payPanel($('#payBox'), id, { onChange: () => {} });
     };
     const overCheck = () => {
       view.querySelectorAll('[data-k]').forEach((el) => {
@@ -366,7 +407,6 @@
         el.addEventListener('input', check); check();
       });
     };
-    const stSel = $('#stSel'); if (stSel) stSel.onchange = async () => { try { await api('POST', `/people/${id}/result`, { status: stSel.value }); person.status = stSel.value; toast('اتغيّرت الحالة', 'ok'); } catch (er) { fail(er); } };
     const save = async () => {
       data = { ...data, ...collect(view) }; profileId = $('#prof').value;
       const body = { profileId: profileId || null, data };
@@ -378,6 +418,7 @@
       await api('PUT', `/people/${id}`, body); toast('اتحفظ', 'ok'); return id;
     };
     const wire = () => {
+      const stSel = $('#stSel'); if (stSel) stSel.onchange = async () => { try { await api('POST', `/people/${id}/result`, { status: stSel.value }); person.status = stSel.value; toast('اتغيّرت الحالة', 'ok'); } catch (er) { fail(er); } };
       $('#prof').onchange = () => { data = { ...data, ...collect(view) }; profileId = $('#prof').value; draw(); };
       $('#save').onclick = () => save().then(() => { if (!isNew) pagePerson(id); }).catch((er) => { if (er.data && er.data.duplicateId && confirm(er.message + '\nتفتحه؟')) location.hash = '#/people/' + er.data.duplicateId; else fail(er); });
       const applyMrz = (r, how) => {
@@ -429,7 +470,7 @@
       const srcUrl = () => (pending.passport ? objUrl(pending.passport) : `/api/people/${id}/file/passport?t=${stamp}`);
       const cp = $('#cropPhoto'); if (cp) cp.onclick = () => openCropper({ src: srcUrl(), aspect: 0.78, title: 'قص الصورة الشخصية', hint: 'حرّك المربع على وش الشخص، وكبّره أو صغّره من الأركان', initial: { x: 0.05, y: 0.24, w: 0.27 }, maxSide: 1000,
         onDone: async (blob) => {
-          const f = await compress(new File([blob], 'photo.jpg', { type: 'image/jpeg' }), 1048576, 900);
+          const f = await preparePhoto(new File([blob], 'photo.jpg', { type: 'image/jpeg' }));
           if (isNew) { pending.photo = f; data = { ...data, ...collect(view) }; draw(); return toast('اتحطّت كصورة شخصية (بتترفع أول ما تحفظ)', 'ok'); }
           const fd = new FormData(); fd.append('file', f); await api('POST', `/people/${id}/files/photo`, fd); toast('اتحفظت كصورة شخصية', 'ok'); data = { ...data, ...collect(view) }; pagePerson(id);
         } });
@@ -457,7 +498,7 @@
       };
       const ph = $('#phF'); if (ph) ph.onchange = async () => {
         try {
-          const f = await compress(ph.files[0], 1048576, 900);
+          const f = await preparePhoto(ph.files[0]);
           if (isNew) { pending.photo = f; data = { ...data, ...collect(view) }; draw(); return; }
           const fd = new FormData(); fd.append('file', f); await api('POST', `/people/${id}/files/photo`, fd); toast('اترفعت الصورة (' + Math.round(f.size / 1024) + ' ك.ب)', 'ok'); data = { ...data, ...collect(view) }; pagePerson(id);
         } catch (er) { fail(er); }
@@ -472,15 +513,7 @@
         } catch (er) { fail(er); } finally { oc.disabled = false; oc.textContent = 'قراءة تلقائية من الصورة'; }
       };
       const wf = $('#wafid'); if (wf) wf.onclick = async () => { try { await save(); wafidRequest(id); } catch (er) { fail(er); } };
-      const letter = async (kind) => {
-        try {
-          await save();
-          const c = await api('GET', `/people/${id}/letter/${kind}?check=1`);
-          const warn = [...(c.hints && c.hints.length ? c.hints : (c.issues || []).map((x) => x + ' (ناقص)')), ...(c.warns || []), ...(c.hasPhoto ? [] : ['الصورة الشخصية ناقصة: الخطاب هيطلع من غير صورة'])];
-          if (warn.length && !confirm('الخطاب هيطلع ناقص:\n- ' + warn.join('\n- ') + '\n\nتحمّله كده؟ (دوس إلغاء، كمّل البيانات، وجرّب تاني)')) return;
-          window.location.href = `/api/people/${id}/letter/${kind}`; toast('بيتحمّل خطاب الترشيح (Word)…', 'ok');
-        } catch (er) { fail(er); }
-      };
+      const letter = async (kind) => { try { await save(); } catch (er) { return fail(er); } return letterDownload(id, kind); };
       const ls = $('#letSuez'); if (ls) ls.onclick = () => letter('suez'); const lc = $('#letCairo'); if (lc) lc.onclick = () => letter('cairo');
       const lb = $('#lab'); if (lb) lb.onclick = async () => { try { await save(); labRequest(id); } catch (er) { fail(er); } };
       const fl = $('#fill'); if (fl) fl.onclick = async () => { try { await save(); fillRequest(id); } catch (er) { fail(er); } };
@@ -585,51 +618,90 @@
     $('#au').onchange = () => reload().catch(fail); $('#aa').onchange = () => reload().catch(fail);
   }
 
+  /* ===== حقول الدفعة/النموذج في تبويبات: تأشيرة · وافد · معامل · خطابات · افتراضيات الأشخاص · حسابات ===== */
+  const PTABS = ['visa', 'wafid', 'lab', 'letters', 'personal', 'accounts'];
+  const PTITLE = { visa: 'التأشيرة (إنجاز)', wafid: 'الفحص الطبي (وافد)', lab: 'المعامل', letters: 'الخطابات', personal: 'افتراضيات الأشخاص', accounts: 'الحسابات' };
+  const secTitle = (g, tab) => (g.id === 'defaults' ? (tab === 'visa' ? 'المهنة' : 'قيم افتراضية لبيانات الأشخاص') : g.title);
+  const LOOKUP_HTML = '<div class="f" style="align-self:end"><button class="btn pri" id="visaLookup" type="button" title="بيدوّر في المنصة من الخلفية وبيعرضلك الكابتشا هنا تكتبها، وبعدها تختار المهنة هنا">بحث وجلب المهن</button><button class="btn" id="visaDocOnly" type="button" style="margin-inline-start:6px" title="بيجيب نوع التأشيرة وعدد الدخول والمهنة من مستند التأشيرة بس (كابتشا واحدة)">مستند التأشيرة فقط</button></div>';
+  function profileTabsHtml(d, opts) {
+    const tOf = (k) => (meta.tabOf || {})[k] || 'personal';
+    const panel = (tab) => meta.groups.map((g) => { const fs = g.fields.filter((f) => tOf(f.k) === tab); if (!fs.length) return '';
+      return `<div class="card"><h2>${e(secTitle(g, tab))}</h2><div class="grid">${fs.map((f) => fieldHtml(f, d[f.k])).join('')}${g.id === 'lookup' && opts && opts.lookup ? LOOKUP_HTML : ''}</div>${g.id === 'lookup' && opts && opts.lookup ? '<div id="visaCapBox"></div><div id="visaInfoBox"></div><div id="visaDocBox"></div>' : ''}</div>`; }).join('');
+    let cur = (opts && opts.tab) || 'visa';
+    return `<div class="tabs ptabs">${PTABS.map((t) => `<button type="button" class="tabb${t === cur ? ' on' : ''}" data-tab="${t}">${e(PTITLE[t])}</button>`).join('')}</div>${PTABS.map((t) => `<section class="tp" data-tab="${t}"${t === cur ? '' : ' hidden'}>${panel(t)}</section>`).join('')}`;
+  }
+  function wireTabs(root) { root.querySelectorAll('.ptabs .tabb').forEach((b) => { b.onclick = () => { root.querySelectorAll('.ptabs .tabb').forEach((x) => x.classList.toggle('on', x === b)); root.querySelectorAll('.tp').forEach((p) => { p.hidden = p.dataset.tab !== b.dataset.tab; }); }; }); }
+  NA.profileTabsHtml = profileTabsHtml; NA.wireTabs = wireTabs;
+
+  /* ===== صفحة دفعات التأشيرات: كروت + أرشفة ===== */
   async function pageProfiles() {
-    const [r, tpl, ov] = await Promise.all([api('GET', '/profiles'), api('GET', '/settings/profile-template').catch(() => ({ auto: false })), can('stats.view') ? api('GET', '/stats/overview').catch(() => null) : Promise.resolve(null)]);
+    const [r, ov] = await Promise.all([api('GET', '/profiles'), can('stats.view') ? api('GET', '/stats/overview').catch(() => null) : Promise.resolve(null)]);
     const vs = new Map(((ov && ov.visas) || []).map((v) => [v.id, v]));
+    const money = (n) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
     const vcard = (p) => { const v = vs.get(p.id); const d = p.data || {};
       const bar = (k, label) => { const s2 = v ? v.stages[k] : { done: 0, booked: 0, pending: 0 }; const t = Math.max(1, v ? v.total : 1); return `<div class="bar"><span class="lb" style="width:78px">${label}</span><span class="tr"><i class="i-done" style="width:${Math.round(s2.done / t * 100)}%"></i><i class="i-book" style="width:${Math.round(s2.booked / t * 100)}%"></i></span><span class="vl" style="width:60px">${s2.done}/${v ? v.total : 0}</span></div>`; };
-      return `<div class="vcard"><div class="vt"><b>${e(p.name)}</b>${p.isDefault ? '<span class="chip ok">الافتراضي</span>' : ''}<button class="btn small edit" data-id="${p.id}" style="margin-inline-start:auto">تعديل</button></div>
-        <div class="vm">${d.visaNumber ? `<span>تأشيرة <b dir="ltr">${e(d.visaNumber)}</b></span>` : ''}${d.sponsorName ? `<span>${e(d.sponsorName)}</span>` : ''}${d.jobText ? `<span>${e(d.jobText)}</span>` : ''}${d.visaDate ? `<span dir="ltr">${e(d.visaDate)}</span>` : ''}</div>
-        ${v ? `<div class="row"><span class="chip acc">${v.total} شخص</span>${v.expiring ? `<span class="chip warn">${v.expiring} جواز قريب الانتهاء</span>` : ''}</div>${bar('sent', 'المنصة')}${bar('medical', 'وافد')}${bar('lab', 'المعمل')}${bar('letter', 'خطاب')}` : ''}
-        <div class="row"><a class="btn small" href="#/people" data-pf="${p.id}" style="text-decoration:none">عرض الأشخاص</a></div></div>`; };
-    view.innerHTML = `<div class="page-head"><div><h1>دفعات التأشيرات</h1><div class="sub">كل دفعة = ملف ضبط: بيانات التأشيرة وجهة العمل والقيم الافتراضية. أي شخص بيتربط بدفعة، وممكن يغلب أي قيمة بقيمته. الأرقام «تم / الإجمالي».</div></div></div>
-      <div class="row" style="margin-bottom:12px"><button class="btn pri" id="newP">+ ملف جديد</button><label title="لما يكون شغّال: أي ملف جديد بيبدأ بالقيم الثابتة من الملف الافتراضي (نوع الجواز، الديانة، المؤهل، العناوين، الوصول…) من غير رقم التأشيرة والرقم الموحد واسم ورقم الجهة وتعليم الإقرارات"><input type="checkbox" id="tplAuto"${tpl.auto ? ' checked' : ''}> الملف الجديد يبدأ بقيم الملف الافتراضي (تلقائي)</label></div><div id="plist" class="vgrid">${r.profiles.map(vcard).join('') || '<div class="card empty"><div class="big">📦</div>لسه مفيش دفعات. دوس «+ ملف جديد» وابدأ.</div>'}</div><div id="peditor" style="margin-top:16px"></div>`;
-    const edit = (p) => {
-      let d = (p && p.data) || {}; let fromTpl = '';
-      if (!p && $('#tplAuto') && $('#tplAuto').checked) {
-        /* الأرقام الخاصة بكل تأشيرة/جهة (واللي بتتجاب من البحث) وتعليم الإقرارات مبتتنسخش */
-        const def = r.profiles.find((x) => x.isDefault); const skip = ['visaNumber', 'unifiedNumber', 'sponsorName', 'sponsorNumber', 'autoDeclare'];
-        if (def) { d = Object.fromEntries(Object.entries(def.data || {}).filter(([k]) => !skip.includes(k))); fromTpl = def.name; } else toast('مفيش ملف افتراضي: علّم ملف كـ«الافتراضي» الأول', 'err');
-      }
-      $('#peditor').innerHTML = `<div class="card"><h2>${p ? 'تعديل: ' + e(p.name) : 'ملف جديد'}</h2>${fromTpl ? `<div class="pill ok" style="margin-bottom:8px">اتعبّى من الملف الافتراضي «${e(fromTpl)}»: راجع القيم وكمّل رقم التأشيرة والرقم الموحد</div>` : ''}<label class="f">اسم الملف<input id="pname" value="${e(p ? p.name : '')}"></label><br>
-        ${meta.groups.map((g) => `<h2 style="margin-top:14px">${e(g.title)}</h2><div class="grid">${g.fields.map((f) => fieldHtml(f, d[f.k])).join('')}${g.id === 'lookup' ? '<div class="f" style="align-self:end"><button class="btn pri" id="visaLookup" title="بيدوّر في المنصة من الخلفية وبيعرضلك الكابتشا هنا تكتبها، وبعدها تختار المهنة هنا">بحث وجلب المهن</button><button class="btn" id="visaDocOnly" type="button" style="margin-inline-start:6px" title="بيجيب نوع التأشيرة وعدد الدخول والمهنة من مستند التأشيرة بس (كابتشا واحدة)">مستند التأشيرة فقط</button></div>' : ''}</div>${g.id === 'lookup' ? '<div id="visaCapBox"></div><div id="visaInfoBox"></div><div id="visaDocBox"></div>' : ''}`).join('')}
-        <div class="row" style="margin-top:14px"><button class="btn pri" id="psave">حفظ</button><label><input type="checkbox" id="pdef"${p && p.isDefault ? ' checked' : ''}> الافتراضي</label>${p ? '<button class="btn danger" id="pdel" style="margin-inline-start:auto">حذف</button>' : ''}</div></div>`;
-      $('#peditor').scrollIntoView({ behavior: 'smooth' });
-      const startLookup = async (mode) => {
-        const dd = collect($('#peditor'));
-        if (!dd.visaNumber || !dd.unifiedNumber) return toast('اكتب رقم التأشيرة والرقم الموحد الأول.', 'err');
-        if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
-        if (!extReady) return toast('إضافة Chrome مش متركّبة. من «الإضافة» نزّلها وركّبها الأول.', 'err');
-        visaReset(); visaLogAdd(mode === 'doc' ? 'بدأ جلب مستند التأشيرة' : 'بدأ البحث');
-        const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: { name: $('#pname').value, visaNumber: dd.visaNumber, unifiedNumber: dd.unifiedNumber, mode, embassy: dd.embassy } }, location.origin); setTimeout(() => res(false), 4000); });
-        if (ok) { visaLogAdd('الإضافة فتحت المنصة في الخلفية'); capWait(mode === 'doc' ? 'بنفتح استعلام مستند التأشيرة في الخلفية…' : 'بنفتح المنصة في الخلفية ونجيب الكابتشا…', 25000, 'مفيش كابتشا وصلت من المنصة خلال 25 ثانية. شوف السجل تحت، أو افتح تبويب المنصة.'); } else toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.9.6 أو أحدث).', 'err');
-      };
-      $('#visaLookup').onclick = () => startLookup('');
-      $('#visaDocOnly').onclick = () => startLookup('doc');
-      $('#psave').onclick = async () => { try { const body = { name: $('#pname').value, data: collect($('#peditor')), isDefault: $('#pdef') ? $('#pdef').checked : false }; if (p) await api('PUT', `/profiles/${p.id}`, body); else await api('POST', '/profiles', body); toast('اتحفظ', 'ok'); pageProfiles(); } catch (er) { fail(er); } };
-      if (p) $('#pdel').onclick = async () => { if (!confirm('تحذف الملف؟')) return; try { await api('DELETE', `/profiles/${p.id}`); pageProfiles(); } catch (er) { fail(er); } };
+      return `<div class="vcard${p.archived ? ' arch-row' : ''}"><div class="vt"><b>${e(p.name)}</b>${p.isDefault ? '<span class="chip">الافتراضية</span>' : ''}${p.archived ? '<span class="chip">مؤرشفة</span>' : ''}</div>
+        <div class="vm">${d.visaNumber ? `<span>تأشيرة <b dir="ltr">${e(d.visaNumber)}</b></span>` : ''}${d.sponsorName ? `<span>${e(d.sponsorName)}</span>` : ''}${d.jobText ? `<span>${e(d.jobText)}</span>` : ''}${d.visaDate ? `<span dir="ltr">${e(d.visaDate)}</span>` : ''}${d.fee ? `<span>التكلفة ${e(money(d.fee))} ج</span>` : ''}</div>
+        ${v ? `<div class="row"><span class="chip">${v.total} شخص</span>${v.expiring ? `<span class="chip warn">${v.expiring} جواز قريب الانتهاء</span>` : ''}${v.due !== undefined && v.due ? `<span class="chip ${v.remaining > 0 ? 'bad' : 'ok'}">مدفوع ${e(money(v.paid))} من ${e(money(v.due))}</span>` : ''}</div>${bar('sent', 'إنجاز')}${bar('medical', 'وافد')}${bar('lab', 'المعمل')}${bar('letter', 'الخطاب')}` : ''}
+        <div class="row"><a class="btn small" href="#/profiles/${p.id}" style="text-decoration:none">فتح وتعديل</a><a class="btn small" href="#/people" data-pf="${p.id}" style="text-decoration:none">الأشخاص</a>${can('profiles.edit') ? `<button class="btn small arch" data-id="${p.id}" data-on="${p.archived ? 0 : 1}" style="margin-inline-start:auto">${p.archived ? 'إلغاء الأرشفة' : 'أرشفة'}</button>` : ''}</div></div>`; };
+    const live = r.profiles.filter((p) => !p.archived), old = r.profiles.filter((p) => p.archived);
+    view.innerHTML = `<div class="page-head"><div><h1>دفعات التأشيرات</h1><div class="sub">كل دفعة: بيانات التأشيرة وجهة العمل والقيم الافتراضية والتكلفة. الأرقام «تم / الإجمالي».</div></div>
+      <div class="sp">${can('profiles.edit') ? '<a class="btn pri" href="#/profiles/new" style="text-decoration:none">+ دفعة جديدة</a><a class="btn" href="#/templates" style="text-decoration:none">ضبط النموذج</a>' : ''}</div></div>
+      <div class="vgrid">${live.map(vcard).join('') || '<div class="card empty">لسه مفيش دفعات. دوس «دفعة جديدة» وابدأ.</div>'}</div>
+      ${old.length ? `<details class="fold" style="margin-top:18px"><summary>الدفعات المؤرشفة (${old.length})</summary><div class="fb"><div class="vgrid">${old.map(vcard).join('')}</div></div></details>` : ''}`;
+    view.onclick = async (ev) => {
+      const g = ev.target.closest('[data-pf]'); if (g) { ev.preventDefault(); return NA.goPeople({ pf: g.dataset.pf }); }
+      const a = ev.target.closest('.arch');
+      if (a) { const on = a.dataset.on === '1'; if (on && !confirm('تأرشف الدفعة دي؟ الناس اللي فيها هيختفوا من القايمة والإحصائيات (وتقدر ترجّعهم في أي وقت).')) return; try { await api('PUT', `/profiles/${a.dataset.id}/archive`, { archived: on }); toast(on ? 'اتأرشفت الدفعة' : 'اتلغت الأرشفة', 'ok'); pageProfiles(); } catch (er) { fail(er); } }
     };
-    $('#newP').onclick = () => edit(null);
-    $('#tplAuto').onchange = async () => { try { await api('PUT', '/settings/profile-template', { auto: $('#tplAuto').checked }); toast($('#tplAuto').checked ? 'الملفات الجديدة هتبدأ بقيم الملف الافتراضي' : 'الملفات الجديدة هتبدأ فاضية', 'ok'); } catch (er) { $('#tplAuto').checked = !$('#tplAuto').checked; fail(er); } };
-    view.onclick = (ev) => { const b = ev.target.closest('.edit'); if (b) return edit(r.profiles.find((x) => String(x.id) === b.dataset.id)); const g = ev.target.closest('[data-pf]'); if (g) { ev.preventDefault(); NA.goPeople({ pf: g.dataset.pf }); } };
+  }
+
+  /* ===== صفحة دفعة واحدة (جديدة أو للتعديل) ===== */
+  async function pageProfileEdit(pid) {
+    const isNew = pid === 'new';
+    const [r, tp] = await Promise.all([api('GET', '/profiles'), api('GET', '/batch-templates').catch(() => ({ templates: [] }))]);
+    const p = isNew ? null : r.profiles.find((x) => String(x.id) === String(pid));
+    if (!isNew && !p) { view.innerHTML = '<div class="card issues">الدفعة مش موجودة.</div>'; return; }
+    const tpls = tp.templates || [];
+    const d0 = (p && p.data) || {};
+    view.innerHTML = `<div class="page-head"><div><h1>${p ? 'تعديل: ' + e(p.name) : 'دفعة جديدة'}</h1><div class="sub"><a href="#/profiles">كل الدفعات</a>${p && p.archived ? ' — <b>مؤرشفة</b>' : ''}</div></div></div>
+      <div class="card"><div class="row"><label class="f" style="min-width:280px;flex:1">اسم الدفعة<input id="pname" value="${e(p ? p.name : '')}" placeholder="مثلاً: الشركة الوطنية — سويس"></label>
+        ${isNew && tpls.length ? `<label class="f" style="min-width:240px">ابدأ من نموذج<select id="ptpl"><option value="">— فاضي —</option>${tpls.map((t) => `<option value="${e(t.id)}"${t.isDefault ? ' selected' : ''}>${e(t.name)}</option>`).join('')}</select></label>` : ''}
+        <label style="display:flex;gap:6px;align-items:center;align-self:end;padding-bottom:9px"><input type="checkbox" id="pdef"${p && p.isDefault ? ' checked' : ''}> الدفعة الافتراضية للأشخاص الجداد</label></div></div>
+      <div id="peditor">${profileTabsHtml(d0, { lookup: true })}</div>
+      <div class="row actions"><button class="btn pri" id="psave">حفظ</button><a class="btn" href="#/profiles" style="text-decoration:none">رجوع</a>
+        ${p && can('profiles.edit') ? `<button class="btn" id="parch" style="margin-inline-start:auto">${p.archived ? 'إلغاء الأرشفة' : 'أرشفة الدفعة'}</button>` : ''}${p && can('users.manage') ? '<button class="btn danger" id="pdel">حذف</button>' : ''}</div>`;
+    wireTabs(view);
+    const ed = $('#peditor');
+    const applyTpl = (t) => { if (!t) return; for (const [k, v] of Object.entries(t.data || {})) { const el = ed.querySelector(`[data-k="${k}"]`); if (!el || v === '' || v === undefined) continue; if (el.tagName === 'SELECT' && ![...el.options].some((o) => o.value === String(v))) continue; el.value = v; } };
+    if (isNew && $('#ptpl')) { const sel = $('#ptpl'); if (sel.value) applyTpl(tpls.find((t) => t.id === sel.value)); sel.onchange = () => { if (sel.value) { applyTpl(tpls.find((t) => t.id === sel.value)); toast('اتعبّت بيانات النموذج: كمّل الباقي', 'ok'); } }; }
+    const startLookup = async (mode) => {
+      const dd = collect(ed);
+      if (!dd.visaNumber || !dd.unifiedNumber) return toast('اكتب رقم التأشيرة والرقم الموحد الأول (في تبويب التأشيرة).', 'err');
+      if (!extReady) { ping(); await new Promise((rr) => setTimeout(rr, 700)); }
+      if (!extReady) return toast('إضافة Chrome مش متركّبة. من «الإضافة» نزّلها وركّبها الأول.', 'err');
+      visaReset(); visaLogAdd(mode === 'doc' ? 'بدأ جلب مستند التأشيرة' : 'بدأ البحث');
+      const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: { name: $('#pname').value, visaNumber: dd.visaNumber, unifiedNumber: dd.unifiedNumber, mode, embassy: dd.embassy } }, location.origin); setTimeout(() => res(false), 4000); });
+      if (ok) { visaLogAdd('الإضافة فتحت المنصة في الخلفية'); capWait(mode === 'doc' ? 'بنفتح استعلام مستند التأشيرة في الخلفية…' : 'بنفتح المنصة في الخلفية ونجيب الكابتشا…', 25000, 'مفيش كابتشا وصلت من المنصة خلال 25 ثانية. افتح تبويب المنصة وشوف إيه اللي ظاهر.'); }
+      else toast('الإضافة ما ردّتش. اعمل F5 للصفحة وجرّب تاني.', 'err');
+    };
+    if ($('#visaLookup')) $('#visaLookup').onclick = () => startLookup('');
+    if ($('#visaDocOnly')) $('#visaDocOnly').onclick = () => startLookup('doc');
+    $('#psave').onclick = async () => {
+      try {
+        const body = { name: $('#pname').value, data: collect(ed), isDefault: $('#pdef').checked };
+        if (p) { await api('PUT', `/profiles/${p.id}`, body); toast('اتحفظت الدفعة', 'ok'); pageProfileEdit(pid); }
+        else { const x = await api('POST', '/profiles', body); toast('اتعملت الدفعة', 'ok'); location.hash = '#/profiles/' + x.id; }
+      } catch (er) { fail(er); }
+    };
+    if (p && $('#parch')) $('#parch').onclick = async () => { try { await api('PUT', `/profiles/${p.id}/archive`, { archived: !p.archived }); toast(p.archived ? 'اتلغت الأرشفة' : 'اتأرشفت', 'ok'); location.hash = '#/profiles'; } catch (er) { fail(er); } };
+    if (p && $('#pdel')) $('#pdel').onclick = async () => { if (!confirm('تحذف الدفعة؟')) return; try { await api('DELETE', `/profiles/${p.id}`); location.hash = '#/profiles'; } catch (er) { fail(er); } };
   }
 
   async function pageExtension() {
     const v = await api('GET', '/extension-version').catch(() => ({}));
     view.innerHTML = `<h1>إضافة Chrome</h1><div class="card"><p>الإضافة بتملا فورم «طلب تأشيرة» في منصة التأشيرات من بيانات الشخص (والصورة الشخصية). الكابتشا والإقرارات وزرار «حفظ» بتتم بإيدك. مفيش بيانات بتتبعت لأي سيرفر تالت: كله بين تبويب النظام وتبويب المنصة.</p>
-      <a class="btn pri" href="/api/extension.zip" style="text-decoration:none">⬇️ تحميل الإضافة${v.version ? ' (' + e(v.version) + ')' : ''}</a> <span id="extNow" class="pill"></span></div>
+      <a class="btn pri" href="/api/extension.zip" style="text-decoration:none">تحميل الإضافة${v.version ? ' (' + e(v.version) + ')' : ''}</a> <span id="extNow" class="pill"></span></div>
       <div class="card"><h2>التسطيب (مرة واحدة على كل كمبيوتر)</h2><ol class="steps">
         <li>فك الملف (كليك يمين ← Extract All). هيطلع فولدر <b>nesr-visa-apply-extension</b>. حطه في مكان مش هتمسحه (مثلاً Documents).</li>
         <li>افتح Chrome واكتب <b dir="ltr">chrome://extensions</b> وادوس Enter.</li>
@@ -638,7 +710,7 @@
         <li>ارجع هنا واعمل تحديث للصفحة (F5). لازم تلاقي فوق «الإضافة شغّالة».</li></ol></div>
       <div class="card"><h2>الاستخدام</h2><ol class="steps">
         <li>ادخل منصة التأشيرات بحسابك (الإضافة مبتخزّنش أي كلمة سر).</li>
-        <li>من «الأشخاص» دوس <b>املى الطلب</b> على الشخص.</li>
+        <li>من «الأشخاص» دوس <b>الإجراءات</b> على الشخص ← <b>عمل إنجاز</b>.</li>
         <li>هيفتح فورم «طلب تأشيرة» ويتملي. راجع الخانات اللي حواليها إطار برتقالي.</li>
         <li>علّم على الإقرارات، اكتب رمز الصورة، ودوس <b>حفظ</b>.</li>
         <li>رقم الطلب بيرجع للنظام لوحده. لو ما رجعش، سجّله من صفحة الشخص.</li></ol></div>`;
@@ -649,10 +721,10 @@
   const can = (perm) => !!(me && me.perms && me.perms.includes(perm));
   /* القايمة الجانبية: مجموعات، وكل عنصر بصلاحيته */
   const NAV = [
-    ['', [['#/', '🏠', 'لوحة التحكم']]],
-    ['الشغل اليومي', [['#/people', '👥', 'الأشخاص', 'people.view'], ['#/bulk', '📥', 'رفع جماعي', 'people.edit'], ['#/profiles', '📦', 'دفعات التأشيرات', 'people.view']]],
-    ['المتابعة', [['#/reports', '📊', 'التقارير', 'stats.view'], ['#/activity', '🧾', 'سجل النشاط', 'activity.view']]],
-    ['الإدارة', [['#/users', '🔐', 'المستخدمين والصلاحيات', 'users.manage'], ['#/extension', '🧩', 'إضافة Chrome']]]
+    ['', [['#/', '', 'لوحة التحكم']]],
+    ['الشغل اليومي', [['#/people', '', 'الأشخاص', 'people.view'], ['#/bulk', '', 'رفع جماعي', 'people.edit'], ['#/profiles', '', 'دفعات التأشيرات', 'people.view']]],
+    ['المتابعة', [['#/accounts', '', 'الحسابات', 'payments.view'], ['#/reports', '', 'التقارير', 'stats.view'], ['#/activity', '', 'سجل النشاط', 'activity.view']]],
+    ['الإدارة', [['#/users', '', 'المستخدمين والصلاحيات', 'users.manage'], ['#/settings', '', 'الإعدادات', 'users.manage'], ['#/extension', '', 'إضافة Chrome']]]
   ];
   const drawNav = (h) => {
     const on = (href) => (href === '#/' ? (h === '#/' || h === '') : h.startsWith(href));
@@ -674,7 +746,11 @@
       else if (h.startsWith('#/bulk')) await pageBulk();
       else if (h.startsWith('#/reports')) await pageReports();
       else if (h.startsWith('#/activity')) await pageActivity();
+      else if ((m = h.match(/^#\/profiles\/(new|\d+)$/))) await pageProfileEdit(m[1]);
       else if (h.startsWith('#/profiles')) await pageProfiles();
+      else if (h.startsWith('#/templates')) await NA.pages.templates();
+      else if (h.startsWith('#/accounts')) await NA.pages.accounts();
+      else if (h.startsWith('#/settings')) await NA.pages.settings();
       else if (h.startsWith('#/users')) await NA.pages.users();
       else if (h.startsWith('#/extension')) await pageExtension();
       else if (h === '#/login') { location.hash = '#/'; }
@@ -682,7 +758,7 @@
     } catch (er) { if (er.status !== 401) view.innerHTML = `<div class="card issues">${e(er.message)}</div>`; }
   }
   /* بنشارك الأدوات مع ملفات الصفحات (pages-*.js) */
-  Object.assign(NA, { api, e, $, view, toast, fail, STATUS, can, ping, fillRequest, wafidRequest, labRequest, stageDots, fmtDate });
+  Object.assign(NA, { api, e, $, view, toast, fail, STATUS, can, ping, fillRequest, wafidRequest, labRequest, letterDownload, stageDots, fmtDate });
   Object.defineProperties(NA, { me: { get: () => me, configurable: true }, meta: { get: () => meta, configurable: true }, extReady: { get: () => extReady, configurable: true } });
   $('#logoutBtn').onclick = async () => { await api('POST', '/logout').catch(() => {}); me = null; location.hash = '#/login'; render(); };
   window.addEventListener('hashchange', render);

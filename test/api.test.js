@@ -214,6 +214,49 @@ const api = async (method, url, body, extra = {}) => {
   assert.strictEqual((await api('PUT', `/api/users/${um.json.users.find((u) => u.username === 'admin').id}`, { role: 'viewer' })).status, 400, 'المدير مينزّلش صلاحية نفسه');
   assert.strictEqual((await api('PUT', `/api/users/${mk1.id}`, { role: 'staff' })).status, 200); assert.strictEqual((await api('GET', '/api/users')).json.users.find((u) => u.username === 'mark1').role, 'staff');
 
+  /* ===== الحسابات / الأرشفة / النماذج / معالجة الصورة / أحدث رقم طلب ===== */
+  const bp = await api('POST', '/api/profiles', { name: 'دفعة الحسابات', data: { fee: '4500', visaKind: '38' } }); assert.strictEqual(bp.status, 200);
+  const ap1 = (await api('POST', '/api/people', { profileId: bp.json.id, data: { nameAr: 'شخص حسابات ١', passportNo: 'AC0000001' } })).json.id;
+  const ap2 = (await api('POST', '/api/people', { profileId: bp.json.id, data: { nameAr: 'شخص حسابات ٢', passportNo: 'AC0000002', fee: '3000' } })).json.id;
+  let pb = (await api('GET', `/api/people/${ap1}/payments`)).json; assert.deepStrictEqual([pb.fee, pb.feeSource, pb.paid, pb.remaining, pb.state], [4500, 'batch', 0, 4500, 'unpaid']);
+  pb = (await api('GET', `/api/people/${ap2}/payments`)).json; assert.deepStrictEqual([pb.fee, pb.feeSource], [3000, 'person'], 'تكلفة الشخص بتغلب تكلفة الدفعة');
+  assert.strictEqual((await api('POST', `/api/people/${ap1}/payments`, { amount: 'abc' })).status, 400); assert.strictEqual((await api('POST', `/api/people/${ap1}/payments`, { amount: 0 })).status, 400);
+  const pay1 = await api('POST', `/api/people/${ap1}/payments`, { amount: 2000, method: 'فودافون كاش', note: 'عربون', date: '2026-11-20' }); assert.strictEqual(pay1.status, 200); assert.deepStrictEqual([pay1.json.paid, pay1.json.remaining, pay1.json.state], [2000, 2500, 'partial']);
+  assert.strictEqual((await api('POST', `/api/people/${ap1}/payments`, { amount: 2500, method: 'غريبة' })).json.state, 'paid'); /* طريقة مش معروفة بتترجّع «كاش» */
+  pb = (await api('GET', `/api/people/${ap1}/payments`)).json; assert.deepStrictEqual([pb.paid, pb.remaining, pb.state, pb.payments.length], [4500, 0, 'paid', 2]); assert.ok(pb.payments.some((x) => x.method === 'فودافون كاش' && x.date === '2026-11-20' && x.note === 'عربون') && pb.payments.some((x) => x.method === 'كاش'));
+  const lst2 = (await api("GET", "/api/people")).json.people; assert.strictEqual(lst2.find((x) => x.id === ap1).pay.state, "paid"); assert.strictEqual(lst2.find((x) => x.id === ap2).pay.remaining, 3000);
+  let acc = (await api('GET', '/api/accounts/summary')).json; assert.ok(acc.totals.paid >= 4500 && acc.totals.remaining >= 3000 && acc.batches.some((x) => x.id === bp.json.id && x.paid === 4500 && x.due === 7500) && acc.debtors.some((x) => x.id === ap2) && acc.byMethod.some((x) => x.method === 'فودافون كاش') && acc.recent.length >= 2, 'ملخص الحسابات');
+  const refund = await api('POST', `/api/people/${ap1}/payments`, { amount: -500, method: 'كاش', note: 'استرجاع' }); assert.strictEqual(refund.json.remaining, 500);
+  assert.strictEqual((await api('DELETE', `/api/payments/${pb.payments[0].id}`)).status, 200); assert.strictEqual((await api('GET', `/api/people/${ap1}/payments`)).json.payments.length, 2);
+  const so = (await api('GET', '/api/stats/overview')).json; assert.ok(so.accounts && so.accounts.paid >= 0 && so.visas.find((v) => v.id === bp.json.id).due === 7500, 'الحسابات في لوحة التحكم');
+  /* الصلاحيات: المشاهد مبيشوفش الفلوس، والموظف بيسجّل */
+  who = await loginAs('viewer1'); assert.strictEqual((await api('GET', `/api/people/${ap1}/payments`)).status, 403); assert.strictEqual((await api('GET', '/api/accounts/summary')).status, 403);
+  assert.ok(!('pay' in (await api('GET', '/api/people')).json.people[0]) && (await api('GET', '/api/stats/overview')).json.accounts === null && !('due' in (await api('GET', '/api/stats/overview')).json.visas[0]), 'المشاهد مبيشوفش أي فلوس');
+  await loginAs('staff1'); assert.strictEqual((await api('POST', `/api/people/${ap2}/payments`, { amount: 100 })).status, 200); cookie = adminCookie2;
+  /* أرشفة دفعة: الناس بتختفي من القايمة والإحصائيات وبترجع لما تلغي الأرشفة */
+  const totBefore = (await api('GET', '/api/stats/overview')).json.total;
+  assert.strictEqual((await api('PUT', `/api/profiles/${bp.json.id}/archive`, { archived: true })).status, 200);
+  assert.ok(!(await api('GET', '/api/people')).json.people.some((x) => x.id === ap1), 'مؤرشف: مش في القايمة'); assert.ok((await api('GET', '/api/people?archived=1')).json.people.some((x) => x.id === ap1), 'archived=1 بيعرض المؤرشف'); assert.ok((await api('GET', '/api/people?archived=all')).json.people.some((x) => x.id === ap1));
+  const so2 = (await api('GET', '/api/stats/overview')).json; assert.strictEqual(so2.total, totBefore - 2); assert.ok(so2.archived.batches >= 1 && so2.archived.people === 2 && !so2.visas.some((v) => v.id === bp.json.id), 'مؤرشف: خارج الإحصائيات');
+  assert.ok(!(await api('GET', '/api/accounts/summary')).json.batches.some((x) => x.id === bp.json.id));
+  assert.strictEqual((await api('GET', '/api/profiles')).json.profiles.find((x) => x.id === bp.json.id).archived, true);
+  await api('PUT', `/api/profiles/${bp.json.id}/archive`, { archived: false }); assert.ok((await api('GET', '/api/people')).json.people.some((x) => x.id === ap1));
+  /* نماذج الدفعات (أكتر من نموذج + افتراضي واحد بس) */
+  assert.deepStrictEqual((await api('GET', '/api/batch-templates')).json.templates, []);
+  const tp = await api('PUT', '/api/batch-templates', { templates: [{ name: 'عمرة', data: { visaKind: '13', degree: 'دبلوم', hack: 'x' }, isDefault: true }, { name: 'حج', data: { visaKind: '4' }, isDefault: true }] });
+  assert.strictEqual(tp.status, 200); assert.deepStrictEqual(tp.json.templates.map((t) => [t.name, t.isDefault, t.data.visaKind, 'hack' in t.data]), [['عمرة', true, '13', false], ['حج', false, '4', false]]);
+  assert.strictEqual((await api('GET', '/api/batch-templates')).json.templates.length, 2);
+  /* معالجة الصورة: إعداد عام (للمدير بس) */
+  assert.strictEqual((await api('GET', '/api/meta')).json.photoProcess, 'off'); assert.strictEqual((await api('PUT', '/api/settings/photo', { mode: 'clean' })).status, 200); assert.strictEqual((await api('GET', '/api/meta')).json.photoProcess, 'clean');
+  await loginAs('staff1'); assert.strictEqual((await api('PUT', '/api/settings/photo', { mode: 'off' })).status, 403); cookie = adminCookie2; await api('PUT', '/api/settings/photo', { mode: 'off' });
+  /* رقم الطلب الأحدث: الأقدم مبيغلبش الأحدث */
+  const al2 = (await api('GET', `/api/people/${ap2}/appno-lookup`)).json; assert.strictEqual(al2.visaType, '38'); assert.ok(al2.visaTypeText && al2.visaTypeText.length > 2, 'نص نوع التأشيرة للمقارنة');
+  assert.strictEqual((await api('POST', `/api/people/${ap2}/result`, { status: 'submitted', appNumber: 'E200000002', appDate: '2026/05/10' })).json.ignored, undefined);
+  const oldApp = await api('POST', `/api/people/${ap2}/result`, { status: 'submitted', appNumber: 'E200000001', appDate: '2026/04/01' }); assert.strictEqual(oldApp.json.ignored, true, 'الرقم الأقدم اتجاهل');
+  assert.strictEqual((await api('GET', `/api/people/${ap2}`)).json.person.appNumber, 'E200000002');
+  assert.strictEqual((await api('POST', `/api/people/${ap2}/result`, { status: 'submitted', appNumber: 'E200000003', appDate: '2026/06/01' })).json.ignored, undefined); assert.strictEqual((await api('GET', `/api/people/${ap2}/appno-lookup`)).json.appDate, '2026-06-01');
+  assert.strictEqual((await api('GET', `/api/people/${ap2}`)).json.person.appNumber, 'E200000003', 'الأحدث بيغلب');
+
   // حماية: طلب من مصدر تاني
   const csrf = await fetch(base + '/api/people', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'https://evil.example' }, body: '{}' });
   assert.strictEqual(csrf.status, 403);

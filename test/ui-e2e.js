@@ -22,6 +22,9 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
   const errs = []; page.on('pageerror', (e) => errs.push(e.message)); page.on('dialog', (d) => d.accept());
   const base = `http://127.0.0.1:${PORT}/`;
+  /* بيكتب قيمة في خانة حتى لو في تبويب مخفي (زي ما المستخدم هيفتح التبويب ويكتب) */
+  const setK = (root, k, v) => page.evaluate(([r, key, val]) => { const el = document.querySelector(r + ' [data-k=' + key + ']'); if (!el) throw new Error('مفيش خانة ' + key); el.value = val; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); }, [root, k, v]);
+  const tab = (t) => page.click('#ptabs .tabb[data-tab=' + t + ']');
   try {
     await page.goto(base); await page.waitForSelector('#u');
     await page.fill('#u', 'admin'); await page.fill('#p', 'wrong'); await page.click('#go'); await page.waitForFunction(() => document.getElementById('err').textContent.length > 0);
@@ -31,15 +34,12 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     assert.ok((await page.textContent('#top')).includes('إنجاز'), 'اسم السيستم المميّز ظاهر');
     assert.ok((await page.textContent('.page-head')).includes('لوحة التحكم'), 'الصفحة الرئيسية = لوحة التحكم');
 
-    // ملف ضبط
-    await page.goto(base + '#/profiles'); await page.click('#newP');
+    // دفعة جديدة (صفحة مخصوصة بتبويبات)
+    await page.goto(base + '#/profiles/new'); await page.waitForSelector('#pname'); assert.ok(await page.isVisible('.ptabs'), 'تبويبات الدفعة ظاهرة');
+    assert.deepStrictEqual(await page.$$eval('.ptabs .tabb', (b) => b.map((x) => x.textContent.trim())), ['التأشيرة (إنجاز)', 'الفحص الطبي (وافد)', 'المعامل', 'الخطابات', 'افتراضيات الأشخاص', 'الحسابات'], 'كل تبويب لخدمة');
     await page.fill('#pname', 'دفعة اختبار');
-    await page.selectOption('[data-k=visaKind]', '38'); await page.selectOption('[data-k=embassy]', '320'); await page.selectOption('[data-k=nationality]', 'EGY');
-    await page.fill('[data-k=sponsorName]', 'شركة اختبار'); await page.fill('[data-k=degree]', 'دبلوم'); await page.fill('[data-k=degreeSource]', 'مصر'); await page.fill('[data-k=homeAddress]', 'جدة');
-    await page.fill('[data-k=email]', 'hr@example.com'); await page.selectOption('[data-k=religion]', '1'); await page.selectOption('[data-k=social]', '2'); await page.selectOption('[data-k=passportType]', '1');
-    await page.selectOption('[data-k=issueCountry]', 'مصر'); await page.fill('[data-k=jobText]', 'سائق حافلة'); await page.selectOption('[data-k=jobClass]', '832').catch(() => {});
-    await page.selectOption('[data-k=entryPoint]', '17'); await page.fill('[data-k=expectedEntryDate]', '2027-01-15');
-    await page.check('#pdef'); await page.click('#psave'); await page.waitForTimeout(800);
+    for (const [k, v] of [['visaKind', '38'], ['embassy', '320'], ['nationality', 'EGY'], ['sponsorName', 'شركة اختبار'], ['degree', 'دبلوم'], ['degreeSource', 'مصر'], ['homeAddress', 'جدة'], ['email', 'hr@example.com'], ['religion', '1'], ['social', '2'], ['passportType', '1'], ['issueCountry', 'مصر'], ['jobText', 'سائق حافلة'], ['entryPoint', '17'], ['expectedEntryDate', '2027-01-15'], ['fee', '4500']]) await setK('#peditor', k, v);
+    await page.check('#pdef'); await page.click('#psave'); await page.waitForURL(/#\/profiles\/\d+/); await page.waitForTimeout(500);
 
     // شخص جديد + MRZ
     await page.goto(base + '#/people/new'); await page.waitForSelector('#mrz');
@@ -56,7 +56,7 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.fill('[data-k=birthPlace]', 'Cairo'); await page.fill('[data-k=issueDate]', '2024-07-01');
     await page.click('#save'); await page.waitForURL(/#\/people\/\d+/); await page.waitForSelector('#phF');
     const id = page.url().match(/people\/(\d+)/)[1];
-    await page.waitForSelector('#letCairo'); assert.ok(await page.isVisible('#letSuez') && await page.isVisible('#letCairo'), 'زرارين خطاب الترشيح (السويس / القاهرة) ظاهرين في صفحة الشخص');
+    await tab('letters'); assert.ok(await page.isVisible('#letSuez') && await page.isVisible('#letCairo'), 'زرارين خطاب الترشيح (السويس / القاهرة) ظاهرين في تبويب الخطابات'); await tab('personal');
     assert.ok((await page.textContent('body')).includes('الصورة الشخصية ناقصة'), 'الناقص ظاهر');
     // رفع صورة كبيرة ← بتتصغّر تحت 1 ميجا
     if (BIG) {
@@ -85,12 +85,12 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.goto(base + '#/people/' + firstId); await page.waitForSelector('.split .side');
     assert.ok(await page.isVisible('.side .pv'), 'لوحة صورة الجواز ظاهرة جنب الحقول');
     /* مراحل الطلب في صفحة الشخص + النقط في القايمة + قايمة الطباعة */
-    await page.waitForSelector('.stg[data-stage="medical"]');
-    assert.ok(await page.isVisible('#svcCard') || (await page.textContent('body')).includes('الخدمات والإجراءات'), 'كارت الخدمات في صفحة الشخص');
-    assert.ok(await page.isVisible('#letSuez') && await page.isVisible('#fill'), 'أزرار الخدمات (خطاب/منصة) ظاهرة');
+    await tab('visa'); assert.ok(await page.isVisible('#fill') && (await page.textContent('#fill')).trim() === 'عمل إنجاز', 'زرار «عمل إنجاز» في تبويب التأشيرة'); assert.ok((await page.textContent('.tp[data-tab=visa]')).includes('بيانات التأشيرة (من الدفعة)'));
+    await tab('wafid'); assert.ok((await page.textContent('#ptabs')).includes('ناقص'), 'حالة جاهزية كل خدمة على التبويب'); await page.waitForSelector('.stg[data-stage="medical"]');
     await page.selectOption('.stg[data-stage="medical"] .stS', 'booked'); await page.fill('.stg[data-stage="medical"] .stD', '2026-12-05'); await page.dispatchEvent('.stg[data-stage="medical"] .stD', 'change');
     await page.waitForTimeout(600);
     assert.ok(!(await page.locator('details.menu').count()), 'مفيش زرار طباعة');
+    await tab('personal');
     await page.click('#save'); await page.waitForTimeout(800); assert.ok(!(await page.textContent('#toast')).includes('trim'), 'الحفظ على شخص موجود شغّال'); assert.ok((await page.textContent('#toast')).includes('اتحفظ'), 'اتحفظ');
     await page.goto(base + '#/people'); await page.waitForSelector('#rows .dots');
     assert.ok((await page.locator('#rows .dot.booked').count()) >= 1, 'نقطة الفحص الطبي محجوز');
@@ -102,17 +102,20 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.selectOption('#sf', 'b:medical'); await page.waitForTimeout(400);
     assert.ok((await page.locator('#rows tr.click').count()) >= 1, 'فلتر المراحل');
     await page.selectOption('#sf', '');
-    assert.strictEqual(await page.locator('a[href="#/settings"]').count(), 0, 'تبويب إعدادات التصدير اتشال');
-    /* ملف جديد من الملف الافتراضي: مقفول ← فاضي؛ مفعّل ← القيم الثابتة بتتنسخ من غير الأرقام الخاصة بالتأشيرة */
-    await page.goto(base + '#/profiles'); await page.waitForSelector('#tplAuto'); assert.strictEqual(await page.isChecked('#tplAuto'), false);
-    await page.click('#newP'); assert.strictEqual(await page.inputValue('[data-k=degree]'), '', 'مقفول: الملف الجديد فاضي');
-    await page.check('#tplAuto'); await page.waitForTimeout(500); await page.goto(base + '#/profiles'); await page.waitForSelector('#tplAuto'); assert.strictEqual(await page.isChecked('#tplAuto'), true, 'الاختيار اتحفظ');
-    await page.click('#newP');
-    assert.deepStrictEqual(await page.evaluate(() => ['degree', 'passportType', 'religion', 'homeAddress', 'entryPoint', 'expectedEntryDate', 'sponsorName', 'visaNumber', 'unifiedNumber', 'autoDeclare'].map((k) => document.querySelector('#peditor [data-k=' + k + ']').value)), ['دبلوم', '1', '1', 'جدة', '17', '2027-01-15', '', '', '', ''], 'القيم الثابتة اتنسخت والأرقام الخاصة لأ');
-    assert.ok((await page.textContent('#peditor')).includes('اتعبّى من الملف الافتراضي'));
-    await page.uncheck('#tplAuto'); await page.waitForTimeout(400);
+    assert.ok(!(await page.textContent('#top')).includes('إعدادات التصدير'), 'تبويب إعدادات التصدير اتشال');
+    /* ضبط النموذج: أكتر من نموذج، وأي دفعة جديدة تتعبّى من النموذج الأساسي (أو اللي تختاره) */
+    await page.evaluate(() => fetch('/api/batch-templates', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ templates: [] }) })); /* القاعدة ممكن تكون مشتركة مع اختبار الـ API */
+    await page.goto(base + '#/profiles/new'); await page.waitForSelector('#pname'); assert.strictEqual(await page.locator('#ptpl').count(), 0, 'مفيش نماذج: الدفعة الجديدة فاضية'); assert.strictEqual(await page.evaluate(() => document.querySelector('#peditor [data-k=degree]').value), '');
+    await page.goto(base + '#/templates'); await page.waitForSelector('#tNew'); await page.click('#tNew'); await page.waitForSelector('#tName'); await page.fill('#tName', 'نموذج العمرة');
+    for (const [k, v] of [['degree', 'دبلوم'], ['passportType', '1'], ['religion', '1'], ['homeAddress', 'جدة'], ['entryPoint', '17'], ['expectedEntryDate', '2027-01-15'], ['visaKind', '13'], ['fee', '4500']]) await setK('#tForm', k, v);
+    await page.click('#tSave'); await page.waitForTimeout(700);
+    await page.click('#tNew'); await page.waitForSelector('#tName'); await page.fill('#tName', 'نموذج الحج'); await setK('#tForm', 'visaKind', '4'); await page.click('#tSave'); await page.waitForTimeout(700);
+    assert.deepStrictEqual((await page.evaluate(async () => (await (await fetch('/api/batch-templates')).json()).templates)).map((t) => [t.name, t.isDefault, Object.keys(t.data).length]), [['نموذج العمرة', true, 8], ['نموذج الحج', false, 1]], 'نموذجين، الأول أساسي');
+    await page.goto(base + '#/profiles/new'); await page.waitForSelector('#ptpl');
+    assert.deepStrictEqual(await page.evaluate(() => ['degree', 'passportType', 'religion', 'homeAddress', 'entryPoint', 'expectedEntryDate', 'sponsorName', 'visaNumber', 'unifiedNumber', 'visaKind', 'fee'].map((k) => document.querySelector('#peditor [data-k=' + k + ']').value)), ['دبلوم', '1', '1', 'جدة', '17', '2027-01-15', '', '', '', '13', '4500'], 'النموذج الأساسي اتعبّى والباقي فاضي');
+    await page.selectOption('#ptpl', { label: 'نموذج الحج' }); assert.strictEqual(await page.evaluate(() => document.querySelector('#peditor [data-k=visaKind]').value), '4', 'تبديل النموذج');
     /* ملف الضبط: الرقمين تحت الاسم + نتيجة «التفويض على تأشيرة» بتتحط في الخانات من غير حفظ */
-    await page.goto(base + '#/profiles'); await page.click('#newP'); await page.waitForSelector('#visaLookup');
+    await page.goto(base + '#/profiles/new'); await page.waitForSelector('#visaLookup');
     assert.strictEqual(await page.locator('#peditor [data-k=visaNumber]').count(), 1); assert.strictEqual(await page.locator('#peditor [data-k=unifiedNumber]').count(), 1);
     await page.evaluate(() => { window.__ctl = []; window.addEventListener('message', (ev) => { if (ev.data && ev.data.type === 'VA_VISAINFO_CTL') window.__ctl.push(ev.data.data); }); window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_VISAINFO_CAPTCHA', data: { image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' } }, location.origin); });
     await page.waitForSelector('#capImg'); assert.ok((await page.evaluate(() => (window.__visaLog || []).join(' '))).includes('وصلت صورة الكابتشا'), 'السجل بيتحفظ في الذاكرة'); assert.strictEqual(await page.locator('#visaLog').count(), 0, 'السجل مش ظاهر على الشاشة'); await page.fill('#capIn', 'a1B2'); await page.click('#capGo');
@@ -140,7 +143,7 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.evaluate(() => { window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_VISAINFO_CAPTCHA', data: { step: 2, only: true, image: '', error: true, empty: true, message: 'مستند التأشيرة رجع من غير بيانات (الجدول: «لا توجد بيانات!»).' } }, location.origin); });
     await page.waitForSelector('#capOpen'); assert.ok((await page.textContent('#visaCapBox')).includes('رجع من غير بيانات')); assert.strictEqual(await page.locator('#capPlus').count(), 0, 'مفيش تخمين +1');
     /* «هات رقم إنجاز»: الإضافة هنا متحاكية برسايل: طلب ← كابتشا ← نتيجة. رقم طلب لجواز تاني مبيتسجّلش */
-    await page.goto(base + '#/people/' + id); await page.waitForSelector('#appNoFetch');
+    await page.goto(base + '#/people/' + id); await page.waitForSelector('#ptabs'); await tab('visa'); await page.waitForSelector('#appNoFetch');
     await page.evaluate(() => { window.__ap = []; window.addEventListener('message', (ev) => { if (ev.data && ev.data.source === 'nesr-visaapply' && /^VA_APPNO/.test(ev.data.type)) window.__ap.push(ev.data); }); window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_READY' }, location.origin); });
     const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
     const apRound = async (n, result) => {
@@ -165,6 +168,40 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     /* من القايمة: التحديد الجماعي (اللي عنده رقم بيتخطّى) */
     await page.goto(base + '#/people'); await page.waitForSelector('#rows .sel'); await page.check('#rows .sel'); await page.click('#appnoBtn');
     await page.waitForSelector('#apClose'); assert.ok((await page.textContent('.modal')).includes('عنده رقم طلب بالفعل'), 'اللي عنده رقم بيتخطّى في الجماعي'); await page.click('#apClose');
+    /* قايمة «الإجراءات» في الصف: كل حاجة من غير ما تدخل على الشخص */
+    await page.goto(base + '#/people'); await page.waitForSelector('#rows .act'); await page.click('#rows tr.click:first-child .act'); await page.waitForSelector('.amenu-list');
+    const mt = await page.textContent('.amenu-list'); for (const t of ['عمل إنجاز', 'هات رقم إنجاز', 'احجز الفحص الطبي', 'احجز المعمل', 'خطاب الترشيح — السويس', 'خطاب الترشيح — القاهرة', 'علّم: تم الفحص الطبي', 'الحسابات والدفع']) assert.ok(mt.includes(t), 'في القايمة: ' + t);
+    assert.ok(!mt.includes('املى الطلب'), 'مفيش «املى الطلب»');
+    await page.click('.amenu-list button[data-a="m:lab"]'); await page.waitForFunction(() => document.querySelectorAll('#rows .dot.done').length >= 1); /* علّم المعمل تم من غير ما تفتح الشخص */
+    assert.strictEqual(await page.evaluate(async (pid) => (await (await fetch('/api/people/' + pid)).json()).person.stages.lab.state, id), 'done', 'التعليم السريع اتحفظ');
+    /* الحسابات: تكلفة من الدفعة، دفع بمحفظة، متبقي */
+    await page.click('#rows tr.click:first-child .act'); await page.click('.amenu-list button[data-a="pay"]'); await page.waitForSelector('#payF');
+    assert.ok((await page.textContent('.modal .money')).includes('4,500'), 'تكلفة الدفعة ظاهرة'); await page.fill('#pAmt', '2000'); await page.selectOption('#pMeth', 'فودافون كاش'); await page.fill('#pNote', 'عربون'); await page.click('#pGo');
+    await page.waitForFunction(() => /2,500/.test(document.querySelector('.modal .money .rem').textContent)); assert.ok((await page.textContent('.modal')).includes('فودافون كاش'), 'المحفظة اتسجّلت');
+    await page.click('#payX'); await page.waitForFunction(() => /دفع جزء/.test(document.querySelector('#rows').textContent), null, { timeout: 8000 });
+    await page.goto(base + '#/people/' + id); await page.waitForSelector('#ptabs'); await tab('accounts'); await page.waitForSelector('#payF'); await page.click('#pRest'); await page.click('#pGo'); await page.waitForFunction(() => document.querySelector('.money .rem.zero'));
+    await page.goto(base + '#/accounts'); await page.waitForSelector('.money'); assert.ok((await page.textContent('#view, main')).includes('4,500') && (await page.textContent('main')).includes('فودافون كاش'), 'صفحة الحسابات');
+    await page.goto(base + '#/'); await page.waitForSelector('.kpis'); assert.ok((await page.textContent('.kpis')).includes('متبقي على الأشخاص'), 'الحسابات في لوحة التحكم');
+    /* أرشفة دفعة */
+    await page.goto(base + '#/profiles'); await page.waitForSelector('.vcard .arch'); const archBtn = page.locator('.vcard', { hasText: 'دفعة اختبار' }).locator('.arch'); await archBtn.click(); await page.waitForSelector('details.fold');
+    await page.goto(base + '#/people'); await page.waitForSelector('#rows'); await page.waitForTimeout(600); assert.ok(!(await page.textContent('#rows')).includes('بدر خليل'), 'الدفعة المؤرشفة مش في القايمة');
+    await page.check('#archOnly'); await page.waitForFunction(() => document.querySelector('#rows').textContent.includes('بدر خليل')); await page.uncheck('#archOnly');
+    await page.goto(base + '#/profiles'); await page.waitForSelector('details.fold'); await page.click('details.fold summary'); await page.locator('details.fold .arch').first().click(); await page.waitForFunction(() => !document.querySelector('details.fold'));
+    /* الإعدادات: معالجة الصورة (خلفية بيضاء + إزالة تشويش) */
+    await page.goto(base + '#/settings'); await page.waitForSelector('#pmSave'); await page.check('input[name=pm][value=clean]'); await page.click('#pmSave'); await page.waitForTimeout(500);
+    assert.strictEqual(await page.evaluate(async () => (await (await fetch('/api/meta')).json()).photoProcess), 'clean', 'معالجة الصورة اتفعّلت');
+    const pc = await page.evaluate(async () => {
+      const c = document.createElement('canvas'); c.width = 300; c.height = 380; const g = c.getContext('2d'); const d = g.createImageData(300, 380);
+      for (let i = 0; i < d.data.length; i += 4) { const n = (Math.random() - 0.5) * 18; d.data[i] = 190 + n; d.data[i + 1] = 205 + n; d.data[i + 2] = 225 + n; d.data[i + 3] = 255; } g.putImageData(d, 0, 0);
+      g.fillStyle = '#d9a98a'; g.beginPath(); g.ellipse(150, 200, 70, 95, 0, 0, 7); g.fill(); g.fillStyle = '#2b2220'; g.beginPath(); g.ellipse(150, 120, 75, 45, 0, 0, 7); g.fill();
+      const blob = await new Promise((r) => c.toBlob(r, 'image/png')); const out = await window.NA.photo.clean(blob);
+      const bm = await createImageBitmap(out.blob); const cc = document.createElement('canvas'); cc.width = bm.width; cc.height = bm.height; const gg = cc.getContext('2d'); gg.drawImage(bm, 0, 0);
+      const px = (x, y) => Array.from(gg.getImageData(Math.round(x * bm.width / 300), Math.round(y * bm.height / 380), 1, 1).data.slice(0, 3));
+      return { applied: out.applied, type: out.blob.type, tl: px(6, 6), br: px(294, 374), left: px(20, 250), face: px(150, 210), note: out.note };
+    });
+    assert.ok(pc.applied && pc.type === 'image/jpeg', 'اتعالجت: ' + pc.note); for (const k of ['tl', 'br', 'left']) assert.ok(pc[k].every((v) => v >= 248), 'الخلفية بقت بيضاء ' + k + ' ' + pc[k]);
+    assert.ok(pc.face[0] > 190 && pc.face[0] < 235 && pc.face[2] < 170, 'الوش ما اتمسّش: ' + pc.face);
+    await page.click('input[name=pm][value=off]'); await page.click('#pmSave'); await page.waitForTimeout(400);
     await page.goto(base + '#/reports'); await page.waitForSelector('#rbody .card'); assert.ok((await page.textContent('#rbody')).includes('الوضع الحالي'));
     assert.ok((await page.getAttribute('#rx', 'href')).includes('/api/reports/export.csv'));
     await page.goto(base + '#/activity'); await page.waitForSelector('#arows tr'); assert.ok((await page.textContent('#arows')).includes('دخول'));

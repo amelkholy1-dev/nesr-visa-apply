@@ -3,6 +3,7 @@
    بعد النتيجة بنسجّل رقم الطلب للشخص (ويتعلّم «اتبعت للمنصة»). لو اتحدّد أكتر من شخص بنكمّل واحد ورا التاني، وكل واحد بكابتشا. */
 (function () {
   const NA = (window.NA = window.NA || { pages: {} });
+  /* بنبحث بنوع تأشيرة الشخص نفسه، والمنصة بترجّع أحدث طلب ليه */
   const NAMES = { '320': 'السويس', '302': 'القاهرة', '321': 'الإسكندرية' };
   const norm = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const post = (type, data) => window.postMessage({ source: 'nesr-visaapply', type, data }, location.origin);
@@ -74,10 +75,13 @@
     }
     /* الرقم لازم يكون لنفس الجواز، وإلا مش بنسجّله */
     if (d.passportNo && norm(d.passportNo) !== norm(c.passportNo)) { record(id, c.name, 'err', `النتيجة لجواز تاني (${d.passportNo}) — مش اتسجّل`); return nextPerson(); }
+    /* لازم يكون نفس نوع تأشيرة الشخص (واحد ممكن يكون ليه طلب بعمل مؤقت وطلب تاني بعمل): لو اختلف بنسأل قبل ما نسجّل */
+    const simp = (t) => String(t || '').replace(/[\s\u064B-\u0652ـ]/g, '').replace(/^تأشيرة/, ''); const exp = simp(c.visaTypeText), got = simp(d.visaKind);
+    if (exp && got && !(got.includes(exp) || exp.includes(got)) && !confirm(`نوع التأشيرة في نتيجة المنصة «${d.visaKind}» غير نوع تأشيرة ${c.name}: «${c.visaTypeText}».\nتسجّل رقم الطلب ${d.appNumber} برضه؟`)) { record(id, c.name, 'skip', 'نوع التأشيرة في المنصة «' + d.visaKind + '» مختلف'); return nextPerson(); }
     try {
-      await NA.api('POST', `/people/${id}/result`, { status: 'submitted', appNumber: d.appNumber });
-      record(id, c.name, 'ok', d.issuedVisaNo ? 'صدرت التأشيرة برقم ' + d.issuedVisaNo : '', d.appNumber);
-      try { if (S.opts.onSaved) S.opts.onSaved(id, d); } catch (x) { /* مش مهم */ }
+      const rr = await NA.api('POST', `/people/${id}/result`, { status: 'submitted', appNumber: d.appNumber, appDate: d.appDate });
+      if (rr.ignored) record(id, c.name, 'skip', rr.reason || 'الرقم المسجّل أحدث', d.appNumber);
+      else { record(id, c.name, 'ok', [d.appDate ? 'تاريخ الطلب ' + d.appDate : '', d.issuedVisaNo ? 'صدرت التأشيرة برقم ' + d.issuedVisaNo : ''].filter(Boolean).join(' — '), d.appNumber); try { if (S.opts.onSaved) S.opts.onSaved(id, d); } catch (x) { /* مش مهم */ } }
     } catch (er) { record(id, c.name, 'err', er.message); }
     nextPerson();
   }

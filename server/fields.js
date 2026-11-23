@@ -60,6 +60,9 @@ const GROUPS = [
     { k: 'purpose', label: 'الغرض', type: 'text', scope: 'both', max: 100 },
     { k: 'carNumber', label: 'رقم الرحلة/السيارة', type: 'text', scope: 'both', max: 20 }
   ] },
+  { id: 'accounts', title: 'الحسابات', fields: [
+    { k: 'fee', label: 'تكلفة الفرد (ج) — إجمالي اللي بيدفعه الشخص', type: 'number', scope: 'both', hint: 'مثلاً: 4500 (فحص طبي + معمل + باقي الإجراءات)' }
+  ] },
   { id: 'defaults', title: 'قيم افتراضية للأشخاص', fields: [
     { k: 'passportType', label: 'نوع الجواز', type: 'select', opt: 'passportType', scope: 'both', req: true },
     { k: 'issueCountry', label: 'دولة الإصدار', type: 'select', opt: 'country', scope: 'both', req: true },
@@ -106,9 +109,19 @@ const USES = {
   visaKind: ['mofa'], nationality: ['mofa', 'tash'], embassy: ['mofa'], entriesText: ['mofa'], entryDays: ['mofa'], residence: ['mofa'], medCity: ['wafid'], medVisa: ['wafid'], medPosition: ['wafid'], autoDeclare: ['mofa', 'wafid'],
   sponsorName: ['mofa', 'letter'], sponsorNumber: ['mofa', 'letter'], sponsorAddress: ['mofa'], sponsorPhone: ['mofa'], comingThrough: ['mofa'], entryPoint: ['mofa'], expectedEntryDate: ['mofa'], purpose: ['mofa'], carNumber: ['mofa'],
   passportType: ['mofa'], issueCountry: ['mofa'], religion: ['mofa'], social: ['mofa', 'wafid'], degree: ['mofa', 'letter'], degreeSource: ['mofa'], homeAddress: ['mofa'], email: ['mofa', 'wafid', 'lab', 'tash'], jobClass: ['mofa'], jobText: ['mofa', 'lab', 'letter'],
-  visaNumber: ['letter', 'lab'], unifiedNumber: ['letter'], visaDate: ['letter'], boxNumber: ['letter'], agencyNumber: ['letter'], labDest: ['lab'], labJob: ['lab']
+  visaNumber: ['letter', 'lab'], unifiedNumber: ['letter'], visaDate: ['letter'], boxNumber: ['letter'], agencyNumber: ['letter'], labDest: ['lab'], labJob: ['lab'], fee: ['accounts']
 };
-const meta = () => ({ uses: USES, groups: GROUPS, personGroups: PERSON_GROUPS, options: OPT, maxName: names.MAX });
+/* كل خانة في أنهي تبويب بتظهر (صفحة الشخص وصفحة الدفعة): personal بيانات الشخص · visa التأشيرة (إنجاز) · wafid · lab · letters · accounts */
+const TABS = [
+  { id: 'personal', title: 'بيانات الشخص' }, { id: 'visa', title: 'التأشيرة (إنجاز)' }, { id: 'wafid', title: 'الفحص الطبي (وافد)' },
+  { id: 'lab', title: 'المعامل' }, { id: 'letters', title: 'الخطابات' }, { id: 'accounts', title: 'الحسابات' }
+];
+const TAB_OF = (() => {
+  const byGroup = { passport: 'personal', names: 'personal', defaults: 'personal', lookup: 'visa', visa: 'visa', sponsor: 'visa', entry: 'visa', declare: 'visa', medical: 'wafid', lab: 'lab', letters: 'letters', accounts: 'accounts' };
+  const o = {}; for (const g of [...GROUPS, ...PERSON_GROUPS]) for (const f of g.fields) o[f.k] = byGroup[g.id] || 'personal';
+  o.jobClass = 'visa'; o.jobText = 'visa'; return o;
+})();
+const meta = () => ({ tabs: TABS, tabOf: TAB_OF, uses: USES, groups: GROUPS, personGroups: PERSON_GROUPS, options: OPT, maxName: names.MAX });
 
 const pick = (src, keys) => { const o = {}; for (const k of keys) if (src && src[k] !== undefined && src[k] !== null) o[k] = typeof src[k] === 'string' ? src[k].trim() : src[k]; return o; };
 const sanitizeProfile = (d) => pick(d, PROFILE_KEYS);

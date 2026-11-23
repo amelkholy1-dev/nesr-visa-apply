@@ -37,15 +37,17 @@ const sizeOf = (id, name) => { try { return name ? fs.statSync(fullPath(id, name
 
 async function loadProfile(id) {
   if (!id) return null;
-  const p = (await db.query('SELECT id, name, data FROM profiles WHERE id = ?', [id]))[0];
-  return p ? { id: p.id, name: p.name, data: json(p.data) } : null;
+  const p = (await db.query('SELECT id, name, data, archived FROM profiles WHERE id = ?', [id]))[0];
+  return p ? { id: p.id, name: p.name, data: json(p.data), archived: !!p.archived } : null;
 }
-function brief(row, profile) {
+const A = require('../accounts');
+function brief(row, profile, pays) {
   const r = F.resolve(json(row.data), profile && profile.data, { personalPhoto: row.personal_photo, personalPhotoSize: sizeOf(row.id, row.personal_photo), passportImage: row.passport_image });
   return { id: row.id, name: row.name_ar, passportNo: row.passport_no, status: row.status, profileId: row.profile_id, profileName: profile ? profile.name : '',
     appNumber: row.app_number, hasPhoto: !!row.personal_photo, hasPassport: !!row.passport_image, issues: r.issues.length, ready: r.ready, updatedAt: row.updated_at, filledAt: row.filled_at,
     stages: S.parse(row.stages), service: readiness(row, profile),
-    expiry: F.expiryInfo(json(row.data).expiryDate, json(row.data).expectedEntryDate || (profile && profile.data && profile.data.expectedEntryDate)) };
+    expiry: F.expiryInfo(json(row.data).expiryDate, json(row.data).expectedEntryDate || (profile && profile.data && profile.data.expectedEntryDate)), archived: !!(profile && profile.archived),
+    ...(pays ? { pay: A.balance(A.feeOf(json(row.data), profile && profile.data).fee, pays.get(row.id) || 0) } : {}) };
 }
 
 router.get('/', async (req, res) => {
@@ -54,9 +56,13 @@ router.get('/', async (req, res) => {
     if (req.query.status) { where.push('status = ?'); vals.push(String(req.query.status)); }
     if (req.query.profile) { where.push('profile_id = ?'); vals.push(parseInt(req.query.profile, 10)); }
     if (req.query.q) { where.push('(name_ar LIKE ? OR passport_no LIKE ?)'); const q = `%${String(req.query.q).trim().replace(/[%_]/g, '')}%`; vals.push(q, q); }
+    /* الدفعات المؤرشفة مش بتظهر إلا لو طلبتها (archived=1 للمؤرشف بس، archived=all للكل) */
+    if (req.query.archived === '1') where.push('profile_id IN (SELECT id FROM profiles WHERE archived = 1)');
+    else if (req.query.archived !== 'all') where.push('(profile_id IS NULL OR profile_id NOT IN (SELECT id FROM profiles WHERE archived = 1))');
     const rows = await db.query(`SELECT * FROM people ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY id DESC LIMIT 500`, vals);
-    const profs = new Map((await db.query('SELECT id, name, data FROM profiles')).map(p => [p.id, { id: p.id, name: p.name, data: json(p.data) }]));
-    res.json({ people: rows.map(r => brief(r, profs.get(r.profile_id))) });
+    const profs = new Map((await db.query('SELECT id, name, data, archived FROM profiles')).map(p => [p.id, { id: p.id, name: p.name, data: json(p.data), archived: !!p.archived }]));
+    const pays = P.has(req, 'payments.view') ? new Map((await db.query('SELECT person_id, SUM(amount) AS s FROM payments GROUP BY person_id')).map((r) => [r.person_id, Number(r.s)])) : null;
+    res.json({ people: rows.map(r => brief(r, profs.get(r.profile_id), pays)) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -176,6 +182,10 @@ router.post('/:id(\\d+)/result', async (req, res) => {
     const cur = (await db.query('SELECT name_ar, app_number, stages FROM people WHERE id = ?', [id]))[0];
     if (!cur) return res.status(404).json({ error: 'الشخص مش موجود' });
     const stages = S.parse(cur.stages); let stagesChanged = false;
+    const appDate = String(b.appDate || '').replace(/\//g, '-').match(/^\d{4}-\d{2}-\d{2}$/) ? String(b.appDate).replace(/\//g, '-') : '';
+    /* «أحدث رقم طلب»: لو الرقم الجديد تاريخه أقدم من المسجّل، مبنغيّرش حاجة */
+    if (app && appDate && cur.app_number && cur.app_number !== app && stages.sent.appDate && appDate < stages.sent.appDate) return res.json({ ok: true, ignored: true, reason: 'الرقم المسجّل (' + cur.app_number + ') أحدث (' + stages.sent.appDate + ')' });
+    if (app && appDate && stages.sent.appDate !== appDate) { stages.sent.appDate = appDate; stagesChanged = true; }
     if (app && cur.app_number && cur.app_number !== app) { stages.sent.history.unshift({ app: cur.app_number, at: new Date().toISOString().slice(0, 10) }); stagesChanged = true; } /* إعادة إرسال برقم طلب جديد: القديم بيتحفظ */
     if (status === 'submitted' && stages.sent.state !== 'done') { S.patch(stages, 'sent', { state: 'done' }); stagesChanged = true; }
     await db.query(`UPDATE people SET status = ?, app_number = COALESCE(?, app_number), filled_at = IF(? IN ('filled','submitted'), NOW(), filled_at)${stagesChanged ? ', stages = ?' : ''} WHERE id = ?`, stagesChanged ? [status, app, status, JSON.stringify(stages), id] : [status, app, status, id]);
@@ -192,7 +202,8 @@ router.get('/:id(\\d+)/appno-lookup', async (req, res) => {
     if (!row) return res.status(404).json({ error: 'الشخص مش موجود' });
     const profile = await loadProfile(row.profile_id);
     const m = F.resolve(json(row.data), profile && profile.data, {}).mofa;
-    res.json({ personId: row.id, name: row.name_ar, passportNo: m.PASSPORTnumber || '', nationality: m.NATIONALITY || 'EGY', visaType: m.VisaKind || '', embassy: m.EmbassyCode || '', appNumber: row.app_number || '' });
+    const st = S.parse(row.stages);
+    res.json({ personId: row.id, name: row.name_ar, passportNo: m.PASSPORTnumber || '', nationality: m.NATIONALITY || 'EGY', visaType: m.VisaKind || '', visaTypeText: (F.OPT.visaKind.find((o) => String(o.v) === String(m.VisaKind)) || {}).t || '', embassy: m.EmbassyCode || '', appNumber: row.app_number || '', appDate: st.sent.appDate || '' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

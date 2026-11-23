@@ -7,6 +7,8 @@ const PERMS = {
   'people.fill': 'استخدام الإضافة (منصة / وافد / معمل) وطباعة الخطابات',
   'people.delete': 'حذف الأشخاص (الموظف يحذف اللي هو أضافه بس)',
   'profiles.edit': 'إدارة ملفات الضبط (دفعات التأشيرات)',
+  'payments.view': 'الحسابات: شوف التكلفة والمدفوع والمتبقي',
+  'payments.edit': 'الحسابات: سجّل دفعة أو امسحها',
   'export': 'التصدير (تساهيل Excel / CSV)',
   'stats.view': 'الإحصائيات والتقارير',
   'activity.view': 'سجل النشاط',
@@ -16,7 +18,7 @@ const ALL = Object.keys(PERMS);
 const ROLES = {
   admin: { label: 'مدير', desc: 'كل الصلاحيات', perms: ALL },
   manager: { label: 'مشرف', desc: 'كل حاجة ما عدا المستخدمين', perms: ALL.filter((p) => p !== 'users.manage') },
-  staff: { label: 'موظف', desc: 'يشتغل على الأشخاص ويستخدم الإضافة', perms: ['people.view', 'people.edit', 'people.mark', 'people.fill', 'people.delete', 'profiles.edit', 'stats.view'] },
+  staff: { label: 'موظف', desc: 'يشتغل على الأشخاص ويستخدم الإضافة', perms: ['people.view', 'people.edit', 'people.mark', 'people.fill', 'people.delete', 'profiles.edit', 'stats.view', 'payments.view', 'payments.edit'] },
   viewer: { label: 'مشاهد', desc: 'يشوف بس', perms: ['people.view', 'stats.view'] }
 };
 const roleOf = (r) => (r === 'user' ? 'staff' : r === 'custom' ? 'custom' : ROLES[r] ? r : 'staff'); /* 'user' هو الدور القديم، و'custom' = صلاحيات مخصّصة */

@@ -15,6 +15,7 @@ function parse(raw) {
   for (const st of STAGES) {
     const v = o[st.k] || {};
     out[st.k] = { state: STATES.includes(v.state) ? v.state : '', date: iso(v.date), note: String(v.note || '').slice(0, 200) };
+    if (st.k === 'sent') out[st.k].appDate = iso(v.appDate); /* تاريخ الطلب زي ما في المنصة */
     if (st.k === 'sent') out[st.k].history = Array.isArray(v.history) ? v.history.slice(0, 20).map((h) => ({ app: String(h.app || '').slice(0, 20), at: iso(h.at) })) : [];
   }
   return out;

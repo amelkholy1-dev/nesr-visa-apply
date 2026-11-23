@@ -16,16 +16,17 @@
       <div class="sp">${can('export') ? '<button class="btn" id="tashBtn" title="ملف Excel (.xls) لموقع تساهيل — للمحدّدين، أو كل المعروضين">تصدير لتساهيل</button>' : ''}${can('people.edit') ? '<a href="#/bulk" class="btn" style="text-decoration:none">رفع جماعي</a><a href="#/people/new" class="btn pri" style="text-decoration:none">+ شخص جديد</a>' : ''}</div></div>
       <div class="card"><div class="filters">
         <input type="search" id="q" placeholder="بحث بالاسم أو رقم الجواز" value="${e(state.q || '')}">
-        <select id="pf"><option value="">كل الدفعات (ملفات الضبط)</option>${profs.map((p) => `<option value="${p.id}"${String(state.pf) === String(p.id) ? ' selected' : ''}>${e(p.name)}</option>`).join('')}</select>
+        <select id="pf"><option value="">كل الدفعات (ملفات الضبط)</option>${profs.map((p) => `<option value="${p.id}"${String(state.pf) === String(p.id) ? ' selected' : ''}>${e(p.name)}${p.archived ? ' (مؤرشفة)' : ''}</option>`).join('')}</select>
         <select id="st" style="display:none"><option value="">كل الحالات</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${state.st === k ? ' selected' : ''}>${e(v[0])}</option>`).join('')}</select>
         <select id="sf"><option value="">كل المراحل</option>${stages.map((x) => `<option value="p:${x.k}"${state.sf === 'p:' + x.k ? ' selected' : ''}>لسه: ${e(x.label)}</option>${x.booking ? `<option value="b:${x.k}"${state.sf === 'b:' + x.k ? ' selected' : ''}>محجوز: ${e(x.label)}</option>` : ''}<option value="d:${x.k}"${state.sf === 'd:' + x.k ? ' selected' : ''}>تم: ${e(x.label)}</option>`).join('')}</select>
         <select id="svf"><option value="">كل الجاهزية</option>${SERVICES.map(([k, l]) => `<option value="${k}:ok"${state.svf === k + ':ok' ? ' selected' : ''}>جاهز: ${l}</option><option value="${k}:no"${state.svf === k + ':no' ? ' selected' : ''}>ناقص: ${l}</option>`).join('')}</select>
         <select id="sortBy"><option value="new"${state.sort === 'new' || !state.sort ? ' selected' : ''}>الأحدث</option><option value="old"${state.sort === 'old' ? ' selected' : ''}>الأقدم</option><option value="name"${state.sort === 'name' ? ' selected' : ''}>الاسم</option></select>
         <label style="display:flex;gap:6px;align-items:center;font-size:13.5px"><input type="checkbox" id="exOnly"${state.ex ? ' checked' : ''}> جوازات قريبة الانتهاء</label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13.5px"><input type="checkbox" id="archOnly"${state.arch ? ' checked' : ''}> المؤرشفة بس</label>
       </div><div class="fchips" id="stChips"></div></div>
       <div id="bulk"></div>
-      <div class="card" style="padding:0"><div class="tbl-wrap"><table><thead><tr><th style="width:34px"><input type="checkbox" id="selAll" title="تحديد الكل"></th><th>الشخص</th><th>الدفعة</th><th>الحالة</th><th>الجاهزية (دوس على أي خدمة تشوف الناقص)</th><th>المراحل</th><th></th></tr></thead>
-      <tbody id="rows"><tr><td colspan="7" class="muted">جاري التحميل…</td></tr></tbody></table></div></div>`;
+      <div class="card" style="padding:0"><div class="tbl-wrap"><table><thead><tr><th style="width:34px"><input type="checkbox" id="selAll" title="تحديد الكل"></th><th>الشخص</th><th>الدفعة</th><th>الحالة</th><th>الجاهزية (دوس على أي خدمة تشوف الناقص)</th><th>المراحل</th>${can('payments.view') ? '<th>الدفع</th>' : ''}<th></th></tr></thead>
+      <tbody id="rows"><tr><td colspan="9" class="muted">جاري التحميل…</td></tr></tbody></table></div></div>`;
 
     let all = [], shown = [];
     const selectedIds = () => [...view.querySelectorAll('.sel:checked')].map((c) => c.dataset.id);
@@ -35,7 +36,7 @@
     const bulkHtml = (n) => {
       const sel = (id, opts, ph) => `<select id="${id}" style="padding:6px 8px;border-radius:9px;border:0;max-width:170px">${ph ? `<option value="">${ph}</option>` : ''}${opts}</select>`;
       return `<div class="bulkbar"><span class="cnt">${n} محدّد</span><button class="btn small" id="clearSel">إلغاء التحديد</button><span class="sep"></span>
-        ${can('people.fill') ? `<div class="grp"><span class="gl">ابدأ طابور:</span><button class="btn pri" id="queueBtn">املى المنصة (${n})</button><button class="btn" id="wafQueueBtn">احجز وافد (${n})</button><button class="btn" id="labQueueBtn">احجز المعمل (${n})</button><button class="btn" id="appnoBtn" title="يجيب رقم الطلب (إنجاز) من المنصة لكل المحدّدين اللي لسه معندهمش رقم">هات أرقام إنجاز (${n})</button></div><span class="sep"></span>` : ''}
+        ${can('people.fill') ? `<div class="grp"><span class="gl">ابدأ طابور:</span><button class="btn pri" id="queueBtn">عمل إنجاز (${n})</button><button class="btn" id="wafQueueBtn">احجز وافد (${n})</button><button class="btn" id="labQueueBtn">احجز المعمل (${n})</button><button class="btn" id="appnoBtn" title="يجيب رقم الطلب (إنجاز) من المنصة لكل المحدّدين اللي لسه معندهمش رقم">هات أرقام إنجاز (${n})</button></div><span class="sep"></span>` : ''}
         ${can('people.mark') ? `<div class="grp"><span class="gl">اعلّم:</span>${sel('bkStage', stages.map((x) => `<option value="${x.k}" data-b="${x.booking ? 1 : 0}">${e(x.label)}</option>`).join(''))}
           ${sel('bkState', '<option value="done">تم ✔</option><option value="booked">محجوز</option><option value="">لسه (إلغاء)</option>')}<input type="date" id="bkDate" title="تاريخ (اختياري)" style="padding:5px 8px;border-radius:9px;border:0"><button class="btn pri" id="bkApply">علّم</button></div>
           <span class="sep"></span><div class="grp"><span class="gl">الحالة:</span>${sel('bkStatus', Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${e(v[0])}</option>`).join(''), '— اختار —')}<button class="btn" id="bkStatusGo">غيّر</button></div>` : ''}
@@ -72,13 +73,47 @@
 
     const svcChips = (p) => SERVICES.map(([k, l]) => { const miss = (p.service || {})[k] || []; return miss.length ? `<span class="chip bad" title="${e('ناقص: ' + miss.join('، '))}">${l} −${miss.length}</span>` : `<span class="chip ok" title="جاهز">${l} ✓</span>`; }).join('');
     const stageCells = (p) => `<span class="stlist">${stages.map((x) => { const c = (p.stages || {})[x.k] || {}; return `<span class="sg" title="${e(x.label + ': ' + STATE_AR[c.state || ''] + (c.date ? ' ' + c.date : ''))}"><span class="dots"><i class="dot ${c.state || ''}"></i></span>${e(x.short || x.k)}</span>`; }).join('')}</span>`;
+    /* قايمة إجراءات الصف: كل حاجة تتعمل من القايمة من غير ما تدخل على الشخص */
+    const closeMenu = () => { view.querySelectorAll('.amenu-list').forEach((m) => m.remove()); };
+    document.addEventListener('click', (ev) => { if (!ev.target.closest('.amenu')) closeMenu(); });
+    const payGate = (p) => { const pay = p && p.pay; if (pay && (pay.state === 'unpaid' || pay.state === 'partial')) return confirm(`${p.name || 'الشخص'} لسه عليه ${Number(pay.remaining).toLocaleString('en-US')} ج (مدفوع ${Number(pay.paid).toLocaleString('en-US')} من ${Number(pay.fee).toLocaleString('en-US')}).\nتكمّل الحجز برضه؟`); return true; };
+    const openMenu = (btn) => {
+      const wasOpen = btn.parentElement.querySelector('.amenu-list'); closeMenu(); if (wasOpen) return;
+      const id = btn.dataset.id; const p = all.find((x) => String(x.id) === String(id)) || {};
+      const fill = can('people.fill'), mark = can('people.mark');
+      const items = [
+        fill ? ['go', 'عمل إنجاز (ملء الطلب في المنصة)'] : null, fill ? ['appno', 'هات رقم إنجاز من المنصة'] : null,
+        fill ? ['wafid', 'احجز الفحص الطبي (وافد)'] : null, fill ? ['lab', 'احجز المعمل'] : null,
+        fill ? ['hr'] : null, fill ? ['suez', 'خطاب الترشيح — السويس'] : null, fill ? ['cairo', 'خطاب الترشيح — القاهرة'] : null,
+        mark ? ['hr'] : null, mark ? ['m:sent', 'علّم: اتبعت للمنصة'] : null, mark ? ['m:medical', 'علّم: تم الفحص الطبي'] : null, mark ? ['m:lab', 'علّم: تم المعمل'] : null, mark ? ['m:letter', 'علّم: اتطبع الخطاب'] : null,
+        can('payments.view') ? ['hr'] : null, can('payments.view') ? ['pay', 'الحسابات والدفع'] : null,
+        ['hr'], ['open', 'فتح الشخص']
+      ].filter(Boolean);
+      const box = document.createElement('div'); box.className = 'amenu-list';
+      box.innerHTML = items.map((it) => (it[0] === 'hr' ? '<hr>' : `<button type="button" data-a="${it[0]}">${e(it[1])}</button>`)).join('');
+      btn.parentElement.appendChild(box);
+      box.onclick = async (ev) => {
+        const b = ev.target.closest('button'); if (!b) return; ev.stopPropagation(); const a = b.dataset.a; closeMenu();
+        try {
+          if (a === 'go') return NA.fillRequest(id);
+          if (a === 'appno') return NA.appno.start([String(id)], { onDone: (n) => { if (n) load().catch(fail); } });
+          if (a === 'wafid') { if (!payGate(p)) return; return NA.wafidRequest(id); }
+          if (a === 'lab') { if (!payGate(p)) return; return NA.labRequest(id); }
+          if (a === 'suez' || a === 'cairo') return NA.letterDownload(id, a);
+          if (a === 'pay') return NA.payModal(id, p.name, () => load().catch(fail));
+          if (a === 'open') { location.hash = '#/people/' + id; return; }
+          if (a.startsWith('m:')) { await api('PUT', `/people/${id}/stages/${a.slice(2)}`, { state: 'done' }); toast('اتعلّمت', 'ok'); await load(); }
+        } catch (er) { fail(er); }
+      };
+    };
     const draw = () => {
       $('#rows').innerHTML = shown.map((p) => `<tr class="click" data-id="${p.id}"><td><input type="checkbox" class="sel" data-id="${p.id}"></td>
         <td class="pcell"><b>${e(p.name || '—')}</b><small>${e(p.passportNo)}${p.appNumber ? ' • ' + e(p.appNumber) : ''}</small>${p.hasPhoto ? '' : ' <span class="chip warn" title="الصورة الشخصية ناقصة">بدون صورة</span>'}${p.expiry && p.expiry.expired ? ' <span class="chip bad">جواز منتهي</span>' : p.expiry && p.expiry.short ? ` <span class="chip warn" title="أقل من 6 شهور من تاريخ الدخول">ينتهي بعد ${p.expiry.days} يوم</span>` : ''}</td>
         <td>${e(p.profileName || '—')}</td><td><span class="pill ${STATUS[p.status] ? STATUS[p.status][1] : ''}">${e((STATUS[p.status] || [p.status])[0])}</span></td>
         <td><span class="svc">${svcChips(p)}</span></td><td>${stageCells(p)}</td>
-        <td>${can('people.fill') ? `<button class="btn small pri fill" data-id="${p.id}" title="يفتح منصة التأشيرات ويملا الطلب">املى الطلب</button>` : ''}</td></tr>`).join('')
-        || `<tr><td colspan="7"><div class="empty"><div class="big">🗂️</div>${all.length ? 'مفيش أشخاص بالفلاتر دي.' : 'لسه مفيش أشخاص. ابدأ بإضافة أول شخص أو ارفع صور جوازات.'}</div></td></tr>`;
+        ${can('payments.view') ? `<td>${p.pay ? NA.payState(p.pay) : ''}</td>` : ''}
+        <td><div class="amenu"><button class="btn small act" data-id="${p.id}" type="button">الإجراءات</button></div></td></tr>`).join('')
+        || `<tr><td colspan="9"><div class="empty">${all.length ? 'مفيش أشخاص بالفلاتر دي.' : 'لسه مفيش أشخاص. ابدأ بإضافة أول شخص أو ارفع صور جوازات.'}</div></td></tr>`;
       $('#cnt').textContent = `${shown.length} من ${all.length} شخص`;
       $('#selAll').checked = false; wireBulk();
     };
@@ -87,7 +122,7 @@
       return `<span class="fchip${!$('#st').value ? ' on' : ''}" data-st="">الكل<b>${all.length}</b></span>` + Object.entries(STATUS).map(([k, v]) => `<span class="fchip${$('#st').value === k ? ' on' : ''}" data-st="${k}">${e(v[0])}<b>${counts[k] || 0}</b></span>`).join('');
     };
     const apply = () => {
-      const st = { q: $('#q').value, st: $('#st').value, pf: $('#pf').value, ex: $('#exOnly').checked, sf: $('#sf').value, svf: $('#svf').value, sort: $('#sortBy').value }; try { sessionStorage.setItem('peopleFilter', JSON.stringify(st)); } catch (x) { /* مش مهم */ }
+      const st = { q: $('#q').value, st: $('#st').value, pf: $('#pf').value, ex: $('#exOnly').checked, arch: $('#archOnly').checked, sf: $('#sf').value, svf: $('#svf').value, sort: $('#sortBy').value }; try { sessionStorage.setItem('peopleFilter', JSON.stringify(st)); } catch (x) { /* مش مهم */ }
       shown = all.filter((p) => (!st.st || p.status === st.st) && (!st.ex || (p.expiry && (p.expiry.short || p.expiry.expired))));
       if (st.sf) { const [mode, key] = st.sf.split(':'); shown = shown.filter((p) => { const c = (p.stages || {})[key] || {}; return mode === 'p' ? !c.state : mode === 'b' ? c.state === 'booked' : c.state === 'done'; }); }
       if (st.svf) { const [k, m] = st.svf.split(':'); shown = shown.filter((p) => ((((p.service || {})[k]) || []).length === 0) === (m === 'ok')); }
@@ -95,15 +130,15 @@
       $('#stChips').innerHTML = chipsHtml(); draw();
     };
     const load = async () => {
-      const r = await api('GET', `/people?q=${encodeURIComponent($('#q').value)}&profile=${$('#pf').value}`); all = r.people; apply();
+      const r = await api('GET', `/people?q=${encodeURIComponent($('#q').value)}&profile=${$('#pf').value}${$('#archOnly').checked ? '&archived=1' : ''}`); all = r.people; apply();
     };
     let qT; $('#q').oninput = () => { clearTimeout(qT); qT = setTimeout(() => load().catch(fail), 250); };
-    $('#pf').onchange = () => load().catch(fail);
+    $('#pf').onchange = () => load().catch(fail); $('#archOnly').onchange = () => load().catch(fail);
     ['st', 'exOnly', 'sf', 'svf', 'sortBy'].forEach((i) => { $('#' + i).onchange = apply; });
     $('#stChips').onclick = (ev) => { const c = ev.target.closest('.fchip'); if (!c) return; $('#st').value = c.dataset.st; apply(); };
     $('#selAll').onchange = () => { view.querySelectorAll('.sel').forEach((c) => { c.checked = $('#selAll').checked; }); wireBulk(); };
     const tash = $('#tashBtn'); if (tash) tash.onclick = () => { const ids = selectedIds().length ? selectedIds() : shown.map((p) => p.id); if (!ids.length) return toast('مفيش أشخاص للتصدير', 'err'); window.location.href = `/api/export/tasaheel.xls?ids=${ids.slice(0, 1500).join(',')}`; toast('بينزّل ملف تساهيل (' + ids.length + ' شخص)', 'ok'); };
-    view.onclick = (ev) => { if (ev.target.classList.contains('sel')) { wireBulk(); return; } if (ev.target.id === 'selAll') return; const b = ev.target.closest('.fill'); if (b) { ev.stopPropagation(); return NA.fillRequest(b.dataset.id); } if (ev.target.closest('input,select,button,a,.bulkbar')) return; const tr = ev.target.closest('tr.click'); if (tr) location.hash = '#/people/' + tr.dataset.id; };
+    view.onclick = (ev) => { if (ev.target.classList.contains('sel')) { wireBulk(); return; } if (ev.target.id === 'selAll') return; const ab = ev.target.closest('.act'); if (ab) { ev.stopPropagation(); return openMenu(ab); } if (ev.target.closest('.amenu-list')) return; closeMenu(); if (ev.target.closest('input,select,button,a,.bulkbar')) return; const tr = ev.target.closest('tr.click'); if (tr) location.hash = '#/people/' + tr.dataset.id; };
     await load();
   };
 })();

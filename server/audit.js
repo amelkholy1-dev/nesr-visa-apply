@@ -10,7 +10,7 @@ function log(req, action, personId, personName, detail) {
   } catch (e) { /* مش مهم */ }
 }
 const LABELS = {
-  login: 'دخول', settings: 'تغيير إعداد', create: 'إضافة شخص', update: 'تعديل بيانات', delete: 'حذف شخص', photo: 'رفع صورة شخصية', passport: 'رفع صورة جواز', 'del-file': 'حذف صورة',
+  login: 'دخول', payment: 'دفعة', settings: 'تغيير إعداد', create: 'إضافة شخص', update: 'تعديل بيانات', delete: 'حذف شخص', photo: 'رفع صورة شخصية', passport: 'رفع صورة جواز', 'del-file': 'حذف صورة',
   fill: 'ملا الطلب في المنصة', filled: 'الفورم اتملى', submitted: 'الطلب اتبعت', status: 'تغيير حالة', bulk: 'رفع جماعي', stage: 'تحديث مرحلة', export: 'تصدير', print: 'طباعة'
 };
 module.exports = { log, LABELS };

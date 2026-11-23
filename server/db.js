@@ -60,6 +60,17 @@ const TABLES = [
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY ix_act_time (created_at), KEY ix_act_user (user_id), KEY ix_act_person (person_id), KEY ix_act_action (action)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS payments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    person_id INT NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    method VARCHAR(40) NOT NULL DEFAULT '',
+    note VARCHAR(255) NOT NULL DEFAULT '',
+    paid_at DATE NOT NULL,
+    created_by INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY ix_pay_person (person_id), KEY ix_pay_date (paid_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
   `CREATE TABLE IF NOT EXISTS settings (
     k VARCHAR(60) PRIMARY KEY,
     v LONGTEXT NULL,
@@ -80,6 +91,8 @@ async function init() {
   if (!hasCol) await pool.query('ALTER TABLE people ADD COLUMN stages LONGTEXT NULL');
   const hasPerms = (await query("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'perms'"))[0].n;
   if (!hasPerms) await pool.query('ALTER TABLE users ADD COLUMN perms TEXT NULL');
+  const hasArch = (await query("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'profiles' AND column_name = 'archived'"))[0].n;
+  if (!hasArch) await pool.query('ALTER TABLE profiles ADD COLUMN archived TINYINT(1) NOT NULL DEFAULT 0');
   await pool.query('ALTER TABLE users MODIFY role VARCHAR(20) NOT NULL DEFAULT \'staff\'');
   const n = (await query('SELECT COUNT(*) AS n FROM users'))[0].n;
   if (!n) {
