@@ -47,7 +47,8 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
 });
 
 const pub = path.join(__dirname, '..', 'public');
-app.use(express.static(pub, { maxAge: '5m' }));
+/* ملفات الواجهة (app.js وغيره) بيتأكد منها المتصفح في كل مرة (ETag) عشان أي تحديث يوصل فوراً؛ مكتبة OCR الكبيرة (vendor) بتتخزّن أسبوع */
+app.use(express.static(pub, { maxAge: 0, etag: true, setHeaders: (res, file) => { if (/[\\/]vendor[\\/]/.test(file)) res.setHeader('Cache-Control', 'public, max-age=604800'); else res.setHeader('Cache-Control', 'no-cache'); } }));
 app.get('*', (req, res) => res.sendFile(path.join(pub, 'index.html')));
 
 const server = app.listen(config.port, () => console.log(`🚀 نظام طلبات التأشيرات شغّال على بورت ${config.port}`));

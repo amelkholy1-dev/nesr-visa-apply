@@ -138,6 +138,8 @@ const api = async (method, url, body, extra = {}) => {
   assert.ok(((await api('GET', '/api/people')).json.people.find((p) => p.id === spid) || {}).stages.medical.state === 'booked', 'المراحل في القايمة');
   const tx = await fetch(base + `/api/export/tasaheel.xls?ids=${spid}&fmt=DD-Mon-YYYY`, { headers: { Cookie: cookie } }); const txb = Buffer.from(await tx.arrayBuffer());
   assert.strictEqual(tx.status, 200); assert.strictEqual(txb.slice(0, 4).toString('hex'), 'd0cf11e0'); fs.writeFileSync(path.join(os.tmpdir(), 'tasaheel-test.xls'), txb); assert.ok(txb.length > 4096 && txb.includes(Buffer.from('Bio_Applicant_Details', 'latin1')), 'ورقة تساهيل جوه الملف');
+  const old = await fetch(base + `/api/export/tasheel.xlsx?ids=${spid}`, { headers: { Cookie: cookie }, redirect: 'manual' });
+  assert.strictEqual(old.status, 302); assert.strictEqual(old.headers.get('location'), `/api/export/tasaheel.xls?ids=${spid}`, 'الرابط القديم بيودّي للجديد');
   assert.ok(String(tx.headers.get('content-disposition')).includes('ST12345.xls'), 'شخص واحد: اسم الملف رقم الجواز زي مثال تساهيل');
   const labp = await api('GET', `/api/people/${spid}/lab`); assert.strictEqual(labp.status, 200);
   assert.deepStrictEqual([labp.json.lab.natType, labp.json.lab.destination, labp.json.lab.passport, labp.json.lab.fullName, labp.json.lab.phone, labp.json.lab.netNumber], ['1', '2182', 'ST12345', 'ALI OMAR SAID', '+201000000000', 'E222222222'], 'بيانات حجز المعمل');

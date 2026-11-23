@@ -35,6 +35,9 @@ const toIso = (v) => String(v || '').replace(/\//g, '-');
 /* أعمدة ملف تساهيل الأصلي (Bio_Applicant_Details) بنفس الترتيب والأسماء */
 const TASAHEEL_HEAD = ['E.No', 'First Name*', 'Second Name', 'Last Name*', 'Passport Number*', 'Date of Birth* ', 'Nationality*', 'Date of Issue*', 'Gender*', 'Place of Issue*', 'Expiry Date*', 'Applicant Mobile No.*', 'Email ID*'];
 
+/* الرابط القديم (نسخة الصفحة القديمة المخزّنة في المتصفح): بنوديه للجديد بنفس الاختيارات */
+router.get('/export/tasheel.xlsx', (req, res) => res.redirect(302, '/api/export/tasaheel.xls' + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '')));
+
 /* تصدير لتساهيل: ?ids=1,2,3 أو ?status=… ، وبيرجّع ملف Excel (.xls) بنفس شكل ملف تساهيل (ورقة Bio_Applicant_Details + ورقة hiddenSheet المخفية) */
 router.get('/export/tasaheel.xls', async (req, res) => {
   try {
