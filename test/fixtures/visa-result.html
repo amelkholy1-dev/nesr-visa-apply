@@ -1,13 +1,26 @@
 <!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>منصة التأشيرات (نسخة اختبار)</title></head><body>
-<!-- نسخة مبسّطة بأرقام وهمية من نتيجة «التفويض على تأشيرة» (visa.mofa.gov.sa/enjaz/ViewVisaDetails/person): نفس الـ ids والتركيب. جدول المهن بيتحمّل متأخّر زي jTable. للاختبار بس. -->
+<!-- نسخة مبسّطة بأرقام وهمية من نتيجة «التفويض على تأشيرة» (visa.mofa.gov.sa/enjaz/ViewVisaDetails/person): نفس الـ ids والتركيب. الجداول بتتحمّل متأخّر وبتتحدّث لما تغيّر الممثلية زي jTable. للاختبار بس. -->
 <form action="/enjaz/ViewVisaDetails/person" method="post">
  <div class="form-group"><label class="col-md-2 control-label"> رقم الصادر </label><div class="col-md-3 control-display-label"> 1000000001 </div><label class="control-label col-md-2"> تاريخ التأشيرة </label><div class="col-md-3 control-display-label"> 1447/09/25 </div></div>
  <div class="form-group"><label class="col-md-2 control-label"> الاسم </label><div class="col-md-3 control-display-label"> شركة تجربة للنقل </div><label class="control-label col-md-2"> العنوان </label><div class="col-md-3 control-display-label"> 0, 111111111, 0, 1 </div></div>
  <div class="form-group"><label class="col-md-2 control-label"> رقم الإقامة </label><div class="col-md-3 control-display-label"> 7000000001 </div></div>
- <div class="form-group"><label class="col-md-2 control-label"> عرض التأشيرات الموجودة في ممثلية: </label><div class="col-md-3"><select class="required select2me" id="EmbassyID" name="EmbassyID"><option value="302">القاهرة</option><option value="320" selected>السويس</option></select></div></div>
- <h3 class="form-section">قائمة المهن</h3><div id="dvJobsGrid"><div class="jtable-main-container"><table class="styled"><thead><tr><th>عدد الأشخاص</th><th>المهنة</th><th>الجنسية</th><th>جهة القدوم</th><th>العدد المتبقي</th><th>الاسم</th></tr></thead><tbody id="jb"></tbody></table></div></div>
-<h3 class="form-section">التفاويض في الممثلية</h3><div id="dvDelegationsInEmbassies"><div class="jtable-main-container"><table class="styled"><thead><tr><th>رقم التفويض</th><th>جهة القدوم</th><th>عدد الأشخاص</th><th>المهنة</th><th>رقم الوكالة#</th><th>اسم الوكالة</th><th>الاجراءات</th></tr></thead><tbody id="db"></tbody></table></div></div>
+ <div class="form-group"><label class="col-md-2 control-label"> عرض التأشيرات الموجودة في ممثلية: </label><div class="col-md-3"><select class="required select2me" id="EmbassyID" name="EmbassyID"><option value="311">ابوجا</option><option value="302">القاهرة</option><option value="320" selected>السويس</option></select></div></div>
+ <h3 class="form-section">قائمة المهن</h3><div id="dvJobsGrid"><div class="jtable-main-container"><div class="jtable-busy-panel-background" style="display:none"></div><table class="styled"><thead><tr><th>عدد الأشخاص</th><th>المهنة</th><th>الجنسية</th><th>جهة القدوم</th><th>العدد المتبقي</th><th>الاسم</th></tr></thead><tbody id="jb"></tbody></table></div></div>
+ <h3 class="form-section">التفاويض في الممثلية</h3><div id="dvDelegationsInEmbassies"><div class="jtable-main-container"><div class="jtable-busy-panel-background" style="display:none"></div><table class="styled"><thead><tr><th>رقم التفويض</th><th>جهة القدوم</th><th>عدد الأشخاص</th><th>المهنة</th><th>رقم الوكالة#</th><th>اسم الوكالة</th><th>الاجراءات</th></tr></thead><tbody id="db"></tbody></table></div></div>
 </form>
-<script>setTimeout(function(){ document.getElementById('db').innerHTML='<tr class="jtable-data-row jtable-row-even"><td>20000001</td><td>السويس</td><td>14</td><td>سائق حافلة</td><td>30000001</td><td>وكالة تجربة</td><td><a></a></td></tr>'; }, 1300);</script>
-<script>setTimeout(function(){ document.getElementById('jb').innerHTML='<tr class="jtable-data-row jtable-row-even"><td><span>8</span></td><td>سائق حافلة</td><td>مصر</td><td>السويس</td><td><span>3</span></td><td></td></tr>'; }, 900);</script>
+<script>
+var DATA={
+ '320':{jobs:'<tr class="jtable-data-row jtable-row-even"><td><span>8</span></td><td>سائق حافلة</td><td>مصر</td><td>السويس</td><td><span>3</span></td><td></td></tr>', dels:'<tr class="jtable-data-row jtable-row-even"><td>20000001</td><td>السويس</td><td>14</td><td>سائق حافلة</td><td>30000001</td><td>وكالة تجربة</td><td><a></a></td></tr>'},
+ '302':{jobs:'<tr class="jtable-data-row jtable-row-even"><td><span>5</span></td><td>فني</td><td>مصر</td><td>القاهرة</td><td><span>0</span></td><td></td></tr>', dels:'<tr class="jtable-data-row jtable-row-even"><td>20000002</td><td>القاهرة</td><td>5</td><td>فني</td><td>30000001</td><td>وكالة تجربة</td><td><a></a></td></tr>'}
+};
+var NONE='<tr class="jtable-no-data-row"><td colspan="7">لا توجد بيانات!</td></tr>';
+function busy(on){ document.querySelectorAll('.jtable-busy-panel-background').forEach(function(b){ b.style.display=on?'block':'none'; }); }
+function load(delayJobs, delayDels){
+  var d=DATA[document.getElementById('EmbassyID').value]||{jobs:NONE,dels:NONE}; busy(true);
+  setTimeout(function(){ document.getElementById('jb').innerHTML=d.jobs; }, delayJobs);
+  setTimeout(function(){ document.getElementById('db').innerHTML=d.dels; busy(false); }, delayDels);
+}
+document.getElementById('EmbassyID').addEventListener('change', function(){ document.getElementById('jb').innerHTML=''; document.getElementById('db').innerHTML=''; load(300, 500); });
+load(900, 1300);
+</script>
 </body></html>

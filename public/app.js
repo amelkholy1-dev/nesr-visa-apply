@@ -77,10 +77,10 @@
     if (put('sponsorNumber', d.unifiedNumber)) done.push('رقم الجهة');
     put('unifiedNumber', d.unifiedNumber); if (!(has('visaNumber') || {}).value) put('visaNumber', d.visaNumber);
     if (put('embassy', d.embassyCode)) done.push('الممثلية (' + (d.embassyName || d.embassyCode) + ')');
-    const remainingOf = (job) => { const j = (d.jobs || []).find((x) => x.job === job); return j ? j.remaining : ''; };
+    const remainingOf = (job, emb) => { const j = (d.jobs || []).find((x) => x.job === job && (!emb || x.embassy === emb)) || (d.jobs || []).find((x) => x.job === job); return j ? j.remaining : ''; };
     const rows = ((d.delegations || []).length ? d.delegations.map((x) => ({ number: x.number, embassy: x.embassy, count: x.count, job: x.job, agency: x.agencyName })) : (d.jobs || []).map((j) => ({ number: '', embassy: j.embassy, count: j.count, job: j.job, agency: '' })));
     const box = $('#visaInfoBox'); if (!box) return;
-    const rem = (r) => { const m = remainingOf(r.job); return m === '' ? '' : `${e(m)}${m === '0' ? ' ⚠️' : ''}`; };
+    const rem = (r) => { const m = remainingOf(r.job, r.embassy); return m === '' ? '' : `${e(m)}${m === '0' ? ' ⚠️' : ''}`; };
     box.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8;margin-top:8px"><b>بيانات التأشيرة من المنصة${d.visaDate ? ' (تاريخ التأشيرة ' + e(d.visaDate) + ')' : ''}</b>
       <div class="muted small">${done.length ? 'اتملّى في الملف: ' + e(done.join('، ')) : 'مفيش بيانات جديدة اتملّت'}</div>
       ${rows.length ? `<h3 style="margin:10px 0 4px">اختار التفويض / المهنة</h3><div style="overflow:auto"><table><thead><tr><th></th><th>رقم التفويض</th><th>جهة القدوم</th><th>عدد الأشخاص</th><th>المهنة</th><th>المتبقي</th><th>اسم الوكالة</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td><input type="radio" name="visaPickRow" value="${i}"${rows.length === 1 ? ' checked' : ''}></td><td dir="ltr" style="text-align:right">${e(r.number)}</td><td>${e(r.embassy)}</td><td>${e(r.count)}</td><td><b>${e(r.job)}</b></td><td>${rem(r)}</td><td>${e(r.agency)}</td></tr>`).join('')}</tbody></table></div>
@@ -90,7 +90,7 @@
       const ok = [];
       if (put('jobText', r.job)) ok.push('المهنة (' + r.job + ')');
       const code = (opt('embassy').find((o) => o.t === r.embassy) || {}).v; if (code && put('embassy', code)) ok.push('الممثلية (' + r.embassy + ')');
-      if (remainingOf(r.job) === '0') toast('تنبيه: العدد المتبقي لـ «' + r.job + '» صفر', 'err');
+      if (remainingOf(r.job, r.embassy) === '0') toast('تنبيه: العدد المتبقي لـ «' + r.job + '» صفر', 'err');
       return ok;
     };
     if (rows.length === 1) apply(rows[0]);
