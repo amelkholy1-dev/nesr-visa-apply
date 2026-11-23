@@ -211,9 +211,9 @@
   async function pageLogin() {
     $('#top').hidden = true; document.body.classList.remove('app');
     const br = await fetch('/api/brand').then((r) => r.json()).catch(() => ({}));
-    document.title = (br.brand || 'فيزاتك') + ' — ' + (br.tag || 'نظام إدارة التأشيرات');
+    document.title = (br.brand || 'إنجاز') + ' — ' + (br.tag || 'نظام إدارة التأشيرات');
     view.innerHTML = `<div class="login-wrap"><div class="login-card"><div class="lg"><svg viewBox="0 0 48 48" width="46" height="46"><path d="M3 24C9 13 16 8 24 8s15 5 21 16c-6 11-13 16-21 16S9 35 3 24z" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/><circle cx="24" cy="24" r="9.5" fill="#e0b24a"/><circle cx="24" cy="24" r="4.4" fill="#0f3438"/><path d="M33 14l6-6M40 12l-4-4" stroke="#e0b24a" stroke-width="2.2" stroke-linecap="round"/></svg></div>
-      <h1>${e(br.brand || 'فيزاتك')}</h1><span class="tag">${e(br.tag || 'نظام إدارة التأشيرات')}</span>
+      <h1>${e(br.brand || 'إنجاز')}</h1><span class="tag">${e(br.tag || 'نظام إدارة التأشيرات')}</span>
       <label class="f">اسم المستخدم<input id="u" autocomplete="username"></label><br>
       <label class="f">كلمة السر<input id="p" type="password" autocomplete="current-password"></label><br>
       <button id="go" class="btn pri" style="width:100%">دخول</button><p id="err" class="issues muted"></p></div></div>`;
@@ -664,7 +664,7 @@
     if (!me) return pageLogin();
     if (!meta) meta = await api('GET', '/meta');
     document.body.classList.add('app'); $('#top').hidden = false; $('#whoName').textContent = me.name; $('#whoAv').textContent = String(me.name || '?').trim().charAt(0);
-    $('#brandName').textContent = meta.brand || 'فيزاتك'; $('#brandTag').textContent = 'نظام إدارة التأشيرات'; document.title = (meta.brand || 'فيزاتك') + ' — نظام إدارة التأشيرات';
+    $('#brandName').textContent = meta.brand || 'إنجاز'; $('#brandTag').textContent = 'نظام إدارة التأشيرات'; document.title = (meta.brand || 'إنجاز') + ' — نظام إدارة التأشيرات';
     drawNav(h); setExt(); ping();
     try {
       let m;

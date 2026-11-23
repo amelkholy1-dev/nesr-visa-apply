@@ -17,7 +17,7 @@ module.exports = {
   db: { host: env('DB_HOST', '127.0.0.1'), port: parseInt(env('DB_PORT', '3306'), 10), database: env('DB_NAME'), user: env('DB_USER'), password: env('DB_PASSWORD') },
   dataDir: path.resolve(expand(env('VISA_DATA_DIR', '~/visa-apply-data'))),
   authSecret,
-  brand: env('BRAND_NAME', 'فيزاتك'),
+  brand: env('BRAND_NAME', 'إنجاز'),
   brandTag: env('BRAND_TAG', 'نظام إدارة طلبات التأشيرات'),
   adminUser: env('ADMIN_USER', 'admin'),
   adminPassword: env('ADMIN_PASSWORD'),

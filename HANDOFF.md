@@ -23,7 +23,7 @@ Hostinger shared (Node + MySQL)، دومين فرعي `visa.nisrelkhaleeg.com`. 
 - `server/readiness.js` — **الجاهزية لكل خدمة** (منصة/وافد/معمل/سويس/القاهرة): الناقص لكل خدمة من نفس بيانات الشخص + ملف الضبط. وسم `meta.uses` في `fields.js` بيقول كل حقل بيخدم أنهي خدمة (بيظهر كوسوم ملوّنة جنب الحقل).
 - `server/routes/stats.js` — `GET /api/stats/overview`: الإجماليات، مسار المراحل، الجاهزية، التنبيهات، نشاط 30 يوم، جدول لكل تأشيرة/دفعة، وحسب الموظف.
 - `server/routes/people.js` — فيه `/bulk/stage|status|profile|delete` (تعليم جماعي) وقاعدة صلاحيات لكل مسار.
-- الاسم التجاري «فيزاتك» من `BRAND_NAME` / `BRAND_TAG` (Environment variables، اختيارية).
+- الاسم التجاري «إنجاز» من `BRAND_NAME` / `BRAND_TAG` (Environment variables، اختيارية).
 - `server/routes/` — session (دخول/مستخدمين)، people، misc (ملفات الضبط، الإضافة zip)، reports (تقارير + CSV + سجل)، extras (إعدادات التصدير + `tasaheel.xls`).
 - `public/` — واجهة JS عادية (من غير build): قايمة جانبية + `app.js` (الدخول، الراوتر، صفحة الشخص، ملفات الضبط/«دفعات التأشيرات»، التقارير، السجل) وبيشاركوا `window.NA` مع `pages-dashboard.js` (لوحة التحكم) و`pages-people.js` (قايمة الأشخاص + شريط التعليم الجماعي) و`pages-admin.js` (المستخدمين والصلاحيات + `NA.modal`)، `mrz-ocr.js` (Tesseract.js محلي في `vendor/`)، `style.css`.
 - `extension/` (MV3): `background.js` (وسيط، حالات الدخول، تقويم وافد عبر `scripting` في عالم الصفحة، الطابور)، `content-app.js` (جسر مع صفحة النظام)، `content-mofa.js`، `content-wafid.js`.
