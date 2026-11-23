@@ -61,9 +61,9 @@ const LMOCK = `<script>
 </script>`;
 
 const appHtml = `<!doctype html><meta charset=utf-8><body><script>
-window.got=[];window.visa=[];window.nexts=[];window.ready=false;window.acks=0;
+window.got=[];window.visa=[];window.caps=[];window.nexts=[];window.ready=false;window.acks=0;
 window.addEventListener('message',function(e){ if(e.source!==window)return; var m=e.data; if(!m||m.source!=='nesr-visaapply-ext')return;
- if(m.type==='VA_READY')window.ready=true; if(m.type==='VA_ACK')window.acks++; if(m.type==='VA_RESULT')window.got.push(m.data); if(m.type==='VA_ERROR')window.got.push({error:m.data.message}); if(m.type==='VA_NEXT')window.nexts.push(m.data); if(m.type==='VA_VISAINFO_RESULT')window.visa.push(m.data); });
+ if(m.type==='VA_READY')window.ready=true; if(m.type==='VA_ACK')window.acks++; if(m.type==='VA_RESULT')window.got.push(m.data); if(m.type==='VA_ERROR')window.got.push({error:m.data.message}); if(m.type==='VA_NEXT')window.nexts.push(m.data); if(m.type==='VA_VISAINFO_RESULT')window.visa.push(m.data); if(m.type==='VA_VISAINFO_CAPTCHA')window.caps.push(m.data); });
 window.fill=function(d){ window.postMessage({source:'nesr-visaapply',type:'VA_FILL',data:d},location.origin); };
 window.postMessage({source:'nesr-visaapply',type:'VA_PING'},location.origin);
 </script></body>`;
@@ -91,7 +91,7 @@ const MOFA = {
     if (/\/Base\/GetResidenceDurations/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ Value: 90, Text: '90' }]) });
     if (/GetOccupationsByClassificationId/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(/jobClassificationId=832/.test(rq.url()) ? [{ Value: 8321, Text: 'سائق سيارة' }, { Value: 8322, Text: 'سائق حافلة' }] : [{ Value: 1431, Text: 'مدير فندق' }]) });
     if (/\/enjaz\/getvisainformation\/person/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaLookupFixture });
-    if (/\/enjaz\/ViewVisaDetails\/person/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaResultFixture });
+    if (/\/enjaz\/ViewVisaDetails\/person/i.test(rq.url())) { if (rq.method() === 'POST') { global.__visaPost = rq.postData() || ''; if (!/Captcha=123456/.test(global.__visaPost)) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaLookupFixture }); } return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaResultFixture }); }
     const html = (b) => r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body>' + b + '</body>' });
     if (/\/Account\/Login/i.test(rq.url())) return html('<h2>دخول الشركات</h2><input id="user"><input id="pw" type="password">');
     if (/\/Home\/Index/i.test(rq.url())) return html('<h1>الرئيسية</h1>');
@@ -216,18 +216,32 @@ const MOFA = {
   await app.waitForFunction((n) => window.nexts.length > n, nBefore2, { timeout: 10000 });
   const nx3 = await app.evaluate(() => window.nexts[window.nexts.length - 1]);
   assert.deepStrictEqual([nx3.personId, nx3.target, nx3.queue.length, nx3.total], ['32', 'lab', 0, 2]);
-  /* سيناريو 10: «التفويض على تأشيرة» من ملف الضبط — الإضافة بتكتب الرقمين وتختار جهة القدوم (الكابتشا و«بحث» بإيدك)، وبعد النتيجة بترجّع البيانات للنظام */
+  /* سيناريو 10: «التفويض على تأشيرة» من ملف الضبط، من جوه النظام — التبويب بيتفتح في الخلفية، صورة الكابتشا بتتبعت للنظام، إنت بتكتبها (غلط ثم صح)، والنتيجة بترجع والتبويب بيتقفل */
   const [vpage] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', embassy: '320' })]);
-  await vpage.waitForSelector('#nesr-vi-bar', { timeout: 30000 });
-  await vpage.waitForFunction(() => /اتكتبت الأرقام/.test((document.getElementById('nesr-vi-bar') || {}).innerText || ''), null, { timeout: 30000 });
+  await vpage.reload(); /* Playwright مبيلقطش أول طلب لتبويب اتفتح في الخلفية (مشكلة في الاختبار بس، مش في Chrome): بنعمل إعادة تحميل عشان الصفحة التجريبية تتحمّل */
+  await app.waitForFunction(() => window.caps.length > 0, null, { timeout: 40000 });
+  const c1 = await app.evaluate(() => window.caps[0]);
+  assert.ok(String(c1.image).startsWith('data:image/png;base64,') && !c1.error, 'صورة الكابتشا وصلت للنظام');
   const v10 = await vpage.evaluate(() => ({ visa: document.getElementById('VisaNumber').value, reg: document.getElementById('SponserID').value, emb: document.getElementById('Embassy').value, cap: document.getElementById('Captcha').value }));
   assert.deepStrictEqual([v10.visa, v10.reg, v10.emb, v10.cap], ['1000000001', '7000000001', '320', ''], 'صفحة البحث اتملت والكابتشا فاضية: ' + JSON.stringify(v10));
-  await vpage.evaluate(() => { window.location.href = '/enjaz/ViewVisaDetails/person'; });
+  /* صورة تانية */
+  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'refresh' } }, location.origin));
+  await app.waitForFunction(() => window.caps.length > 1, null, { timeout: 20000 });
+  assert.notStrictEqual((await app.evaluate(() => window.caps[1])).image, c1.image, 'صورة كابتشا تانية');
+  /* كود غلط ← المنصة بترجّعنا لصفحة البحث ← النظام بياخد كابتشا جديدة بتنبيه */
+  const nc = await app.evaluate(() => window.caps.length);
+  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '000000' } }, location.origin));
+  await app.waitForFunction((n) => window.caps.length > n, nc, { timeout: 30000 });
+  assert.strictEqual((await app.evaluate(() => window.caps[window.caps.length - 1])).error, true, 'كود غلط ← تنبيه + كابتشا جديدة');
+  /* كود صح ← النتيجة ترجع والتبويب يتقفل */
+  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '123456' } }, location.origin));
   await app.waitForFunction(() => window.visa.length > 0, null, { timeout: 40000 });
+  assert.ok(/VisaNumber=1000000001/.test(global.__visaPost) && /SponserID=7000000001/.test(global.__visaPost) && /Embassy=320/.test(global.__visaPost) && /Captcha=123456/.test(global.__visaPost), 'اتبعت للمنصة: ' + global.__visaPost);
   const vi = await app.evaluate(() => window.visa[0]);
   assert.deepStrictEqual([vi.visaNumber, vi.visaDate, vi.sponsorName, vi.unifiedNumber, vi.embassyCode, vi.embassyName], ['1000000001', '1447/09/25', 'شركة تجربة للنقل', '7000000001', '320', 'السويس'], JSON.stringify(vi));
   assert.deepStrictEqual(vi.delegations, [{ number: '20000001', embassy: 'السويس', count: '14', job: 'سائق حافلة', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }], 'جدول التفاويض');
   assert.deepStrictEqual(vi.jobs, [{ count: '8', job: 'سائق حافلة', nationality: 'مصر', embassy: 'السويس', remaining: '3' }], 'جدول المهن');
+  await vpage.waitForEvent('close', { timeout: 15000 }).catch(() => {}); assert.ok(vpage.isClosed(), 'تبويب المنصة اتقفل لوحده');
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

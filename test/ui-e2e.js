@@ -90,6 +90,10 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     /* ملف الضبط: الرقمين تحت الاسم + نتيجة «التفويض على تأشيرة» بتتحط في الخانات من غير حفظ */
     await page.goto(base + '#/profiles'); await page.click('#newP'); await page.waitForSelector('#visaLookup');
     assert.strictEqual(await page.locator('#peditor [data-k=visaNumber]').count(), 1); assert.strictEqual(await page.locator('#peditor [data-k=unifiedNumber]').count(), 1);
+    await page.evaluate(() => { window.__ctl = []; window.addEventListener('message', (ev) => { if (ev.data && ev.data.type === 'VA_VISAINFO_CTL') window.__ctl.push(ev.data.data); }); window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_VISAINFO_CAPTCHA', data: { image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' } }, location.origin); });
+    await page.waitForSelector('#capImg'); await page.fill('#capIn', 'a1B2'); await page.click('#capGo');
+    await page.waitForFunction(() => window.__ctl.length > 0);
+    assert.deepStrictEqual(await page.evaluate(() => window.__ctl), [{ op: 'submit', captcha: 'a1B2' }], 'الكابتشا اللي كتبتها بتتبعت للإضافة');
     await page.evaluate(() => window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_VISAINFO_RESULT', data: { visaNumber: '1000000001', visaDate: '1447/09/25', sponsorName: 'شركة تجربة للنقل', unifiedNumber: '7000000001', embassyCode: '320', embassyName: 'السويس',
       jobs: [{ count: '8', job: 'سائق حافلة', nationality: 'مصر', embassy: 'السويس', remaining: '0' }, { count: '5', job: 'فني', nationality: 'مصر', embassy: 'السويس', remaining: '2' }],
       delegations: [{ number: '20000001', embassy: 'السويس', count: '8', job: 'سائق حافلة', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }, { number: '20000002', embassy: 'السويس', count: '5', job: 'فني', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }] } }, location.origin));

@@ -47,16 +47,37 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     } else if (msg.kind === 'open-visainfo') {
       /* «التفويض على تأشيرة»: بنفتح صفحة البحث، والإضافة بتكتب الأرقام، والكابتشا و«بحث» بإيدك، وبعدها بنقرا النتيجة ونرجّعها لملف الضبط */
       const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now() };
-      const tab = await chrome.tabs.create({ url: VISAINFO_URL, active: true });
-      await store.set({ ['vctx_' + tab.id]: ctx });
+      /* التبويب بيتفتح في الخلفية: إنت فاضل في النظام، والإضافة بتبعتلك صورة الكابتشا هناك وإنت اللي بتكتبها */
+      const o = await store.get('visainfoTab'); if (o.visainfoTab) { try { await chrome.tabs.remove(o.visainfoTab); } catch (e) { /* اتقفل */ } }
+      const tab = await chrome.tabs.create({ url: VISAINFO_URL, active: false });
+      await store.set({ ['vctx_' + tab.id]: { ...ctx, inline: true, stage: '' }, visainfoTab: tab.id });
       reply({ ok: true });
+    } else if (msg.kind === 'visainfo-ctl') {
+      /* أوامر من صفحة النظام لتبويب المنصة: submit (الكابتشا اللي كتبتها) · refresh (صورة تانية) · open (افتح التبويب) · cancel */
+      const o = await store.get('visainfoTab'); const tid = o.visainfoTab;
+      if (!tid) { reply({ ok: false, error: 'مفيش بحث شغّال: دوس «بحث وجلب المهن» تاني' }); return; }
+      try {
+        if (msg.op === 'cancel') { await chrome.tabs.remove(tid); await store.remove('visainfoTab'); }
+        else if (msg.op === 'open') { await chrome.tabs.update(tid, { active: true }); const t = await chrome.tabs.get(tid); if (t.windowId) await chrome.windows.update(t.windowId, { focused: true }); }
+        else if (msg.op === 'refresh') await chrome.tabs.sendMessage(tid, { kind: 'vi-refresh' });
+        else if (msg.op === 'submit') { const cap = String(msg.captcha || '').trim(); if (!/^[A-Za-z0-9]{1,8}$/.test(cap)) { reply({ ok: false, error: 'اكتب رمز الصورة زي ما هو' }); return; } await chrome.tabs.sendMessage(tid, { kind: 'vi-submit', captcha: cap }); }
+        else { reply({ ok: false, error: 'أمر مش معروف' }); return; }
+        reply({ ok: true });
+      } catch (e) { await store.remove('visainfoTab'); reply({ ok: false, error: 'تبويب المنصة اتقفل: دوس «بحث وجلب المهن» تاني' }); }
+    } else if (msg.kind === 'visainfo-captcha') {
+      const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
+      const t = await findAppTab(ctx.originTabId);
+      if (!t) { reply({ ok: false }); return; }
+      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-visainfo-captcha', data: msg.data }); reply({ ok: true }); } catch (e) { reply({ ok: false }); }
+    } else if (msg.kind === 'visainfo-stage') {
+      const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); if (o[key]) await store.set({ [key]: { ...o[key], stage: String(msg.stage || '') } }); reply({ ok: true });
     } else if (msg.kind === 'get-visainfo-ctx') {
       const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); reply({ ctx: o[key] || null });
     } else if (msg.kind === 'visainfo-result') {
       const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
       const t = await findAppTab(ctx.originTabId);
       if (!t) { reply({ ok: false, error: 'افتح صفحة نظام طلبات التأشيرات (visa.nisrelkhaleeg.com) في تبويب وجرّب تاني' }); return; }
-      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-visainfo', data: msg.data }); reply({ ok: true }); }
+      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-visainfo', data: msg.data }); reply({ ok: true }); if (ctx.inline && sender.tab) { await store.remove('visainfoTab'); try { await chrome.tabs.remove(sender.tab.id); } catch (e) { /* اتقفل */ } } }
       catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ. اعمل F5 فيها وجرّب تاني' }); }
     } else if (msg.kind === 'open-lab') {
       /* حجز المعمل (معامل الصحة العامة): تبويب جديد بنفس أسلوب وافد */

@@ -24,6 +24,11 @@
   const mark = (el) => { try { if (el) { el.style.outline = '3px solid #f2a31b'; el.style.outlineOffset = '2px'; } } catch (e) { /* مش مهم */ } };
 
   /* صفحة البحث */
+  const captchaImage = async () => {
+    const img = document.getElementById('imgCaptcha'); if (!img) return '';
+    if (!(await waitFor(() => img.complete && img.naturalWidth > 0, 10000))) return '';
+    try { const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0); return c.toDataURL('image/png'); } catch (e) { return ''; }
+  };
   async function runSearch(ctx) {
     const problems = [];
     const put = (id, v, label) => { const el = document.getElementById(id); if (!el) return problems.push(label + ': الخانة مش موجودة'); if (!v) { problems.push(label + ' فاضي في ملف الضبط'); return mark(el); } Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, String(v)); fire(el); };
@@ -33,10 +38,38 @@
       const o = [...em.options].find((x) => String(x.value) === String(ctx.embassy));
       if (o) { em.value = o.value; fire(em); await sleep(300); if (String(em.value) !== String(o.value)) problems.push('جهة القدوم: اختارها بإيدك'); } else problems.push('جهة القدوم: مش لاقي الممثلية في القايمة — اختارها بإيدك');
     } else problems.push('جهة القدوم: اختارها بإيدك (الممثلية مش متحدّدة في ملف الضبط)');
-    mark(document.getElementById('Captcha'));
-    bar('<div><b>🔎 ' + esc(ctx.name || 'ملف الضبط') + '</b> — اتكتبت الأرقام. دلوقتي:</div><ol style="margin:4px 18px;padding:0"><li>اكتب <b>رمز الصورة</b> (الكابتشا)</li><li>دوس <b>«بحث»</b></li></ol><div>بعد النتيجة هقرا البيانات وأرجّعها لملف الضبط.</div>' +
-      (problems.length ? '<div style="margin-top:6px">ℹ️</div><ul style="margin:4px 18px;padding:0">' + problems.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : ''));
+    const failedBefore = ctx.stage === 'submitted'; /* لو رجعنا لصفحة البحث بعد ما بعتنا: الكود غلط أو البيانات مش مقبولة */
+    if (failedBefore) await send({ kind: 'visainfo-stage', stage: '' });
+    const shown = (document.querySelector('.field-validation-error, .validation-summary-errors, .alert-danger') || {}).textContent;
+    bar('<div><b>🔎 ' + esc(ctx.name || 'ملف الضبط') + '</b> — اتكتبت الأرقام، والكابتشا بتظهرلك في <b>صفحة نظام طلبات التأشيرات</b>: اكتبها هناك ودوس «بحث».</div><div style="margin-top:4px">(أو اكتب الكابتشا هنا ودوس «بحث» بنفسك لو حبيت.)</div>' +
+      (problems.length ? '<ul style="margin:4px 18px;padding:0">' + problems.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : ''));
+    if (ctx.inline) {
+      const image = await captchaImage();
+      await send({ kind: 'visainfo-captcha', data: { image, error: failedBefore, problems, message: failedBefore ? (norm(shown) || 'الكود غلط أو البيانات مش مقبولة: اكتب الكود الجديد') : '' } });
+    }
   }
+  /* أوامر من النظام عن طريق الوسيط: كتابة الكابتشا اللي كتبتها إنت و«بحث»، أو صورة تانية. مفيش أي قراءة/حل للكابتشا بالإضافة */
+  try {
+    chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+      if (!isSearch() || !msg) return;
+      if (msg.kind === 'vi-submit') {
+        (async () => {
+          const cap = document.getElementById('Captcha'); const btn = document.querySelector('button[name="VisaInformation"], button[type="submit"]');
+          if (!cap || !btn) { reply({ ok: false }); return; }
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(cap, String(msg.captcha || '')); fire(cap);
+          await send({ kind: 'visainfo-stage', stage: 'submitted' }); btn.click(); reply({ ok: true });
+        })(); return true;
+      }
+      if (msg.kind === 'vi-refresh') {
+        (async () => {
+          const img = document.getElementById('imgCaptcha'); const old = img ? img.src : ''; const rb = document.getElementById('btnRefreshCaptcha'); if (rb) rb.click();
+          await waitFor(() => img && img.src !== old && img.complete && img.naturalWidth > 0, 8000);
+          const image = await captchaImage(); const { ctx } = await send({ kind: 'get-visainfo-ctx' });
+          await send({ kind: 'visainfo-captcha', data: { image, error: false, refreshed: true } }); reply({ ok: true, ctx: !!ctx });
+        })(); return true;
+      }
+    });
+  } catch (e) { /* مش مهم */ }
 
   /* صفحة النتيجة */
   const labelValue = (label) => { for (const l of document.querySelectorAll('label.control-label')) { if (norm(l.textContent) === label) { const d = l.nextElementSibling; return d ? norm(d.textContent) : ''; } } return ''; };

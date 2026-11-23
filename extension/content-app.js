@@ -33,6 +33,10 @@
       } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
       return;
     }
+    if (m.type === 'VA_VISAINFO_CTL' && m.data) {
+      try { chrome.runtime.sendMessage({ kind: 'visainfo-ctl', op: String(m.data.op || ''), captcha: String(m.data.captcha || '').slice(0, 12) }, (r) => { if (chrome.runtime.lastError || !r || !r.ok) post('VA_VISAINFO_CAPTCHA', { error: true, message: (r && r.error) || 'الإضافة ما ردّتش. اعمل F5 للصفحة وجرّب تاني.' }); }); } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
+      return;
+    }
     if (m.type === 'VA_FILL' && m.data && m.data.mofa) {
       try {
         chrome.runtime.sendMessage({ kind: 'open-fill', payload: { personId: String(m.data.personId || ''), name: String(m.data.name || '').slice(0, 120), mofa: m.data.mofa, issues: m.data.issues || [], warns: m.data.warns || [], photo: typeof m.data.photo === 'string' && m.data.photo.startsWith('data:image/') ? m.data.photo : '', queue: Array.isArray(m.data.queue) ? m.data.queue.slice(0, 200).map((x) => ({ id: String(x.id), name: String(x.name || '').slice(0, 80) })) : [], queueTotal: Number(m.data.queueTotal) || 0 } }, (r) => {
@@ -42,7 +46,7 @@
       } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
     }
   });
-  chrome.runtime.onMessage.addListener((msg) => { if (msg && msg.kind === 'va-result') post('VA_RESULT', msg.data); if (msg && msg.kind === 'va-next') post('VA_NEXT', msg.data); if (msg && msg.kind === 'va-visainfo') post('VA_VISAINFO_RESULT', msg.data); });
+  chrome.runtime.onMessage.addListener((msg) => { if (msg && msg.kind === 'va-result') post('VA_RESULT', msg.data); if (msg && msg.kind === 'va-next') post('VA_NEXT', msg.data); if (msg && msg.kind === 'va-visainfo') post('VA_VISAINFO_RESULT', msg.data); if (msg && msg.kind === 'va-visainfo-captcha') post('VA_VISAINFO_CAPTCHA', msg.data); });
   const ready = () => { post('VA_READY'); chrome.runtime.sendMessage({ kind: 'app-ready' }, (r) => { if (r && r.pending) setTimeout(() => post('VA_RESULT', r.pending), 800); }); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready); else ready();
   setTimeout(() => post('VA_READY'), 1500); setTimeout(() => post('VA_READY'), 4000);
