@@ -91,14 +91,16 @@
   /* صفحة النتيجة */
   /* jTable بيحط صف «لا توجد بيانات!» مؤقتاً وهو لسه بيحمّل (قبل ما الـ AJAX يرجع). فبنستنى: مفيش «جاري التحميل» + الجدول ثابت، وبعدها لو فيه بيانات نقرا، ولو فاضي نستنى كمان شوية قبل ما نحكم إنه فاضي فعلاً */
   const settle = async (gridId, maxMs = 25000) => {
-    const t0 = Date.now(); let last = null; let since = Date.now();
+    const t0 = Date.now(); let last = null; let since = Date.now(); let sawBusy = false;
     for (;;) {
       const g = byId(gridId); if (!g) return false;
       const busy = [...g.querySelectorAll('.jtable-busy-panel-background')].some((b) => getComputedStyle(b).display !== 'none');
+      if (busy) sawBusy = true;
       const sig = (g.querySelector('tbody') || {}).innerHTML || '';
       if (sig !== last) { last = sig; since = Date.now(); }
       const hasData = !!g.querySelector('tr.jtable-data-row');
-      if (!busy && Date.now() - since >= 900 && (hasData || Date.now() - t0 >= 4000)) return true;
+      /* فاضي نثق فيه بس بعد ما نشوف دورة تحميل كاملة (جاري التحميل ← خلص)، أو بعد 3.5 ثانية لو التحميل كان أسرع من ما نلحق نشوفه */
+      if (!busy && Date.now() - since >= 900 && (hasData || (sawBusy && Date.now() - since >= 1200) || Date.now() - t0 >= 3500)) return true;
       if (Date.now() - t0 > maxMs) return false;
       await sleep(150);
     }
@@ -117,16 +119,24 @@
     });
     let jobs = [], delegations = [];
     const merge = (g) => { jobs = jobs.concat(g.jobs); delegations = delegations.concat(g.delegations); };
-    merge(grab());
-    /* بنشيك على السويس والقاهرة (من غير ما تغيّر الممثلية بإيدك): بنبدّل «عرض التأشيرات الموجودة في ممثلية» وننتظر الجداول تتحدّث */
-    const seen = new Set([startCode]);
-    for (const code of ['320', '302']) {
-      if (!sel || seen.has(code) || ![...sel.options].some((o) => String(o.value) === code)) continue;
-      bar('<span>🔎 بشيك على ' + (code === '320' ? 'السويس' : 'القاهرة') + '…</span>');
+    /* لو الممثلية اللي بدأنا بيها مفيهاش بيانات: بنجرّب السويس ثم القاهرة ثم الإسكندرية (بنبدّل «عرض التأشيرات الموجودة في ممثلية» لوحدنا) ونقف عند أول واحدة فيها بيانات */
+    const NAMES = { '320': 'السويس', '302': 'القاهرة', '321': 'الإسكندرية' };
+    const hasData = (g) => g.jobs.length > 0 || g.delegations.length > 0;
+    let foundCode = '';
+    { const g0 = grab(); merge(g0); if (hasData(g0)) foundCode = startCode; }
+    const tried = [startName || startCode];
+    for (const code of ['320', '302', '321']) {
+      if (foundCode) break;
+      const opt2 = sel && [...sel.options].find((o) => String(o.value) === code);
+      if (!opt2 || code === startCode) continue;
+      bar('<span>🔎 مفيش بيانات في ' + esc(tried[tried.length - 1]) + '، بجرّب ' + esc(NAMES[code]) + '…</span>');
       sel.value = code; fire(sel); await sleep(400);
-      await settle('dvJobsGrid'); if (byId('dvDelegationsInEmbassies')) await settle('dvDelegationsInEmbassies'); merge(grab()); seen.add(code);
+      await settle('dvJobsGrid'); if (byId('dvDelegationsInEmbassies')) await settle('dvDelegationsInEmbassies');
+      const g = grab(); merge(g); tried.push(NAMES[code]); if (hasData(g)) { foundCode = code; }
     }
-    const info = { delegations: delegations.slice(0, 60), visaNumber: cut(labelValue('رقم الصادر'), 20), visaDate: cut(labelValue('تاريخ التأشيرة'), 12), sponsorName: cut(labelValue('الاسم'), 100), unifiedNumber: cut(labelValue('رقم الإقامة'), 12).replace(/\D/g, '').slice(0, 10), embassyCode: startCode.replace(/\D/g, '').slice(0, 6), embassyName: startName, jobs: jobs.slice(0, 60) };
+    const foundOpt = foundCode && sel ? [...sel.options].find((o) => String(o.value) === foundCode) : null;
+    await send({ kind: 'visainfo-status', data: { text: foundOpt ? 'لقيت بيانات في ' + cut(foundOpt.textContent, 30) : 'مفيش بيانات في: ' + tried.join('، ') } });
+    const info = { delegations: delegations.slice(0, 60), visaNumber: cut(labelValue('رقم الصادر'), 20), visaDate: cut(labelValue('تاريخ التأشيرة'), 12), sponsorName: cut(labelValue('الاسم'), 100), unifiedNumber: cut(labelValue('رقم الإقامة'), 12).replace(/\D/g, '').slice(0, 10), embassyCode: (foundCode || startCode).replace(/\D/g, '').slice(0, 6), embassyName: foundOpt ? cut(foundOpt.textContent, 30) : startName, triedEmbassies: tried, jobs: jobs.slice(0, 60) };
     if (!info.sponsorName && !info.unifiedNumber && !jobs.length && !delegations.length) { bar('<div>⚠️ مقدرتش أقرا بيانات من الصفحة دي. اتأكد إنها نتيجة البحث، وجرّب تاني.</div>'); return; }
     const r = await send({ kind: 'visainfo-result', data: info });
     bar('<div><b>' + (r && r.ok ? '✅ البيانات اتبعتت لملف الضبط' : '⚠️ مقدرتش أرجّع البيانات') + '</b></div>' + (r && r.ok ? '<div>ارجع لتبويب النظام: راجع الخانات ودوس <b>حفظ</b>.</div>' : '<div>' + esc((r && r.error) || 'جرّب تاني') + '</div>') +

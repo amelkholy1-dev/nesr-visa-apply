@@ -48,8 +48,9 @@
   }
   /* بحث «التفويض على تأشيرة» من جوه النظام: الإضافة بتفتح المنصة في تبويب مخفي وبتبعتلنا صورة الكابتشا، وإنت اللي بتكتبها هنا وتدوس بحث (مفيش أي حل تلقائي للكابتشا) */
   let capTimer = null;
-  const visaLogAdd = (t) => { const b = $('#visaLog'); if (b) b.insertAdjacentHTML('beforeend', `<div>${e(new Date().toLocaleTimeString('ar-EG', { hour12: false }))} — ${e(t)}</div>`); };
-  const visaReset = () => { ['visaCapBox', 'visaInfoBox', 'visaDocBox', 'visaLog'].forEach((id) => { const b = $('#' + id); if (b) b.innerHTML = ''; }); };
+  /* سجل الخطوات مش بيظهر على الشاشة: بيتحفظ في الذاكرة وبيظهر بس جوه رسالة المشاكل (تحت «تفاصيل») */
+  const visaLogAdd = (t) => { (window.__visaLog = window.__visaLog || []).push(new Date().toLocaleTimeString('ar-EG', { hour12: false }) + ' — ' + t); };
+  const visaReset = () => { window.__visaLog = []; ['visaCapBox', 'visaInfoBox', 'visaDocBox'].forEach((id) => { const b = $('#' + id); if (b) b.innerHTML = ''; }); };
   const visaCtl = (op, captcha) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op, captcha: captcha || '' } }, location.origin);
   const capCard = (html) => { const b = $('#visaCapBox'); if (b) b.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8;margin-top:8px">${html}</div>`; };
   const capWait = (msg, ms, late) => { clearTimeout(capTimer); capCard(`<b>${e(msg)}</b>`); capTimer = setTimeout(() => onVisaCaptcha({ message: late || 'المنصة اتأخرت في الرد.' }), ms || 30000); };
@@ -58,7 +59,7 @@
     const img = typeof d.image === 'string' && d.image.startsWith('data:image/png;base64,') ? d.image : '';
     if (!img) {
       visaLogAdd(d.message || 'مفيش صورة كابتشا');
-      capCard(`<b>${e(d.message || 'مقدرتش أجيب صورة الكابتشا من المنصة.')}</b><div class="row" style="margin-top:8px"><button class="btn" id="capOpen">افتح تبويب المنصة واكتب الكابتشا هناك</button><button class="btn" id="capRetry">جرّب تاني</button></div>`);
+      capCard(`<b>${e(d.message || 'مقدرتش أجيب صورة الكابتشا من المنصة.')}</b><details class="muted small" style="margin-top:6px"><summary>تفاصيل</summary>${(window.__visaLog || []).map((x) => `<div>${e(x)}</div>`).join('')}</details><div class="row" style="margin-top:8px"><button class="btn" id="capOpen">افتح تبويب المنصة واكتب الكابتشا هناك</button><button class="btn" id="capRetry">جرّب تاني</button></div>`);
       $('#capOpen').onclick = () => visaCtl('open'); $('#capRetry').onclick = () => { const b = $('#visaLookup'); if (b) b.click(); };
       return;
     }
@@ -83,7 +84,7 @@
     if (put('sponsorName', d.sponsorName)) done.push('اسم جهة العمل');
     if (put('sponsorNumber', d.unifiedNumber)) done.push('رقم الجهة');
     put('unifiedNumber', d.unifiedNumber); if (!(has('visaNumber') || {}).value) put('visaNumber', d.visaNumber);
-    if (put('embassy', d.embassyCode)) done.push('الممثلية (' + (d.embassyName || d.embassyCode) + ')');
+    if (put('embassy', d.embassyCode)) done.push('الممثلية (' + (d.embassyName || d.embassyCode) + ')' + ((d.triedEmbassies || []).length > 1 ? ' — جرّبنا: ' + d.triedEmbassies.join('، ') : ''));
     if ((d.jobs || []).some((j) => /مصر/.test(j.nationality)) && put('nationality', 'EGY')) done.push('الجنسية (مصر)');
     const remainingOf = (job, emb) => { const j = (d.jobs || []).find((x) => x.job === job && (!emb || x.embassy === emb)) || (d.jobs || []).find((x) => x.job === job); return j ? j.remaining : ''; };
     const rows = ((d.delegations || []).length ? d.delegations.map((x) => ({ number: x.number, embassy: x.embassy, count: x.count, job: x.job, agency: x.agencyName })) : (d.jobs || []).map((j) => ({ number: '', embassy: j.embassy, count: j.count, job: j.job, agency: '' })));
@@ -92,8 +93,7 @@
     box.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8;margin-top:8px"><b>بيانات التأشيرة من المنصة${d.visaDate ? ' (تاريخ التأشيرة ' + e(d.visaDate) + ')' : ''}</b>
       <div class="muted small">${done.length ? 'اتملّى في الملف: ' + e(done.join('، ')) : 'مفيش بيانات جديدة اتملّت'}</div>
       ${rows.length ? `<h3 style="margin:10px 0 4px">اختار التفويض / المهنة</h3><div style="overflow:auto"><table><thead><tr><th></th><th>رقم التفويض</th><th>جهة القدوم</th><th>عدد الأشخاص</th><th>المهنة</th><th>المتبقي</th><th>اسم الوكالة</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td><input type="radio" name="visaPickRow" value="${i}"${rows.length === 1 ? ' checked' : ''}></td><td dir="ltr" style="text-align:right">${e(r.number)}</td><td>${e(r.embassy)}</td><td>${e(r.count)}</td><td><b>${e(r.job)}</b></td><td>${rem(r)}</td><td>${e(r.agency)}</td></tr>`).join('')}</tbody></table></div>
-      <div class="row" style="margin-top:8px"><button class="btn pri" id="visaPick">موافق</button><span class="muted small">بيحط المهنة (والممثلية) في الملف</span></div>` : '<div style="margin-top:6px">مفيش تفاويض ولا مهن في النتيجة: اكتب المهنة بإيدك. (ده بيحصل لما الرقم اللي في «رقم التأشيرة» هو <b>رقم المستند</b> مش رقم الصادر: جدول التفاويض بيحتاج رقم الصادر. جرّب <b>مستند التأشيرة فقط</b>: بيجيب المهنة ونوع التأشيرة وعدد الدخول من المستند.)</div>'}
-      <div class="muted small" style="margin-top:6px">الصفحة دي مفيهاش: نوع التأشيرة، عدد الدخول، الصلاحية، مدة الإقامة، عنوان وهاتف الجهة، وسيلة الوصول والمنفذ وتاريخ الدخول، والقيم الافتراضية للأشخاص. كمّلهم بإيدك، ودوس <b>حفظ</b> بعد المراجعة.</div></div>`;
+      <div class="row" style="margin-top:8px"><button class="btn pri" id="visaPick">موافق</button><span class="muted small">بيحط المهنة (والممثلية) في الملف</span></div>` : '<div style="margin-top:6px">مفيش تفاويض ولا مهن في النتيجة: اكتب المهنة بإيدك. (ده بيحصل لما الرقم اللي في «رقم التأشيرة» هو <b>رقم المستند</b> مش رقم الصادر: جدول التفاويض بيحتاج رقم الصادر. جرّب <b>مستند التأشيرة فقط</b>: بيجيب المهنة ونوع التأشيرة وعدد الدخول من المستند.)</div>'}</div>`;
     const apply = (r) => {
       const ok = [];
       if (put('jobText', r.job)) ok.push('المهنة (' + r.job + ')');
@@ -127,8 +127,7 @@
     if (d.sponsorName && !(has('sponsorName') || {}).value && put('sponsorName', d.sponsorName)) done.push('اسم الجهة');
     const box = $('#visaDocBox');
     if (box) box.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8;margin-top:8px"><b>من مستند التأشيرة${d.docNumber ? ' رقم ' + e(d.docNumber) : ''}${d.docDate ? ' (' + e(d.docDate) + ')' : ''}</b>
-      <ul class="list">${done.length ? `<li>اتملّى في الملف: ${e(done.join('، '))}</li>` : '<li>مفيش حاجة اتملّت</li>'}${skipped.length ? `<li>كمّلها بإيدك: ${e(skipped.join('، '))}</li>` : ''}</ul>
-      <div class="muted small">المستند مفيهوش: صلاحية التأشيرة (الأيام)، عنوان وهاتف الجهة، وسيلة الوصول والمنفذ وتاريخ الدخول. راجع ودوس <b>حفظ</b>.</div></div>`;
+      <ul class="list">${done.length ? `<li>اتملّى في الملف: ${e(done.join('، '))}</li>` : '<li>مفيش حاجة اتملّت</li>'}${skipped.length ? `<li>كمّلها بإيدك: ${e(skipped.join('، '))}</li>` : ''}</ul></div>`;
     toast('اتملّت بيانات مستند التأشيرة في الملف: راجعها ودوس حفظ', 'ok');
   }
   async function fillRequest(id, queue, total, quiet) {
@@ -619,11 +618,6 @@
     $('#au').onchange = () => reload().catch(fail); $('#aa').onchange = () => reload().catch(fail);
   }
 
-  async function pageSettings() {
-    view.innerHTML = `<h1>إعدادات التصدير</h1>
-      <div class="card"><p style="margin:0">ملف تساهيل بيتكتب فيه التاريخ بنفس شكل ملف تساهيل الأصلي (مثلاً 22/May/1984)، ومفيش إعدادات هنا دلوقتي.</p></div>`;
-  }
-
   async function pageProfiles() {
     const [r, tpl] = await Promise.all([api('GET', '/profiles'), api('GET', '/settings/profile-template').catch(() => ({ auto: false }))]);
     view.innerHTML = `<h1>ملفات الضبط</h1><p class="muted">كل ملف = جهة عمل/دفعة: نوع التأشيرة والممثلية وبيانات الكفيل وقيم افتراضية (المؤهل، الديانة…). أي شخص بيتربط بملف، وممكن يغلب أي قيمة بقيمته.</p>
@@ -636,7 +630,7 @@
         if (def) { d = Object.fromEntries(Object.entries(def.data || {}).filter(([k]) => !skip.includes(k))); fromTpl = def.name; } else toast('مفيش ملف افتراضي: علّم ملف كـ«الافتراضي» الأول', 'err');
       }
       $('#peditor').innerHTML = `<div class="card"><h2>${p ? 'تعديل: ' + e(p.name) : 'ملف جديد'}</h2>${fromTpl ? `<div class="pill ok" style="margin-bottom:8px">اتعبّى من الملف الافتراضي «${e(fromTpl)}»: راجع القيم وكمّل رقم التأشيرة والرقم الموحد</div>` : ''}<label class="f">اسم الملف<input id="pname" value="${e(p ? p.name : '')}"></label><br>
-        ${meta.groups.map((g) => `<h2 style="margin-top:14px">${e(g.title)}</h2><div class="grid">${g.fields.map((f) => fieldHtml(f, d[f.k])).join('')}${g.id === 'lookup' ? '<div class="f" style="align-self:end"><button class="btn pri" id="visaLookup" title="بيدوّر في المنصة من الخلفية وبيعرضلك الكابتشا هنا تكتبها، وبعدها تختار المهنة هنا">بحث وجلب المهن</button><button class="btn" id="visaDocOnly" type="button" style="margin-inline-start:6px" title="بيجيب نوع التأشيرة وعدد الدخول والمهنة من مستند التأشيرة بس (كابتشا واحدة)">مستند التأشيرة فقط</button></div>' : ''}</div>${g.id === 'lookup' ? '<div id="visaCapBox"></div><div id="visaInfoBox"></div><div id="visaDocBox"></div><div id="visaLog" class="muted small" style="margin-top:6px"></div>' : ''}`).join('')}
+        ${meta.groups.map((g) => `<h2 style="margin-top:14px">${e(g.title)}</h2><div class="grid">${g.fields.map((f) => fieldHtml(f, d[f.k])).join('')}${g.id === 'lookup' ? '<div class="f" style="align-self:end"><button class="btn pri" id="visaLookup" title="بيدوّر في المنصة من الخلفية وبيعرضلك الكابتشا هنا تكتبها، وبعدها تختار المهنة هنا">بحث وجلب المهن</button><button class="btn" id="visaDocOnly" type="button" style="margin-inline-start:6px" title="بيجيب نوع التأشيرة وعدد الدخول والمهنة من مستند التأشيرة بس (كابتشا واحدة)">مستند التأشيرة فقط</button></div>' : ''}</div>${g.id === 'lookup' ? '<div id="visaCapBox"></div><div id="visaInfoBox"></div><div id="visaDocBox"></div>' : ''}`).join('')}
         <div class="row" style="margin-top:14px"><button class="btn pri" id="psave">حفظ</button><label><input type="checkbox" id="pdef"${p && p.isDefault ? ' checked' : ''}> الافتراضي</label>${p ? '<button class="btn danger" id="pdel" style="margin-inline-start:auto">حذف</button>' : ''}</div></div>`;
       $('#peditor').scrollIntoView({ behavior: 'smooth' });
       const startLookup = async (mode) => {
@@ -646,7 +640,7 @@
         if (!extReady) return toast('إضافة Chrome مش متركّبة. من «الإضافة» نزّلها وركّبها الأول.', 'err');
         visaReset(); visaLogAdd(mode === 'doc' ? 'بدأ جلب مستند التأشيرة' : 'بدأ البحث');
         const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: { name: $('#pname').value, visaNumber: dd.visaNumber, unifiedNumber: dd.unifiedNumber, mode, embassy: dd.embassy } }, location.origin); setTimeout(() => res(false), 4000); });
-        if (ok) { visaLogAdd('الإضافة فتحت المنصة في الخلفية'); capWait(mode === 'doc' ? 'بنفتح استعلام مستند التأشيرة في الخلفية…' : 'بنفتح المنصة في الخلفية ونجيب الكابتشا…', 25000, 'مفيش كابتشا وصلت من المنصة خلال 25 ثانية. شوف السجل تحت، أو افتح تبويب المنصة.'); } else toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.9.5 أو أحدث).', 'err');
+        if (ok) { visaLogAdd('الإضافة فتحت المنصة في الخلفية'); capWait(mode === 'doc' ? 'بنفتح استعلام مستند التأشيرة في الخلفية…' : 'بنفتح المنصة في الخلفية ونجيب الكابتشا…', 25000, 'مفيش كابتشا وصلت من المنصة خلال 25 ثانية. شوف السجل تحت، أو افتح تبويب المنصة.'); } else toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.9.6 أو أحدث).', 'err');
       };
       $('#visaLookup').onclick = () => startLookup('');
       $('#visaDocOnly').onclick = () => startLookup('doc');
@@ -690,7 +684,7 @@
   }
 
   /* ===== التوجيه ===== */
-  const NAV = [['#/people', 'الأشخاص'], ['#/bulk', 'رفع جماعي'], ['#/profiles', 'ملفات الضبط'], ['#/reports', 'التقارير'], ['#/activity', 'السجل', 'admin'], ['#/settings', 'إعدادات التصدير', 'admin'], ['#/users', 'المستخدمين', 'admin'], ['#/extension', 'الإضافة']];
+  const NAV = [['#/people', 'الأشخاص'], ['#/bulk', 'رفع جماعي'], ['#/profiles', 'ملفات الضبط'], ['#/reports', 'التقارير'], ['#/activity', 'السجل', 'admin'], ['#/users', 'المستخدمين', 'admin'], ['#/extension', 'الإضافة']];
   async function render() {
     const h = location.hash || '#/people';
     if (!me) { try { me = (await api('GET', '/me')).user; } catch (er) { /* مش داخل */ } }
@@ -705,7 +699,6 @@
       else if (h.startsWith('#/bulk')) await pageBulk();
       else if (h.startsWith('#/reports')) await pageReports();
       else if (h.startsWith('#/activity')) await pageActivity();
-      else if (h.startsWith('#/settings')) await pageSettings();
       else if (h.startsWith('#/profiles')) await pageProfiles();
       else if (h.startsWith('#/users')) await pageUsers();
       else if (h.startsWith('#/extension')) await pageExtension();

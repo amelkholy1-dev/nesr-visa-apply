@@ -94,7 +94,7 @@ const MOFA = {
     if (/\/Base\/GetResidenceDurations/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ Value: 90, Text: '90' }]) });
     if (/GetOccupationsByClassificationId/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(/jobClassificationId=832/.test(rq.url()) ? [{ Value: 8321, Text: 'سائق سيارة' }, { Value: 8322, Text: 'سائق حافلة' }] : [{ Value: 1431, Text: 'مدير فندق' }]) });
     if (/\/enjaz\/getvisainformation\/person/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaLookupFixture });
-    if (/\/enjaz\/ViewVisaDetails\/person/i.test(rq.url())) { if (rq.method() === 'POST') { global.__visaPost = rq.postData() || ''; if (!/Captcha=123456/.test(global.__visaPost)) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaLookupFixture }); } return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaResultFixture }); }
+    if (/\/enjaz\/ViewVisaDetails\/person/i.test(rq.url())) { if (rq.method() === 'POST') { global.__visaPost = rq.postData() || ''; if (!/Captcha=123456/.test(global.__visaPost)) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaLookupFixture }); } return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: global.__cairoOnly ? visaResultFixture.replace("'320':{", "'3200':{") : visaResultFixture }); }
     if (/\/Home\/PrintVisa/i.test(rq.url())) { global.__printUrl = rq.url(); return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: global.__printEmpty ? printEmptyFixture : visaPrintFixture }); }
     if (global.__inquiry === 'broken' && /\/Home\/Index/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h1>صفحة غريبة</h1></body>' });
     if (global.__inquiry && /\/Home\/Index/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaHomeFixture });
@@ -246,8 +246,9 @@ const MOFA = {
   assert.ok(/VisaNumber=1000000001/.test(global.__visaPost) && /SponserID=7000000001/.test(global.__visaPost) && /Embassy=320/.test(global.__visaPost) && /Captcha=123456/.test(global.__visaPost), 'اتبعت للمنصة: ' + global.__visaPost);
   const vi = await app.evaluate(() => window.visa[0]);
   assert.deepStrictEqual([vi.visaNumber, vi.visaDate, vi.sponsorName, vi.unifiedNumber, vi.embassyCode, vi.embassyName], ['1000000001', '1447/09/25', 'شركة تجربة للنقل', '7000000001', '320', 'السويس'], JSON.stringify(vi));
-  assert.deepStrictEqual(vi.delegations, [{ number: '20000001', embassy: 'السويس', count: '14', job: 'سائق حافلة', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }, { number: '20000002', embassy: 'القاهرة', count: '5', job: 'فني', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }], 'التفاويض: السويس والقاهرة');
-  assert.deepStrictEqual(vi.jobs, [{ count: '8', job: 'سائق حافلة', nationality: 'مصر', embassy: 'السويس', remaining: '3' }, { count: '5', job: 'فني', nationality: 'مصر', embassy: 'القاهرة', remaining: '0' }], 'المهن: السويس والقاهرة');
+  assert.deepStrictEqual(vi.delegations, [{ number: '20000001', embassy: 'السويس', count: '14', job: 'سائق حافلة', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }], 'التفاويض: السويس فيها بيانات فوقف عندها');
+  assert.strictEqual(vi.embassyCode, '320');
+  assert.deepStrictEqual(vi.jobs, [{ count: '8', job: 'سائق حافلة', nationality: 'مصر', embassy: 'السويس', remaining: '3' }], 'المهن: السويس');
   /* الخطوة 2: نفس التبويب بيروح لاستعلام «مستند التأشيرة» ← كابتشا تانية في النظام (step 2) ← كود غلط ثم صح ← نتيجة المستند */
   await app.waitForFunction(() => window.caps.some((c) => c.step === 2), null, { timeout: 40000 });
   const h2 = await vpage.evaluate(() => ({ type: document.getElementById('SearchingType').value, no: document.getElementById('ApplicationNumber').value, sp: document.getElementById('SponserID').value, cap: document.getElementById('Captcha').value }));
@@ -263,6 +264,19 @@ const MOFA = {
   assert.deepStrictEqual(doc.rows, [{ visaKind: 'عمل موسمي', embassy: 'السويس', gender: 'ذكر', nationality: 'مصر', job: 'سائق حافلة', entries: 'سفرة واحدة', residence: '90' }], 'صف مستند التأشيرة');
   assert.ok(/t=2&n=1000000001&s=7000000001/.test(global.__printUrl), 'اتبعت للمنصة: ' + global.__printUrl);
   await vpage.waitForEvent('close', { timeout: 15000 }).catch(() => {}); assert.ok(vpage.isClosed(), 'تبويب المنصة اتقفل لوحده');
+  /* سيناريو 14: البيانات في القاهرة مش السويس ← الإضافة تجرّب لوحدها وتغيّر جهة القدوم وتقف عند أول واحدة فيها بيانات */
+  global.__inquiry = true; global.__cairoOnly = true;
+  const nVisa6 = await app.evaluate(() => window.visa.length); const nCaps6 = await app.evaluate(() => window.caps.length);
+  const [vp6] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', embassy: '' })]);
+  await vp6.waitForTimeout(1500); await vp6.reload().catch(async () => { await vp6.waitForTimeout(2000); await vp6.reload(); });
+  await app.waitForFunction((n) => window.caps.length > n, nCaps6, { timeout: 40000 });
+  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '123456' } }, location.origin));
+  await app.waitForFunction((n) => window.visa.length > n, nVisa6, { timeout: 60000 });
+  const v6 = await app.evaluate(() => window.visa[window.visa.length - 1]);
+  assert.deepStrictEqual([v6.embassyCode, v6.embassyName, v6.triedEmbassies], ['302', 'القاهرة', ['السويس', 'القاهرة']], 'جرّب السويس ثم القاهرة ولقى بيانات في القاهرة: ' + JSON.stringify([v6.embassyCode, v6.triedEmbassies]));
+  assert.deepStrictEqual(v6.delegations.map((x) => x.embassy), ['القاهرة'], 'تفاويض القاهرة بس');
+  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'cancel' } }, location.origin));
+  await vp6.waitForEvent('close', { timeout: 15000 }).catch(() => {}); global.__cairoOnly = false;
   /* سيناريو 12: «مستند التأشيرة فقط» — بيبدأ من استعلام المستند على طول (كابتشا واحدة) وبيتقفل بعد النتيجة */
   global.__inquiry = true; global.__printUrl = '';
   const nDocs = await app.evaluate(() => window.docs.length); const nCaps4 = await app.evaluate(() => window.caps.length);
