@@ -70,7 +70,7 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     /* الطابور والحالة والتقارير والسجل والرفع الجماعي */
     await page.goto(base + '#/people'); await page.waitForSelector('#rows .sel');
     assert.ok(await page.isHidden('#queueBtn'), 'زرار الطابور مخفي من غير تحديد');
-    await page.check('#rows .sel'); assert.ok(await page.isVisible('#queueBtn'), 'زرار الطابور ظهر بعد التحديد');
+    await page.check('#rows .sel'); assert.ok(await page.isVisible('#queueBtn'), 'زرار الطابور ظهر بعد التحديد'); assert.ok(await page.isVisible('#wafQueueBtn'), 'زرار طابور وافد ظهر بعد التحديد');
     /* صفحة الشخص: لوحة صورة الجواز جنب الحقول */
     const firstId = await page.evaluate(async () => (await (await fetch('/api/people')).json()).people[0].id);
     await page.goto(base + '#/people/' + firstId); await page.waitForSelector('.split .side');

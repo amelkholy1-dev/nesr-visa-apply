@@ -88,6 +88,12 @@
     mark(byId('id_appointment_date'));
   }
 
+  const queueHtml = (ctx) => {
+    const q = Array.isArray(ctx.queue) ? ctx.queue : []; if (!q.length) return '';
+    const total = ctx.queueTotal || (q.length + 1); const idx = total - q.length;
+    return '<div style="margin-top:6px;padding:6px 8px;background:#ffffff22;border-radius:8px">📋 الشخص ' + idx + ' من ' + total + ' — التالي: <b>' + esc(q[0].name) + '</b> (باقي ' + q.length + ') <button id="nesr-wf-next" style="background:#fff;color:#1d4486;border:0;border-radius:8px;padding:5px 10px;font:700 12px Tahoma;cursor:pointer;margin-inline-start:6px">الشخص التالي</button></div>';
+  };
+
   (async function run() {
     const { ctx } = await send({ kind: 'get-wafid-ctx' }); if (!ctx || !ctx.wafid) return;
     const flag = 'va_wf_' + ctx.personId + '_' + ctx.at; try { if (sessionStorage.getItem(flag)) return; } catch (e) { /* مش مهم */ }
@@ -99,7 +105,9 @@
     const b = bar('<div><b>' + (bad ? '⚠️' : '✅') + ' اتملى ' + report.ok.length + ' خانة' + (report.failed.length ? ' · ' + report.failed.length + ' محتاجة راجعة' : '') + '</b> — دلوقتي:</div>' +
       '<ol style="margin:4px 18px;padding:0"><li>راجع الخانات اللي حواليها إطار برتقالي</li><li>اختار <b>تاريخ الموعد</b> (من الموقع)</li><li>' + (ctx.wafid.autoDeclare ? 'الإقرار اتعلّم' : 'علّم على الإقرار') + '، ولو طلب كود تحقق/OTP اكتبه</li><li>دوس «حفظ ومتابعة»</li></ol>' +
       (ctx.issues.length ? '<div>⛔ في النظام:</div>' + list(ctx.issues) : '') + (report.failed.length ? '<div>❌ مش اتملى:</div>' + list(report.failed) : '') + (report.manual.length ? '<div>✋ فاضي في النظام:</div>' + list(report.manual) : '') + ((ctx.warns || []).length ? '<div>ℹ️</div>' + list(ctx.warns) : '') +
-      '<div style="margin-top:6px"><button id="nesr-wf-hide" style="background:#ffffff33;color:#fff;border:0;border-radius:8px;padding:6px 12px;font:700 12px Tahoma;cursor:pointer">إخفاء</button></div>');
+      queueHtml(ctx) + '<div style="margin-top:6px"><button id="nesr-wf-hide" style="background:#ffffff33;color:#fff;border:0;border-radius:8px;padding:6px 12px;font:700 12px Tahoma;cursor:pointer">إخفاء</button></div>');
+    const nx = b.querySelector('#nesr-wf-next');
+    if (nx) nx.addEventListener('click', async () => { nx.disabled = true; nx.textContent = 'بيجهّز…'; const r = await send({ kind: 'next' }); if (!r || !r.ok) { nx.disabled = false; nx.textContent = 'الشخص التالي'; alert((r && r.error) || 'مش قادر أفتح الشخص التالي'); } });
     const h = b.querySelector('#nesr-wf-hide'); if (h) h.addEventListener('click', () => b.remove());
   })();
 })();

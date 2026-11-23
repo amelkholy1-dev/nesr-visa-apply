@@ -70,13 +70,13 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       } catch (e) { reply({ ok: false, why: String(e && e.message || e) }); }
     } else if (msg.kind === 'next') {
       /* الطابور: الشخص التالي بيتطلب من صفحة النظام (هي اللي معاها الصلاحية تجيب بياناته) */
-      const key = 'ctx_' + (sender.tab && sender.tab.id);
-      const o = await store.get(key); const ctx = o[key] || {};
+      const tid = sender.tab && sender.tab.id; const o = await store.get(['ctx_' + tid, 'wctx_' + tid]);
+      const isWafid = !!o['wctx_' + tid] && !o['ctx_' + tid]; const ctx = o['ctx_' + tid] || o['wctx_' + tid] || {};
       const queue = Array.isArray(ctx.queue) ? ctx.queue : [];
       if (!queue.length) { reply({ ok: false, error: 'الطابور خلص' }); return; }
       const t = await findAppTab(ctx.originTabId);
       if (!t) { reply({ ok: false, error: 'افتح صفحة نظام طلبات التأشيرات في تبويب (visa.nisrelkhaleeg.com) وجرّب تاني' }); return; }
-      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-next', data: { personId: queue[0].id, queue: queue.slice(1), total: ctx.queueTotal || (queue.length + 1) } }); reply({ ok: true }); }
+      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-next', data: { personId: queue[0].id, queue: queue.slice(1), total: ctx.queueTotal || (queue.length + 1), target: isWafid ? 'wafid' : 'mofa' } }); reply({ ok: true }); }
       catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ. اعمل F5 فيها وجرّب تاني' }); }
     } else if (msg.kind === 'app-ready') {
       const o = await chrome.storage.local.get('pendingResult');

@@ -30,7 +30,7 @@
     if (m.type === 'VA_ACK') { bridge.pending.splice(0).forEach((f) => f(true)); }
     if (m.type === 'VA_ERROR') { toast(m.data && m.data.message || 'مشكلة في الإضافة', 'err'); bridge.pending.splice(0).forEach((f) => f(false)); }
     if (m.type === 'VA_RESULT' && m.data) onResult(m.data);
-    if (m.type === 'VA_NEXT' && m.data && m.data.personId) fillRequest(m.data.personId, m.data.queue || [], m.data.total || 0, true);
+    if (m.type === 'VA_NEXT' && m.data && m.data.personId) { if (m.data.target === 'wafid') wafidRequest(m.data.personId, m.data.queue || [], m.data.total || 0, true); else fillRequest(m.data.personId, m.data.queue || [], m.data.total || 0, true); }
   });
   const ping = () => window.postMessage({ source: 'nesr-visaapply', type: 'VA_PING' }, location.origin);
   function setExt() { const p = $('#extState'); p.className = 'pill ' + (extReady ? 'ok' : 'warn'); p.textContent = extReady ? 'الإضافة شغّالة' : 'الإضافة مش متركّبة'; }
@@ -55,13 +55,13 @@
     } catch (er) { fail(er); }
   }
 
-  async function wafidRequest(id) {
+  async function wafidRequest(id, queue, total, quiet) {
     try {
       const pl = await api('GET', `/people/${id}/wafid`);
       if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
       if (!extReady) return toast('إضافة Chrome مش متركّبة. من «الإضافة» نزّلها وركّبها الأول.', 'err');
-      if (pl.issues.length && !confirm('فيه نواقص للفحص الطبي:\n- ' + pl.issues.join('\n- ') + '\n\nتفتح وافد وتملا اللي موجود؟')) return;
-      const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_WAFID', data: { personId: id, name: pl.name, wafid: pl.wafid, issues: pl.issues, warns: pl.warns } }, location.origin); setTimeout(() => res(false), 4000); });
+      if (!quiet && pl.issues.length && !confirm('فيه نواقص للفحص الطبي:\n- ' + pl.issues.join('\n- ') + '\n\nتفتح وافد وتملا اللي موجود؟')) return;
+      const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_WAFID', data: { personId: id, name: pl.name, wafid: pl.wafid, issues: pl.issues, warns: pl.warns, queue: queue || [], queueTotal: total || 0 } }, location.origin); setTimeout(() => res(false), 4000); });
       if (!ok) toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.4.0 أو أحدث).', 'err'); else toast('اتفتح موقع وافد وبيتملي…', 'ok');
     } catch (er) { fail(er); }
   }
@@ -180,12 +180,13 @@
         <select id="sf" style="padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">كل المراحل</option>${(meta.stages || []).map((x) => `<option value="p:${x.k}"${state.sf === 'p:' + x.k ? ' selected' : ''}>لسه: ${e(x.label)}</option>${x.booking ? `<option value="b:${x.k}"${state.sf === 'b:' + x.k ? ' selected' : ''}>محجوز: ${e(x.label)}</option>` : ''}<option value="d:${x.k}"${state.sf === 'd:' + x.k ? ' selected' : ''}>تم: ${e(x.label)}</option>`).join('')}</select>
         <button class="btn" id="tashBtn" title="ملف Excel لموقع تسهيل (للمحدّدين، أو كل المعروضين)">تصدير لتسهيل</button>
         <button class="btn pri" id="queueBtn" hidden>املى المحدّدين بالتتابع</button>
+        <button class="btn pri" id="wafQueueBtn" hidden>احجز الفحص (وافد) للمحدّدين</button>
         <a href="#/people/new" class="btn pri" style="margin-inline-start:auto;text-decoration:none">+ شخص جديد</a></div></div>
       <div id="upc"></div>
       <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th style="width:30px"><input type="checkbox" id="selAll" title="تحديد الكل"></th><th>الاسم</th><th>الجواز</th><th>ملف الضبط</th><th>الحالة</th><th>النواقص</th><th>المراحل</th><th>رقم الطلب</th><th></th></tr></thead><tbody id="rows"><tr><td colspan="7" class="muted">جاري التحميل…</td></tr></tbody></table></div>`;
     let shown = [];
     const selectedIds = () => [...view.querySelectorAll('.sel:checked')].map((c) => c.dataset.id);
-    const syncQueue = () => { const n = selectedIds().length; const b = $('#queueBtn'); if (!b) return; b.hidden = n === 0; b.textContent = `املى المحدّدين بالتتابع (${n})`; const t = $('#tashBtn'); if (t) t.textContent = n ? `تصدير لتسهيل (${n})` : 'تصدير لتسهيل'; };
+    const syncQueue = () => { const n = selectedIds().length; const b = $('#queueBtn'); if (!b) return; b.hidden = n === 0; b.textContent = `املى المحدّدين بالتتابع (${n})`; const wq = $('#wafQueueBtn'); if (wq) { wq.hidden = n === 0; wq.textContent = `احجز الفحص (وافد) للمحدّدين (${n})`; } const t = $('#tashBtn'); if (t) t.textContent = n ? `تصدير لتسهيل (${n})` : 'تصدير لتسهيل'; };
     const load = async () => {
       const st = { q: $('#q').value, st: $('#st').value, pf: $('#pf').value, ex: $('#exOnly').checked, sf: $('#sf').value }; sessionStorage.setItem('peopleFilter', JSON.stringify(st));
       const r = await api('GET', `/people?q=${encodeURIComponent(st.q)}&status=${st.st}&profile=${st.pf}`);
@@ -199,6 +200,14 @@
         <td dir="ltr" style="text-align:right">${e(p.appNumber || '')}</td><td><button class="btn small pri fill" data-id="${p.id}">املى الطلب</button></td></tr>`).join('') || '<tr><td colspan="9" class="muted">مفيش أشخاص.</td></tr>';
     };
     ['q', 'st', 'pf', 'exOnly', 'sf'].forEach((i) => { $('#' + i).oninput = () => load().catch(fail); });
+    $('#wafQueueBtn').onclick = async () => {
+      const ids = selectedIds(); if (!ids.length) return;
+      const items = ids.map((id) => { const p = shown.find((x) => String(x.id) === String(id)) || {}; return { id, name: p.name || '#' + id }; });
+      if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
+      if (!extReady) return toast('إضافة Chrome مش متركّبة.', 'err');
+      toast(`بدأ طابور وافد: ${items.length} شخص. بعد ما تخلّص كل واحد دوس «الشخص التالي» في صفحة وافد.`, 'ok');
+      wafidRequest(items[0].id, items.slice(1), items.length, true);
+    };
     $('#tashBtn').onclick = () => { const ids = selectedIds().length ? selectedIds() : shown.map((p) => p.id); if (!ids.length) return toast('مفيش أشخاص للتصدير', 'err'); window.location.href = `/api/export/tasheel.xlsx?ids=${ids.slice(0, 1500).join(',')}`; toast('بينزّل ملف تسهيل (' + ids.length + ' شخص)', 'ok'); };
     api('GET', '/reports/summary').then((r) => { const u = (r.upcoming || []).slice(0, 6); const box = $('#upc'); if (box && u.length) box.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8"><b>📅 مواعيد خلال 7 أيام:</b> ${u.map((x) => `<a href="#/people/${x.personId}">${e(x.name || '#' + x.personId)}</a> — ${e(x.stage)} ${e(x.date)}`).join(' · ')}</div>`; }).catch(() => {});
     $('#selAll').onchange = () => { view.querySelectorAll('.sel').forEach((c) => { c.checked = $('#selAll').checked; }); syncQueue(); };

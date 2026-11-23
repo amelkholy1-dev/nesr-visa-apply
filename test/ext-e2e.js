@@ -173,6 +173,14 @@ const MOFA = {
   assert.deepStrictEqual([w7.pass, w7.pass2, w7.place, w7.email, w7.phone, w7.nid, w7.pos, w7.visa], ['A45449365', 'A45449365', 'Egypt', 'a@b.com', '+201000000000', '29001010100011', '65', 'hu']);
   assert.deepStrictEqual([w7.dob, w7.iss, w7.exp], ['01/11/1989', '24/06/2026', '23/06/2033'], 'التواريخ اتحطت بتقويم الصفحة');
   assert.strictEqual(w7.confirm, true, 'الإقرار اتعلّم لأن الإعداد مفعّل'); assert.ok(w7.apptType, 'نوع الموعد اتسجّل'); assert.strictEqual(w7.apptDate, '', 'تاريخ الموعد مش بيتلمس'); assert.strictEqual(w7.captcha, '', 'الكابتشا مش بتتلمس');
+  /* سيناريو 8: طابور وافد — زرار «الشخص التالي» بيبعت للنظام target=wafid */
+  const nBefore = await app.evaluate(() => window.nexts.length);
+  const [wpage2] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_WAFID', data: d }, location.origin), { personId: '22', name: 'أول وافد', wafid: WF, issues: [], warns: [], queue: [{ id: '23', name: 'تاني وافد' }], queueTotal: 2 })]);
+  await wpage2.waitForSelector('#nesr-wf-next', { timeout: 120000 });
+  await wpage2.click('#nesr-wf-next');
+  await app.waitForFunction((n) => window.nexts.length > n, nBefore, { timeout: 10000 });
+  const nx2 = await app.evaluate(() => window.nexts[window.nexts.length - 1]);
+  assert.deepStrictEqual([nx2.personId, nx2.target, nx2.queue.length, nx2.total], ['23', 'wafid', 0, 2]);
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });
