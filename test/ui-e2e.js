@@ -118,16 +118,9 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.waitForFunction(() => document.querySelector('#peditor [data-k=visaKind]').value === '13');
     assert.deepStrictEqual(await page.evaluate(() => ['entriesText', 'residence', 'nationality'].map((k) => document.querySelector('#peditor [data-k=' + k + ']').value)), ['سفرة واحدة', '90', 'EGY'], 'عدد الدخول ومدة الإقامة والجنسية من المستند');
     assert.ok((await page.textContent('#visaDocBox')).includes('نوع التأشيرة'), 'ملخص المستند');
-    /* جدول المستند رجع فاضي: النظام بيعرض السبب وبيقترح رقم المستند (رقم التأشيرة + 1) */
-    await page.evaluate(() => { window.__va = []; window.addEventListener('message', (ev) => { const m = ev.data; if (m && m.source === 'nesr-visaapply' && m.type === 'VA_VISAINFO') { window.__va.push(m.data); window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_ACK', data: {} }, location.origin); } }); window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_READY' }, location.origin); window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_VISAINFO_CAPTCHA', data: { step: 2, only: true, image: '', error: true, empty: true, message: 'مستند التأشيرة رجع من غير بيانات (الجدول: «لا توجد بيانات!»).' } }, location.origin); });
-    /* أول مرة فاضي: بيجرّب +1 لوحده */
-    await page.waitForFunction(() => window.__va.length > 0, null, { timeout: 8000 });
-    assert.deepStrictEqual(await page.evaluate(() => [window.__va[0].visaNumber, window.__va[0].mode]), ['1000000002', 'doc'], 'جرّب +1 تلقائي');
-    /* تاني مرة فاضي: مفيش محاولة تلقائية تانية، وفيه زرار يدوي */
-    await page.evaluate(() => window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_VISAINFO_CAPTCHA', data: { step: 2, only: true, image: '', error: true, empty: true, message: 'مستند التأشيرة رجع من غير بيانات (الجدول: «لا توجد بيانات!»).' } }, location.origin));
-    await page.waitForSelector('#capPlus'); assert.ok((await page.textContent('#visaCapBox')).includes('رجع من غير بيانات'));
-    await page.waitForTimeout(1500); assert.strictEqual(await page.evaluate(() => window.__va.length), 1, 'مفيش محاولة تلقائية تالتة');
-    await page.click('#capPlus'); await page.waitForFunction(() => window.__va.length > 1); assert.strictEqual(await page.evaluate(() => window.__va[1].visaNumber), '1000000002', 'الزرار اليدوي شغّال');
+    /* جدول المستند رجع فاضي: النظام بيعرض السبب (من غير أي تخمين لرقم تاني) */
+    await page.evaluate(() => { window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_VISAINFO_CAPTCHA', data: { step: 2, only: true, image: '', error: true, empty: true, message: 'مستند التأشيرة رجع من غير بيانات (الجدول: «لا توجد بيانات!»).' } }, location.origin); });
+    await page.waitForSelector('#capOpen'); assert.ok((await page.textContent('#visaCapBox')).includes('رجع من غير بيانات')); assert.strictEqual(await page.locator('#capPlus').count(), 0, 'مفيش تخمين +1');
     await page.goto(base + '#/reports'); await page.waitForSelector('#rbody .card'); assert.ok((await page.textContent('#rbody')).includes('الوضع الحالي'));
     assert.ok((await page.getAttribute('#rx', 'href')).includes('/api/reports/export.csv'));
     await page.goto(base + '#/activity'); await page.waitForSelector('#arows tr'); assert.ok((await page.textContent('#arows')).includes('دخول'));

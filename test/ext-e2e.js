@@ -46,7 +46,7 @@ const WMOCK = `<script>
 const visaLookupFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-lookup.html'), 'utf8');
 const visaHomeFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-home.html'), 'utf8');
 const visaPrintFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-print.html'), 'utf8');
-const printEmptyFixture = visaPrintFixture.replace(/setTimeout\(function\(\)\{[\s\S]*?\}, 700\);/, () => 'document.getElementById("tb").innerHTML = \'<tr class="jtable-no-data-row"><td colspan="11">لا توجد بيانات!</td></tr>\';');
+const printEmptyFixture = visaPrintFixture.replace(/setTimeout\(function\(\)\{[\s\S]*?\}, 700\);/, () => 'document.querySelector(".jtable-busy-panel-background").style.display = "none"; document.getElementById("tb").innerHTML = \'<tr class="jtable-no-data-row"><td colspan="11">لا توجد بيانات!</td></tr>\';');
 const visaResultFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-result.html'), 'utf8');
 const labFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'lab-booking.html'), 'utf8');
 /* بيحاكي سلوك APEX في صفحة المعمل: الأقسام مخفية لحد اختيار نوع الجنسية، والرقم القومي بيحسب تاريخ الميلاد والجنس */

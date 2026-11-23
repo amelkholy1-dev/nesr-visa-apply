@@ -17,10 +17,11 @@ var NONE='<tr class="jtable-no-data-row"><td colspan="7">لا توجد بيان�
 function busy(on){ document.querySelectorAll('.jtable-busy-panel-background').forEach(function(b){ b.style.display=on?'block':'none'; }); }
 function load(delayJobs, delayDels){
   var d=DATA[document.getElementById('EmbassyID').value]||{jobs:NONE,dels:NONE}; busy(true);
+  document.getElementById('jb').innerHTML=NONE; document.getElementById('db').innerHTML=NONE; /* زي jTable: صف «لا توجد بيانات» مؤقت لحد ما الـ AJAX يرجع */
   setTimeout(function(){ document.getElementById('jb').innerHTML=d.jobs; }, delayJobs);
   setTimeout(function(){ document.getElementById('db').innerHTML=d.dels; busy(false); }, delayDels);
 }
-document.getElementById('EmbassyID').addEventListener('change', function(){ document.getElementById('jb').innerHTML=''; document.getElementById('db').innerHTML=''; load(300, 500); });
+document.getElementById('EmbassyID').addEventListener('change', function(){ load(300, 500); });
 load(900, 1300);
 </script>
 </body></html>

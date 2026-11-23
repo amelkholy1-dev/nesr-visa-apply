@@ -89,11 +89,24 @@
   } catch (e) { /* مش مهم */ }
 
   /* صفحة النتيجة */
+  /* jTable بيحط صف «لا توجد بيانات!» مؤقتاً وهو لسه بيحمّل (قبل ما الـ AJAX يرجع). فبنستنى: مفيش «جاري التحميل» + الجدول ثابت، وبعدها لو فيه بيانات نقرا، ولو فاضي نستنى كمان شوية قبل ما نحكم إنه فاضي فعلاً */
+  const settle = async (gridId, maxMs = 25000) => {
+    const t0 = Date.now(); let last = null; let since = Date.now();
+    for (;;) {
+      const g = byId(gridId); if (!g) return false;
+      const busy = [...g.querySelectorAll('.jtable-busy-panel-background')].some((b) => getComputedStyle(b).display !== 'none');
+      const sig = (g.querySelector('tbody') || {}).innerHTML || '';
+      if (sig !== last) { last = sig; since = Date.now(); }
+      const hasData = !!g.querySelector('tr.jtable-data-row');
+      if (!busy && Date.now() - since >= 900 && (hasData || Date.now() - t0 >= 4000)) return true;
+      if (Date.now() - t0 > maxMs) return false;
+      await sleep(150);
+    }
+  };
   const labelValue = (label) => { for (const l of document.querySelectorAll('label.control-label')) { if (norm(l.textContent) === label) { const d = l.nextElementSibling; return d ? norm(d.textContent) : ''; } } return ''; };
   async function runResult() {
     bar('<span>🔎 بقرا بيانات التأشيرة من النتيجة…</span>');
-    const loaded = (id) => document.querySelector('#' + id + ' tr.jtable-data-row, #' + id + ' tr.jtable-no-data-row');
-    await waitFor(() => loaded('dvJobsGrid') && (!document.getElementById('dvDelegationsInEmbassies') || loaded('dvDelegationsInEmbassies')), 15000);
+    await settle('dvJobsGrid'); if (byId('dvDelegationsInEmbassies')) await settle('dvDelegationsInEmbassies');
     const sel = document.getElementById('EmbassyID'); const opt = sel && sel.selectedOptions && sel.selectedOptions[0];
     const startCode = sel ? String(sel.value || '') : ''; const startName = opt ? cut(opt.textContent, 30) : '';
     const rowsOf = (gridId) => [...document.querySelectorAll('#' + gridId + ' tr.jtable-data-row')].map((tr) => [...tr.children].map((c) => norm(c.textContent)));
@@ -102,7 +115,6 @@
       /* «التفاويض في الممثلية»: رقم التفويض، جهة القدوم، عدد الأشخاص، المهنة، رقم الوكالة، اسم الوكالة */
       delegations: rowsOf('dvDelegationsInEmbassies').map((td) => ({ number: cut(td[0], 20), embassy: cut(td[1], 30), count: cut(td[2], 6), job: cut(td[3], 60), agencyNumber: cut(td[4], 20), agencyName: cut(td[5], 80) }))
     });
-    const idle = () => ['dvJobsGrid', 'dvDelegationsInEmbassies'].every((id) => loaded(id) && ![...document.querySelectorAll('#' + id + ' .jtable-busy-panel-background')].some((b) => getComputedStyle(b).display !== 'none'));
     let jobs = [], delegations = [];
     const merge = (g) => { jobs = jobs.concat(g.jobs); delegations = delegations.concat(g.delegations); };
     merge(grab());
@@ -111,8 +123,8 @@
     for (const code of ['320', '302']) {
       if (!sel || seen.has(code) || ![...sel.options].some((o) => String(o.value) === code)) continue;
       bar('<span>🔎 بشيك على ' + (code === '320' ? 'السويس' : 'القاهرة') + '…</span>');
-      sel.value = code; fire(sel); await sleep(200);
-      await waitFor(idle, 12000, 150); await sleep(250); merge(grab()); seen.add(code);
+      sel.value = code; fire(sel); await sleep(400);
+      await settle('dvJobsGrid'); if (byId('dvDelegationsInEmbassies')) await settle('dvDelegationsInEmbassies'); merge(grab()); seen.add(code);
     }
     const info = { delegations: delegations.slice(0, 60), visaNumber: cut(labelValue('رقم الصادر'), 20), visaDate: cut(labelValue('تاريخ التأشيرة'), 12), sponsorName: cut(labelValue('الاسم'), 100), unifiedNumber: cut(labelValue('رقم الإقامة'), 12).replace(/\D/g, '').slice(0, 10), embassyCode: startCode.replace(/\D/g, '').slice(0, 6), embassyName: startName, jobs: jobs.slice(0, 60) };
     if (!info.sponsorName && !info.unifiedNumber && !jobs.length && !delegations.length) { bar('<div>⚠️ مقدرتش أقرا بيانات من الصفحة دي. اتأكد إنها نتيجة البحث، وجرّب تاني.</div>'); return; }
@@ -124,7 +136,7 @@
   /* الخطوة 2: نتيجة «مستند تأشيرة»: نوع التأشيرة وعدد الدخول ومدة الإقامة والمهنة وجهة القدوم */
   async function runDoc(ctx) {
     bar('<span>🔎 بقرا مستند التأشيرة…</span>');
-    await waitFor(() => document.querySelector('#gridDocumentVisaList tr.jtable-data-row, #gridDocumentVisaList tr.jtable-no-data-row'), 15000);
+    await settle('gridDocumentVisaList');
     const heads = [...document.querySelectorAll('#tblDocumentVisaList thead th')].map((th) => norm(th.textContent));
     const col = (td, title) => { const i = heads.indexOf(title); return i >= 0 ? norm(td[i]) : ''; };
     const rows = [...document.querySelectorAll('#gridDocumentVisaList tr.jtable-data-row')].slice(0, 60).map((tr) => { const td = [...tr.children].map((c) => c.textContent);
@@ -159,7 +171,7 @@
     try {
       const want = phase === 'enjaz' ? () => isEnjazSearch() || isEnjazResult() : () => isHomeSearch() || isDocResult();
       if (!(await waitFor(want, 12000))) { await status('الصفحة مش اللي متوقعينها'); await tell('صفحة المنصة مش زي المتوقع (' + location.pathname + '). افتح تبويب المنصة وشوف إيه اللي ظاهر.'); return; }
-      await status('الصفحة ظاهرة زي المتوقع، بجيب الكابتشا…');
+      await status('الصفحة ظاهرة زي المتوقع');
       if (phase === 'enjaz') { if (isEnjazSearch()) await runSearch(ctx); else await runResult(); }
       else if (isHomeSearch()) await runHomeSearch(ctx); else await runDoc(ctx);
     } catch (e) { await tell('حصل خطأ في الإضافة: ' + String(e && e.message || e).slice(0, 120)); }
