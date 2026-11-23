@@ -289,7 +289,7 @@
       const st = person.stages || {};
       return `<div class="card"><h2>مراحل الطلب</h2><div class="stages">${meta.stages.map((x) => { const c = st[x.k] || { state: '', date: '', note: '' };
         return `<div class="stg" data-stage="${x.k}"><b>${e(x.label)}</b><select class="stS">${['', ...(x.booking ? ['booked'] : []), 'done'].map((v) => `<option value="${v}"${c.state === v ? ' selected' : ''}>${STATE_AR[v]}</option>`).join('')}</select><input type="date" class="stD" value="${e(c.date || '')}"><input class="stN" placeholder="ملاحظة (مكان / رقم / …)" value="${e(c.note || '')}">
-          ${x.k === 'sent' ? `<div class="stX small">رقم الطلب: <b dir="ltr">${e(person.appNumber || '—')}</b> <input id="appNo" placeholder="E123456789" dir="ltr"> <button class="btn small" id="appNoBtn">سجّل رقم الطلب</button>${(c.history || []).length ? `<div class="muted">أرقام سابقة (قبل إعادة الإرسال): ${c.history.map((h) => `<span dir="ltr">${e(h.app)}</span>`).join('، ')}</div>` : ''}</div>` : ''}</div>`; }).join('')}</div></div>`;
+          ${x.k === 'sent' ? `<div class="stX small">رقم الطلب: <b dir="ltr">${e(person.appNumber || '—')}</b> <input id="appNo" placeholder="E123456789" dir="ltr"> <button class="btn small" id="appNoBtn">سجّل رقم الطلب</button> ${can('people.fill') ? '<button class="btn small pri" id="appNoFetch" type="button" title="يفتح «البحث عن طلب مقدم» في المنصة ويجيب رقم الطلب (إنجاز) بعد ما تكتب الكابتشا">هات رقم إنجاز من المنصة</button>' : ''}${(c.history || []).length ? `<div class="muted">أرقام سابقة (قبل إعادة الإرسال): ${c.history.map((h) => `<span dir="ltr">${e(h.app)}</span>`).join('، ')}</div>` : ''}</div>` : ''}</div>`; }).join('')}</div></div>`;
     };
     const servicesHtml = () => {
       if (isNew) return '';
@@ -440,6 +440,7 @@
         ['.stS', '.stD', '.stN'].forEach((c) => { row.querySelector(c).onchange = send; });
       });
       const an = $('#appNoBtn'); if (an) an.onclick = async () => { const v = $('#appNo').value.trim().toUpperCase(); if (!/^[A-Z]\d{6,12}$/.test(v)) return toast('رقم الطلب شكله غلط (حرف + أرقام، زي E123456789)', 'err'); try { await api('POST', `/people/${id}/result`, { status: 'submitted', appNumber: v }); toast('اتسجّل رقم الطلب', 'ok'); pagePerson(id); } catch (er) { fail(er); } };
+      const af = $('#appNoFetch'); if (af) af.onclick = () => NA.appno.start([String(id)], { onDone: (n) => { if (n) pagePerson(id); } });
 
       $('#mrzBtn').onclick = async () => {
         try {

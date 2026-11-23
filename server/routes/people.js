@@ -22,7 +22,7 @@ const router = express.Router();
 const P = require('../perms');
 /* صلاحية كل مسار (أول قاعدة تنطبق) */
 const RULES = [
-  ['GET', /^\/\d+\/(payload|wafid|lab|letter\/.*)$/, 'people.fill'], ['POST', /^\/\d+\/result$/, 'people.fill'],
+  ['GET', /^\/\d+\/(payload|wafid|lab|appno-lookup|letter\/.*)$/, 'people.fill'], ['POST', /^\/\d+\/result$/, 'people.fill'],
   ['PUT', /^\/\d+\/stages\//, 'people.mark'], ['POST', /^\/bulk\//, 'people.mark'],
   ['DELETE', /^\/\d+$/, 'people.delete'], ['GET', /./, 'people.view'], ['*', /./, 'people.edit']
 ];
@@ -182,6 +182,17 @@ router.post('/:id(\\d+)/result', async (req, res) => {
     const pn = cur;
     audit.log(req, status === 'filled' || status === 'submitted' ? status : 'status', id, pn ? pn.name_ar : '', app || status);
     res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* «هات رقم إنجاز»: اللي محتاجه صفحة «البحث عن طلب مقدم» في المنصة (رقم الجواز + الجنسية + نوع التأشيرة + جهة القدوم) من بيانات الشخص وملف الضبط */
+router.get('/:id(\\d+)/appno-lookup', async (req, res) => {
+  try {
+    const row = (await db.query('SELECT * FROM people WHERE id = ?', [req.params.id]))[0];
+    if (!row) return res.status(404).json({ error: 'الشخص مش موجود' });
+    const profile = await loadProfile(row.profile_id);
+    const m = F.resolve(json(row.data), profile && profile.data, {}).mofa;
+    res.json({ personId: row.id, name: row.name_ar, passportNo: m.PASSPORTnumber || '', nationality: m.NATIONALITY || 'EGY', visaType: m.VisaKind || '', embassy: m.EmbassyCode || '', appNumber: row.app_number || '' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

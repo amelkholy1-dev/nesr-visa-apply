@@ -1,0 +1,19 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>منصة التأشيرات (نسخة اختبار)</title></head><body>
+<!-- نسخة مبسّطة بأرقام وهمية من «البحث عن طلب مقدم» (visa.mofa.gov.sa/visaperson/getapplicantdata): نفس الـ ids والأسماء. للاختبار بس. -->
+<div class="page-content-inner"><div class="portlet-body form">
+<form action="https://visa.mofa.gov.sa/visaperson/getapplicantdata" method="post">
+ <div class="alert alert-danger" style="display: none"><!--ERR--></div>
+ <label class="control-label">رقم الجواز </label><input type="text" name="PassportNumber" id="PassportNumber" value="" class="form-control required">
+ <label class="control-label">الجنسية الحالية </label><select id="Nationality" name="Nationality"><option value="ETH">إثيوبيــــا</option><option value="EGY">مصر</option><option value="SDN">السودان</option></select>
+ <label class="control-label">نوع التأشيرة </label><select id="VisaType" name="VisaType"><option value="3">اقامة</option><option value="13">تأشيرة العمل المؤقت لخدمات الحج والعمرة</option><option value="1">عمل</option><option value="38">عمل مؤقت</option></select>
+ <label class="control-label">جهة القدوم </label><select id="Embassy" name="Embassy"><option value="311">ابوجا</option><option value="321">الاسكندرية</option><option value="320">السويس</option><option value="302">القاهرة</option></select>
+ <label class="control-label">رمز الصورة</label>
+ <div class="input-group input-group-capcha"><input type="text" class="form-control required hasCaptcha fake" id="Captcha" name="Captcha" maxlength="6" autocomplete="off"><img id="imgCaptcha" class="image-capcha" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="><span class="input-group-addon" id="btnRefreshCaptcha" style="cursor:pointer;">↻</span></div>
+ <a class="btn btn-default" href="/Enjaz"><span>عودة</span></a>
+ <button type="submit" value="Search" class="btn green">إجراء البحث</button>
+ <input name="__RequestVerificationToken" type="hidden" value="x">
+</form></div></div>
+<script>
+var n=0, imgs=['data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==','data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='];
+document.getElementById('btnRefreshCaptcha').addEventListener('click', function(){ n++; document.getElementById('Captcha').value=''; document.getElementById('imgCaptcha').src = imgs[n%2]; });
+</script></body></html>

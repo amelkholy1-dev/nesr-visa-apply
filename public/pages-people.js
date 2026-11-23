@@ -35,7 +35,7 @@
     const bulkHtml = (n) => {
       const sel = (id, opts, ph) => `<select id="${id}" style="padding:6px 8px;border-radius:9px;border:0;max-width:170px">${ph ? `<option value="">${ph}</option>` : ''}${opts}</select>`;
       return `<div class="bulkbar"><span class="cnt">${n} محدّد</span><button class="btn small" id="clearSel">إلغاء التحديد</button><span class="sep"></span>
-        ${can('people.fill') ? `<div class="grp"><span class="gl">ابدأ طابور:</span><button class="btn pri" id="queueBtn">املى المنصة (${n})</button><button class="btn" id="wafQueueBtn">احجز وافد (${n})</button><button class="btn" id="labQueueBtn">احجز المعمل (${n})</button></div><span class="sep"></span>` : ''}
+        ${can('people.fill') ? `<div class="grp"><span class="gl">ابدأ طابور:</span><button class="btn pri" id="queueBtn">املى المنصة (${n})</button><button class="btn" id="wafQueueBtn">احجز وافد (${n})</button><button class="btn" id="labQueueBtn">احجز المعمل (${n})</button><button class="btn" id="appnoBtn" title="يجيب رقم الطلب (إنجاز) من المنصة لكل المحدّدين اللي لسه معندهمش رقم">هات أرقام إنجاز (${n})</button></div><span class="sep"></span>` : ''}
         ${can('people.mark') ? `<div class="grp"><span class="gl">اعلّم:</span>${sel('bkStage', stages.map((x) => `<option value="${x.k}" data-b="${x.booking ? 1 : 0}">${e(x.label)}</option>`).join(''))}
           ${sel('bkState', '<option value="done">تم ✔</option><option value="booked">محجوز</option><option value="">لسه (إلغاء)</option>')}<input type="date" id="bkDate" title="تاريخ (اختياري)" style="padding:5px 8px;border-radius:9px;border:0"><button class="btn pri" id="bkApply">علّم</button></div>
           <span class="sep"></span><div class="grp"><span class="gl">الحالة:</span>${sel('bkStatus', Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${e(v[0])}</option>`).join(''), '— اختار —')}<button class="btn" id="bkStatusGo">غيّر</button></div>` : ''}
@@ -54,6 +54,7 @@
         NA.fillRequest(items[0].id, items.slice(1).map((x) => ({ id: x.id, name: x.name })), items.length, true);
       };
       const wq = $('#wafQueueBtn'); if (wq) wq.onclick = async () => { const items = itemsOf(ids()); if (!(await ensureExt())) return; toast(`بدأ طابور وافد: ${items.length} شخص. بعد ما تخلّص كل واحد دوس «الشخص التالي» في صفحة وافد.`, 'ok'); NA.wafidRequest(items[0].id, items.slice(1).map((x) => ({ id: x.id, name: x.name })), items.length, true); };
+      const ab = $('#appnoBtn'); if (ab) ab.onclick = () => NA.appno.start(ids(), { skipHave: true, onDone: () => load().catch(() => {}) });
       const lq = $('#labQueueBtn'); if (lq) lq.onclick = async () => { const items = itemsOf(ids()); if (!(await ensureExt())) return; toast(`بدأ طابور المعمل: ${items.length} شخص. بعد ما تخلّص كل واحد دوس «الشخص التالي» في صفحة المعمل.`, 'ok'); NA.labRequest(items[0].id, items.slice(1).map((x) => ({ id: x.id, name: x.name })), items.length, true); };
       const ba = $('#bkApply'); if (ba) {
         const syncState = () => { const booking = $('#bkStage').selectedOptions[0].dataset.b === '1'; [...$('#bkState').options].forEach((o) => { o.disabled = o.value === 'booked' && !booking; }); if ($('#bkState').selectedOptions[0].disabled) $('#bkState').value = 'done'; };

@@ -4,6 +4,7 @@ const FORM_URL = 'https://visa.mofa.gov.sa/SmartForm/TraditionalApp';
 const WAFID_URL = 'https://wafid.com/ar/book-appointment/';
 const LAB_URL = 'https://clab.mohp.gov.eg/booking';
 const VISAINFO_URL = 'https://visa.mofa.gov.sa/enjaz/getvisainformation/person';
+const APPNO_URL = 'https://visa.mofa.gov.sa/visaperson/getapplicantdata'; /* «البحث عن طلب مقدم» (رقم الطلب / إنجاز) */
 const VISADOC_URL = 'https://visa.mofa.gov.sa/Home/Index'; /* استعلام «مستند التأشيرة» (الخطوة 2) */
 const LOGIN_URL = 'https://visa.mofa.gov.sa/Account/Login/enjazcompany';
 const store = chrome.storage.session;
@@ -99,6 +100,37 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
         }
       }
       catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ. اعمل F5 فيها وجرّب تاني' }); }
+    } else if (msg.kind === 'open-appno') {
+      /* رقم الطلب (إنجاز): تبويب مخفي بيفتح «البحث عن طلب مقدم»، والكابتشا بتتكتب في صفحة النظام */
+      const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now(), stage: '' };
+      const o = await store.get('appnoTab'); if (o.appnoTab) { try { await chrome.tabs.remove(o.appnoTab); } catch (e) { /* اتقفل */ } }
+      const tab = await chrome.tabs.create({ url: APPNO_URL, active: false });
+      await store.set({ ['actx_' + tab.id]: ctx, appnoTab: tab.id });
+      reply({ ok: true });
+    } else if (msg.kind === 'appno-ctl') {
+      const o = await store.get('appnoTab'); const tid = o.appnoTab;
+      if (!tid) { reply({ ok: false, error: 'مفيش بحث شغّال: دوس «هات رقم إنجاز» تاني' }); return; }
+      try {
+        if (msg.op === 'cancel') { await chrome.tabs.remove(tid); await store.remove('appnoTab'); }
+        else if (msg.op === 'open') { await chrome.tabs.update(tid, { active: true }); const t = await chrome.tabs.get(tid); if (t.windowId) await chrome.windows.update(t.windowId, { focused: true }); }
+        else if (msg.op === 'refresh') await chrome.tabs.sendMessage(tid, { kind: 'ap-refresh' });
+        else if (msg.op === 'submit') { const cap = String(msg.captcha || '').trim(); if (!/^[A-Za-z0-9]{1,8}$/.test(cap)) { reply({ ok: false, error: 'اكتب رمز الصورة زي ما هو' }); return; } await chrome.tabs.sendMessage(tid, { kind: 'ap-submit', captcha: cap }); }
+        else { reply({ ok: false, error: 'أمر مش معروف' }); return; }
+        reply({ ok: true });
+      } catch (e) { await store.remove('appnoTab'); reply({ ok: false, error: 'تبويب المنصة اتقفل: دوس «هات رقم إنجاز» تاني' }); }
+    } else if (msg.kind === 'get-appno-ctx') {
+      const key = 'actx_' + (sender.tab && sender.tab.id); const o = await store.get(key); reply({ ctx: o[key] || null });
+    } else if (msg.kind === 'appno-stage') {
+      const key = 'actx_' + (sender.tab && sender.tab.id); const o = await store.get(key); if (o[key]) await store.set({ [key]: { ...o[key], stage: String(msg.stage || '') } }); reply({ ok: true });
+    } else if (msg.kind === 'appno-captcha' || msg.kind === 'appno-result') {
+      const key = 'actx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
+      const t = await findAppTab(ctx.originTabId);
+      if (!t) { reply({ ok: false, error: 'افتح صفحة نظام طلبات التأشيرات (visa.nisrelkhaleeg.com) في تبويب وجرّب تاني' }); return; }
+      try {
+        const isRes = msg.kind === 'appno-result';
+        await chrome.tabs.sendMessage(t.id, { kind: isRes ? 'va-appno-result' : 'va-appno-captcha', data: { ...(msg.data || {}), personId: ctx.personId } }); reply({ ok: true });
+        if (isRes) { await store.remove('appnoTab'); try { await chrome.tabs.remove(sender.tab.id); } catch (e) { /* اتقفل */ } }
+      } catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ. اعمل F5 فيها وجرّب تاني' }); }
     } else if (msg.kind === 'open-lab') {
       /* حجز المعمل (معامل الصحة العامة): تبويب جديد بنفس أسلوب وافد */
       const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now() };
@@ -184,4 +216,4 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
     if (next !== ctx.stage) await store.set({ [key]: { ...ctx, stage: next } });
   } catch (e) { /* مش مهم */ }
 });
-chrome.tabs.onRemoved.addListener((id) => { store.remove(['ctx_' + id, 'wctx_' + id, 'lctx_' + id, 'vctx_' + id]).catch(() => {}); });
+chrome.tabs.onRemoved.addListener((id) => { store.remove(['ctx_' + id, 'wctx_' + id, 'lctx_' + id, 'vctx_' + id, 'actx_' + id]).catch(() => {}); });

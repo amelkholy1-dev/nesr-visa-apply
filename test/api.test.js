@@ -202,11 +202,13 @@ const api = async (method, url, body, extra = {}) => {
   const loginAs = async (u) => { cookie = ''; const x = await api('POST', '/api/login', { username: u, password: PW }); assert.strictEqual(x.status, 200); return x.json.user; };
   let who = await loginAs('viewer1'); assert.strictEqual(who.role, 'viewer');
   assert.strictEqual((await api('GET', '/api/people')).status, 200); assert.strictEqual((await api('GET', '/api/stats/overview')).status, 200);
-  for (const [m, u, b] of [['POST', '/api/people', { data: { nameAr: 'x', passportNo: 'ZZ1' } }], ['PUT', `/api/people/${pp}/stages/lab`, { state: 'done' }], ['POST', '/api/people/bulk/status', { ids: [pp], status: 'ready' }], ['GET', `/api/people/${pp}/letter/suez`], ['GET', '/api/activity'], ['GET', '/api/users'], ['POST', '/api/profiles', { name: 'x', data: {} }], ['GET', '/api/export/tasaheel.xls?ids=1']]) assert.strictEqual((await api(m, u, b)).status, 403, 'المشاهد ممنوع: ' + m + ' ' + u);
+  for (const [m, u, b] of [['POST', '/api/people', { data: { nameAr: 'x', passportNo: 'ZZ1' } }], ['PUT', `/api/people/${pp}/stages/lab`, { state: 'done' }], ['POST', '/api/people/bulk/status', { ids: [pp], status: 'ready' }], ['GET', `/api/people/${pp}/letter/suez`], ['GET', `/api/people/${pp}/appno-lookup`], ['GET', '/api/activity'], ['GET', '/api/users'], ['POST', '/api/profiles', { name: 'x', data: {} }], ['GET', '/api/export/tasaheel.xls?ids=1']]) assert.strictEqual((await api(m, u, b)).status, 403, 'المشاهد ممنوع: ' + m + ' ' + u);
   await loginAs('mark1');
   assert.strictEqual((await api('POST', '/api/people/bulk/status', { ids: [pp], status: 'ready' })).status, 200, 'الصلاحية المخصّصة (تعليم) شغّالة');
   assert.strictEqual((await api('POST', '/api/people', { data: { nameAr: 'x', passportNo: 'ZZ2' } })).status, 403); assert.strictEqual((await api('GET', `/api/people/${pp}/letter/suez`)).status, 403);
   who = await loginAs('staff1'); assert.strictEqual(who.role, 'staff');
+  const al = await api('GET', `/api/people/${pp}/appno-lookup`); assert.strictEqual(al.status, 200, 'الموظف يقدر يجيب بيانات رقم إنجاز');
+  assert.strictEqual(al.json.passportNo, 'PP0000001'); assert.strictEqual(al.json.nationality, 'EGY'); assert.ok('visaType' in al.json && 'embassy' in al.json && 'appNumber' in al.json);
   assert.strictEqual((await api('GET', `/api/people/${pp}/letter/suez?check=1`)).status, 200); assert.strictEqual((await api('GET', '/api/activity')).status, 403); assert.strictEqual((await api('GET', '/api/users')).status, 403);
   cookie = adminCookie2;
   assert.strictEqual((await api('PUT', `/api/users/${um.json.users.find((u) => u.username === 'admin').id}`, { role: 'viewer' })).status, 400, 'المدير مينزّلش صلاحية نفسه');

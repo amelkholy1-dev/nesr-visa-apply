@@ -4,9 +4,9 @@
   const NA = (window.NA = window.NA || { pages: {} });
 
   /* نافذة بسيطة (modal) */
-  NA.modal = (html, onMount) => {
+  NA.modal = (html, onMount, opts) => {
     const bg = document.createElement('div'); bg.className = 'modal-bg'; bg.innerHTML = `<div class="modal">${html}</div>`; document.body.appendChild(bg);
-    const close = () => bg.remove(); bg.addEventListener('mousedown', (ev) => { if (ev.target === bg) close(); });
+    const close = () => bg.remove(); if (!(opts && opts.sticky)) bg.addEventListener('mousedown', (ev) => { if (ev.target === bg) close(); });
     if (onMount) onMount(bg.querySelector('.modal'), close); return close;
   };
 

@@ -139,6 +139,32 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     /* جدول المستند رجع فاضي: النظام بيعرض السبب (من غير أي تخمين لرقم تاني) */
     await page.evaluate(() => { window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_VISAINFO_CAPTCHA', data: { step: 2, only: true, image: '', error: true, empty: true, message: 'مستند التأشيرة رجع من غير بيانات (الجدول: «لا توجد بيانات!»).' } }, location.origin); });
     await page.waitForSelector('#capOpen'); assert.ok((await page.textContent('#visaCapBox')).includes('رجع من غير بيانات')); assert.strictEqual(await page.locator('#capPlus').count(), 0, 'مفيش تخمين +1');
+    /* «هات رقم إنجاز»: الإضافة هنا متحاكية برسايل: طلب ← كابتشا ← نتيجة. رقم طلب لجواز تاني مبيتسجّلش */
+    await page.goto(base + '#/people/' + id); await page.waitForSelector('#appNoFetch');
+    await page.evaluate(() => { window.__ap = []; window.addEventListener('message', (ev) => { if (ev.data && ev.data.source === 'nesr-visaapply' && /^VA_APPNO/.test(ev.data.type)) window.__ap.push(ev.data); }); window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_READY' }, location.origin); });
+    const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const apRound = async (n, result) => {
+      await page.waitForFunction((k) => window.__ap.filter((x) => x.type === 'VA_APPNO').length > k, n);
+      await page.evaluate((img) => window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_APPNO_CAPTCHA', data: { image: img } }, location.origin), PNG);
+      await page.waitForSelector('#apImg'); if (process.env.SHOT_DIR && !global.__shot) { global.__shot = 1; await page.screenshot({ path: process.env.SHOT_DIR + '/appno.png' }); } await page.fill('#apIn', 'a1B2'); await page.click('#apGo');
+      await page.waitForFunction(() => window.__ap.some((x) => x.type === 'VA_APPNO_CTL' && x.data.op === 'submit' && x.data.captcha === 'a1B2'));
+      await page.evaluate((d) => window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_APPNO_RESULT', data: d }, location.origin), result);
+      await page.waitForSelector('#apClose');
+    };
+    await page.click('#appNoFetch');
+    await page.waitForFunction(() => window.__ap.some((x) => x.type === 'VA_APPNO'));
+    const apReq = await page.evaluate(() => window.__ap.find((x) => x.type === 'VA_APPNO').data);
+    assert.deepStrictEqual([apReq.passportNo, apReq.visaType, apReq.embassy, apReq.nationality], ['A42014007', '38', '320', 'EGY'], 'بيانات رقم إنجاز من الشخص وملف الضبط');
+    await apRound(0, { appNumber: 'E100000009', passportNo: 'B0000000' });
+    assert.ok((await page.textContent('.modal')).includes('جواز تاني'), 'رقم لجواز تاني اتمنع'); await page.click('#apClose');
+    assert.strictEqual((await page.evaluate(async (pid) => (await (await fetch('/api/people/' + pid)).json()).person.appNumber, id)) || '', '', 'مفيش رقم اتسجّل');
+    await page.click('#appNoFetch'); await apRound(1, { appNumber: 'E100000009', passportNo: 'a42014007', issuedVisaNo: '1000000009' });
+    assert.ok((await page.textContent('.modal')).includes('E100000009') && (await page.textContent('.modal')).includes('اتسجّل'), 'الملخص بيعرض الرقم'); await page.click('#apClose');
+    await page.waitForFunction(() => document.body.textContent.includes('E100000009'));
+    assert.strictEqual(await page.evaluate(async (pid) => (await (await fetch('/api/people/' + pid)).json()).person.appNumber, id), 'E100000009', 'رقم إنجاز اتسجّل للشخص');
+    /* من القايمة: التحديد الجماعي (اللي عنده رقم بيتخطّى) */
+    await page.goto(base + '#/people'); await page.waitForSelector('#rows .sel'); await page.check('#rows .sel'); await page.click('#appnoBtn');
+    await page.waitForSelector('#apClose'); assert.ok((await page.textContent('.modal')).includes('عنده رقم طلب بالفعل'), 'اللي عنده رقم بيتخطّى في الجماعي'); await page.click('#apClose');
     await page.goto(base + '#/reports'); await page.waitForSelector('#rbody .card'); assert.ok((await page.textContent('#rbody')).includes('الوضع الحالي'));
     assert.ok((await page.getAttribute('#rx', 'href')).includes('/api/reports/export.csv'));
     await page.goto(base + '#/activity'); await page.waitForSelector('#arows tr'); assert.ok((await page.textContent('#arows')).includes('دخول'));
