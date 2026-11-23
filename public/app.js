@@ -593,12 +593,17 @@
   }
 
   async function pageProfiles() {
-    const r = await api('GET', '/profiles');
+    const [r, tpl] = await Promise.all([api('GET', '/profiles'), api('GET', '/settings/profile-template').catch(() => ({ auto: false }))]);
     view.innerHTML = `<h1>ملفات الضبط</h1><p class="muted">كل ملف = جهة عمل/دفعة: نوع التأشيرة والممثلية وبيانات الكفيل وقيم افتراضية (المؤهل، الديانة…). أي شخص بيتربط بملف، وممكن يغلب أي قيمة بقيمته.</p>
-      <div class="row" style="margin-bottom:12px"><button class="btn pri" id="newP">+ ملف جديد</button></div><div id="plist">${r.profiles.map((p) => `<div class="card"><div class="row"><b>${e(p.name)}</b>${p.isDefault ? '<span class="pill ok">الافتراضي</span>' : ''}<button class="btn small edit" data-id="${p.id}" style="margin-inline-start:auto">تعديل</button></div></div>`).join('') || '<p class="muted">لسه مفيش ملفات.</p>'}</div><div id="peditor"></div>`;
+      <div class="row" style="margin-bottom:12px"><button class="btn pri" id="newP">+ ملف جديد</button><label title="لما يكون شغّال: أي ملف جديد بيبدأ بالقيم الثابتة من الملف الافتراضي (نوع الجواز، الديانة، المؤهل، العناوين، الوصول…) من غير رقم التأشيرة والرقم الموحد واسم ورقم الجهة وتعليم الإقرارات"><input type="checkbox" id="tplAuto"${tpl.auto ? ' checked' : ''}> الملف الجديد يبدأ بقيم الملف الافتراضي (تلقائي)</label></div><div id="plist">${r.profiles.map((p) => `<div class="card"><div class="row"><b>${e(p.name)}</b>${p.isDefault ? '<span class="pill ok">الافتراضي</span>' : ''}<button class="btn small edit" data-id="${p.id}" style="margin-inline-start:auto">تعديل</button></div></div>`).join('') || '<p class="muted">لسه مفيش ملفات.</p>'}</div><div id="peditor"></div>`;
     const edit = (p) => {
-      const d = (p && p.data) || {};
-      $('#peditor').innerHTML = `<div class="card"><h2>${p ? 'تعديل: ' + e(p.name) : 'ملف جديد'}</h2><label class="f">اسم الملف<input id="pname" value="${e(p ? p.name : '')}"></label><br>
+      let d = (p && p.data) || {}; let fromTpl = '';
+      if (!p && $('#tplAuto') && $('#tplAuto').checked) {
+        /* الأرقام الخاصة بكل تأشيرة/جهة (واللي بتتجاب من البحث) وتعليم الإقرارات مبتتنسخش */
+        const def = r.profiles.find((x) => x.isDefault); const skip = ['visaNumber', 'unifiedNumber', 'sponsorName', 'sponsorNumber', 'autoDeclare'];
+        if (def) { d = Object.fromEntries(Object.entries(def.data || {}).filter(([k]) => !skip.includes(k))); fromTpl = def.name; } else toast('مفيش ملف افتراضي: علّم ملف كـ«الافتراضي» الأول', 'err');
+      }
+      $('#peditor').innerHTML = `<div class="card"><h2>${p ? 'تعديل: ' + e(p.name) : 'ملف جديد'}</h2>${fromTpl ? `<div class="pill ok" style="margin-bottom:8px">اتعبّى من الملف الافتراضي «${e(fromTpl)}»: راجع القيم وكمّل رقم التأشيرة والرقم الموحد</div>` : ''}<label class="f">اسم الملف<input id="pname" value="${e(p ? p.name : '')}"></label><br>
         ${meta.groups.map((g) => `<h2 style="margin-top:14px">${e(g.title)}</h2><div class="grid">${g.fields.map((f) => fieldHtml(f, d[f.k])).join('')}${g.id === 'lookup' ? '<div class="f" style="align-self:end"><button class="btn pri" id="visaLookup" title="بيدوّر في المنصة من الخلفية وبيعرضلك الكابتشا هنا تكتبها، وبعدها تختار المهنة هنا">بحث وجلب المهن</button></div>' : ''}</div>${g.id === 'lookup' ? '<div id="visaInfoBox"></div>' : ''}`).join('')}
         <div class="row" style="margin-top:14px"><button class="btn pri" id="psave">حفظ</button><label><input type="checkbox" id="pdef"${p && p.isDefault ? ' checked' : ''}> الافتراضي</label>${p ? '<button class="btn danger" id="pdel" style="margin-inline-start:auto">حذف</button>' : ''}</div></div>`;
       $('#peditor').scrollIntoView({ behavior: 'smooth' });
@@ -614,6 +619,7 @@
       if (p) $('#pdel').onclick = async () => { if (!confirm('تحذف الملف؟')) return; try { await api('DELETE', `/profiles/${p.id}`); pageProfiles(); } catch (er) { fail(er); } };
     };
     $('#newP').onclick = () => edit(null);
+    $('#tplAuto').onchange = async () => { try { await api('PUT', '/settings/profile-template', { auto: $('#tplAuto').checked }); toast($('#tplAuto').checked ? 'الملفات الجديدة هتبدأ بقيم الملف الافتراضي' : 'الملفات الجديدة هتبدأ فاضية', 'ok'); } catch (er) { $('#tplAuto').checked = !$('#tplAuto').checked; fail(er); } };
     view.onclick = (ev) => { const b = ev.target.closest('.edit'); if (b) edit(r.profiles.find((x) => String(x.id) === b.dataset.id)); };
   }
 

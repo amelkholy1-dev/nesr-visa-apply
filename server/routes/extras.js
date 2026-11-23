@@ -35,6 +35,19 @@ const toIso = (v) => String(v || '').replace(/\//g, '-');
 /* أعمدة ملف تساهيل الأصلي (Bio_Applicant_Details) بنفس الترتيب والأسماء */
 const TASAHEEL_HEAD = ['E.No', 'First Name*', 'Second Name', 'Last Name*', 'Passport Number*', 'Date of Birth* ', 'Nationality*', 'Date of Issue*', 'Gender*', 'Place of Issue*', 'Expiry Date*', 'Applicant Mobile No.*', 'Email ID*'];
 
+/* «ملف جديد يبدأ بالقيم الثابتة من الملف الافتراضي»: مفتاح تلقائي بيتفعّل من صفحة «ملفات الضبط» */
+router.get('/settings/profile-template', async (req, res) => {
+  try { const r = (await db.query("SELECT v FROM settings WHERE k = 'profileTemplate'"))[0]; res.json({ auto: !!(r && json(r.v).auto) }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.put('/settings/profile-template', admin, async (req, res) => {
+  try {
+    const auto = !!(req.body && req.body.auto);
+    await db.query("INSERT INTO settings (k, v) VALUES ('profileTemplate', ?) ON DUPLICATE KEY UPDATE v = VALUES(v)", [JSON.stringify({ auto })]);
+    audit.log(req, 'settings', null, '', 'ملف جديد من الافتراضي: ' + (auto ? 'شغّال' : 'مقفول'));
+    res.json({ ok: true, auto });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 /* الرابط القديم (نسخة الصفحة القديمة المخزّنة في المتصفح): بنوديه للجديد بنفس الاختيارات */
 router.get('/export/tasheel.xlsx', (req, res) => res.redirect(302, '/api/export/tasaheel.xls' + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '')));
 

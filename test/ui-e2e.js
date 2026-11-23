@@ -87,6 +87,14 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     assert.ok((await page.locator('#rows tr.click').count()) >= 1, 'فلتر المراحل');
     await page.selectOption('#sf', '');
     await page.goto(base + '#/settings'); await page.waitForSelector('#view .card, main .card'); assert.ok((await page.textContent('body')).includes('تساهيل'), 'صفحة الإعدادات بتشرح شكل ملف تساهيل');
+    /* ملف جديد من الملف الافتراضي: مقفول ← فاضي؛ مفعّل ← القيم الثابتة بتتنسخ من غير الأرقام الخاصة بالتأشيرة */
+    await page.goto(base + '#/profiles'); await page.waitForSelector('#tplAuto'); assert.strictEqual(await page.isChecked('#tplAuto'), false);
+    await page.click('#newP'); assert.strictEqual(await page.inputValue('[data-k=degree]'), '', 'مقفول: الملف الجديد فاضي');
+    await page.check('#tplAuto'); await page.waitForTimeout(500); await page.goto(base + '#/profiles'); await page.waitForSelector('#tplAuto'); assert.strictEqual(await page.isChecked('#tplAuto'), true, 'الاختيار اتحفظ');
+    await page.click('#newP');
+    assert.deepStrictEqual(await page.evaluate(() => ['degree', 'passportType', 'religion', 'homeAddress', 'entryPoint', 'expectedEntryDate', 'sponsorName', 'visaNumber', 'unifiedNumber', 'autoDeclare'].map((k) => document.querySelector('#peditor [data-k=' + k + ']').value)), ['دبلوم', '1', '1', 'جدة', '17', '2027-01-15', '', '', '', ''], 'القيم الثابتة اتنسخت والأرقام الخاصة لأ');
+    assert.ok((await page.textContent('#peditor')).includes('اتعبّى من الملف الافتراضي'));
+    await page.uncheck('#tplAuto'); await page.waitForTimeout(400);
     /* ملف الضبط: الرقمين تحت الاسم + نتيجة «التفويض على تأشيرة» بتتحط في الخانات من غير حفظ */
     await page.goto(base + '#/profiles'); await page.click('#newP'); await page.waitForSelector('#visaLookup');
     assert.strictEqual(await page.locator('#peditor [data-k=visaNumber]').count(), 1); assert.strictEqual(await page.locator('#peditor [data-k=unifiedNumber]').count(), 1);

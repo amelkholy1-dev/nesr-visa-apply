@@ -144,6 +144,9 @@ const api = async (method, url, body, extra = {}) => {
   const labp = await api('GET', `/api/people/${spid}/lab`); assert.strictEqual(labp.status, 200);
   assert.deepStrictEqual([labp.json.lab.natType, labp.json.lab.destination, labp.json.lab.passport, labp.json.lab.fullName, labp.json.lab.phone, labp.json.lab.netNumber], ['1', '2182', 'ST12345', 'ALI OMAR SAID', '+201000000000', 'E222222222'], 'بيانات حجز المعمل');
   assert.ok(labp.json.issues.some((x) => x.includes('الرقم القومي')), 'الرقم القومي ناقص بيتعلّم');
+  assert.strictEqual((await api('GET', '/api/settings/profile-template')).json.auto, false, 'الافتراضي مقفول');
+  assert.strictEqual((await api('PUT', '/api/settings/profile-template', { auto: true })).status, 200); assert.strictEqual((await api('GET', '/api/settings/profile-template')).json.auto, true);
+  assert.strictEqual((await api('PUT', '/api/settings/profile-template', { auto: false })).status, 200);
   const ps = await api('GET', '/api/settings/print'); assert.strictEqual(ps.status, 200); assert.ok(ps.json.dateFormat);
   assert.strictEqual((await api('PUT', '/api/settings/print', { company: 'شركة تجربة', dateFormat: 'YYYY-MM-DD' })).status, 200);
   assert.strictEqual((await api('GET', '/api/settings/print')).json.company, 'شركة تجربة');
