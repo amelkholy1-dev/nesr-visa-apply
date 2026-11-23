@@ -12,7 +12,7 @@ const mrz = require('../server/mrz');
 const PORT = 3198;
 const BIG = process.env.BIG_IMAGE;
 const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME: process.env.TEST_DB_NAME || 'va1', DB_USER: process.env.TEST_DB_USER || 'u', DB_PASSWORD: process.env.TEST_DB_PASSWORD || 'p',
-  AUTH_SECRET: 'ui-test-secret-ui-test-secret', ADMIN_USER: 'admin', ADMIN_PASSWORD: 'Admin#12345', VISA_DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'va-ui-')) };
+  AUTH_SECRET: 'ui-test-secret-ui-test-secret', PRINT_AGENT_KEY: 'ui-print-key-0123456789abcdef', ADMIN_USER: 'admin', ADMIN_PASSWORD: 'Admin#12345', VISA_DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'va-ui-')) };
 
 (async () => {
   const srv = spawn('node', [path.join(__dirname, '..', 'server', 'server.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -38,7 +38,7 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.goto(base + '#/profiles/new'); await page.waitForSelector('#pname'); assert.ok(await page.isVisible('.ptabs'), 'تبويبات الدفعة ظاهرة');
     assert.deepStrictEqual(await page.$$eval('.ptabs .tabb', (b) => b.map((x) => x.textContent.trim())), ['التأشيرة (إنجاز)', 'الفحص الطبي (وافد)', 'المعامل', 'الخطابات', 'افتراضيات الأشخاص', 'الحسابات'], 'كل تبويب لخدمة');
     await page.fill('#pname', 'دفعة اختبار');
-    for (const [k, v] of [['visaKind', '38'], ['embassy', '320'], ['nationality', 'EGY'], ['sponsorName', 'شركة اختبار'], ['degree', 'دبلوم'], ['degreeSource', 'مصر'], ['homeAddress', 'جدة'], ['email', 'hr@example.com'], ['religion', '1'], ['social', '2'], ['passportType', '1'], ['issueCountry', 'مصر'], ['jobText', 'سائق حافلة'], ['entryPoint', '17'], ['expectedEntryDate', '2027-01-15'], ['fee', '4500']]) await setK('#peditor', k, v);
+    for (const [k, v] of [['visaKind', '38'], ['embassy', '320'], ['nationality', 'EGY'], ['sponsorName', 'شركة اختبار'], ['degree', 'دبلوم'], ['degreeSource', 'مصر'], ['homeAddress', 'جدة'], ['email', 'hr@example.com'], ['religion', '1'], ['social', '2'], ['passportType', '1'], ['issueCountry', 'مصر'], ['jobText', 'سائق حافلة'], ['entryPoint', '17'], ['expectedEntryDate', '2027-01-15'], ['fee', '4500'], ['visaNumber', '1306311796']]) await setK('#peditor', k, v);
     await page.check('#pdef'); await page.click('#psave'); await page.waitForURL(/#\/profiles\/\d+/); await page.waitForTimeout(500);
 
     // شخص جديد + MRZ
@@ -168,6 +168,24 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     /* من القايمة: التحديد الجماعي (اللي عنده رقم بيتخطّى) */
     await page.goto(base + '#/people'); await page.waitForSelector('#rows .sel'); await page.check('#rows .sel'); await page.click('#appnoBtn');
     await page.waitForSelector('#apClose'); assert.ok((await page.textContent('.modal')).includes('عنده رقم طلب بالفعل'), 'اللي عنده رقم بيتخطّى في الجماعي'); await page.click('#apClose');
+    /* تجهيز الطباعة: برنامج طباعة متحاكي (نفس بروتوكول Masar Print Agent) بيسحب الأوامر ويطبعها */
+    const AKEY = 'ui-print-key-0123456789abcdef'; const gotJobs = [];
+    const agentFetch = (m, u, b) => fetch(`http://127.0.0.1:${PORT}${u}`, { method: m, headers: { 'Content-Type': 'application/json', 'X-Agent-Key': AKEY }, body: b ? JSON.stringify(b) : undefined }).then((r) => r.json());
+    await agentFetch('POST', '/api/passports/barcode/agents/register', { agentId: 'UIPC', agentName: 'جهاز اختبار', printers: [{ name: 'BIXOLON XD5', isDefault: true }], defaultPrinter: 'BIXOLON XD5', agentVersion: '25' });
+    await page.evaluate(() => fetch('/api/print/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ printAgentId: 'UIPC' }) }));
+    const agentTimer = global.__agentTimer = setInterval(async () => { try { const r = await agentFetch('GET', '/api/passports/barcode/agents/UIPC/jobs/next'); if (r.job) { gotJobs.push(r.job); await agentFetch('POST', `/api/passports/barcode/agents/UIPC/jobs/${r.job.jobId}/status`, { status: 'printed' }); } } catch (x) { /* مش مهم */ } }, 400);
+    await page.goto(base + '#/people'); await page.waitForSelector('#rows .act'); await page.click('#rows tr.click:first-child .act'); await page.click('.amenu-list button[data-a="prep"]'); await page.waitForSelector('#pkGo');
+    assert.ok((await page.textContent('.modal')).includes('E100000009') && (await page.textContent('.modal')).includes('1306311796'), 'رقم الطلب ورقم التأشيرة ظاهرين'); assert.strictEqual(await page.inputValue('.pkKind'), 'suez', 'الخطاب حسب الممثلية (السويس)');
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('#pkGo')]); assert.ok(/nomination-suez/.test(dl.suggestedFilename()), 'خطاب السويس نزل: ' + dl.suggestedFilename());
+    await page.waitForFunction(() => document.querySelectorAll('#pkLog .chip.ok').length >= 3, null, { timeout: 40000 });
+    assert.strictEqual(gotJobs.length, 2, 'ليبلين: رقم الطلب + التأشيرة'); assert.deepStrictEqual(gotJobs.map((j) => j.payload.code), ['E100000009', '1306311796']);
+    const nj = JSON.parse(gotJobs[0].payload.nativeLabelJson); const fn = Object.values(nj.functions).map((f) => Object.keys(f)[0]); assert.ok(fn.includes('draw1DBarcode') && fn.includes('drawBitmap') && fn[fn.length - 1] === 'printBuffer', 'أوامر BIXOLON: ' + fn.join(','));
+    assert.deepStrictEqual(Object.values(nj.functions).find((f) => f.draw1DBarcode).draw1DBarcode.slice(0, 7), ['E100000009', 32, 24, 1, 2, 5, 152], 'مكان وحجم الباركود زي نظام الجوازات (52×31 مم، 203 dpi)');
+    assert.deepStrictEqual([gotJobs[0].payload.label.widthMm, gotJobs[0].payload.label.heightMm, gotJobs[0].payload.version, gotJobs[0].printerName], [52, 31, 4, 'BIXOLON XD5']);
+    await page.click('#pkX'); clearInterval(agentTimer);
+    /* فلاتر الأشخاص */
+    await page.goto(base + '#/people'); await page.waitForSelector('#kf'); await page.selectOption('#kf', '38'); await page.waitForTimeout(300); assert.ok((await page.textContent('#rows')).includes('بدر خليل'), 'فلتر نوع التأشيرة'); await page.selectOption('#kf', '13'); await page.waitForTimeout(300); assert.ok(!(await page.textContent('#rows')).includes('بدر خليل'));
+    await page.click('#clrF'); await page.waitForTimeout(400); await page.selectOption('#anf', 'no'); await page.waitForTimeout(300); assert.ok(!(await page.textContent('#rows')).includes('بدر خليل'), 'فلتر «من غير رقم طلب»'); await page.selectOption('#ef', '320'); await page.selectOption('#anf', 'has'); await page.waitForTimeout(300); assert.ok((await page.textContent('#rows')).includes('بدر خليل'), 'فلتر الممثلية + عنده رقم'); await page.click('#clrF'); await page.waitForTimeout(400);
     /* قايمة «الإجراءات» في الصف: كل حاجة من غير ما تدخل على الشخص */
     await page.goto(base + '#/people'); await page.waitForSelector('#rows .act'); await page.click('#rows tr.click:first-child .act'); await page.waitForSelector('.amenu-list');
     const mt = await page.textContent('.amenu-list'); for (const t of ['عمل إنجاز', 'هات رقم إنجاز', 'احجز الفحص الطبي', 'احجز المعمل', 'خطاب الترشيح — السويس', 'خطاب الترشيح — القاهرة', 'علّم: تم الفحص الطبي', 'الحسابات والدفع']) assert.ok(mt.includes(t), 'في القايمة: ' + t);
@@ -209,5 +227,5 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     assert.deepStrictEqual(errs, [], 'مفيش أخطاء JS: ' + errs.join(' | '));
     console.log('UI E2E OK');
   } catch (e) { console.error('FAIL', e); await page.screenshot({ path: path.join(os.tmpdir(), 'va-ui-fail.png') }).catch(() => {}); process.exitCode = 1; }
-  finally { await browser.close(); srv.kill(); }
+  finally { clearInterval(global.__agentTimer); await browser.close(); srv.kill(); }
 })();

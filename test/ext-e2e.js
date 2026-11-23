@@ -105,6 +105,7 @@ const MOFA = {
       if (f.get('PassportNumber') === 'Z9999999') return page('لم يتم العثور على اي نتائج، يرجى التاكد من البيانات المدخلة');
       return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: appnoResultFixture.replace('PASSPORT_PLACEHOLDER', f.get('PassportNumber')) });
     }
+    if (/\/SmartForm\/PrintApplication\//i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h2>تم تقديم الطلب</h2><div>رقم الطلب: 830068985</div><div>رقم الجواز : A12345678</div></body>' });
     if (/\/Home\/PrintVisa/i.test(rq.url())) { global.__printUrl = rq.url(); return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: global.__printEmpty ? printEmptyFixture : visaPrintFixture }); }
     if (global.__inquiry === 'broken' && /\/Home\/Index/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h1>صفحة غريبة</h1></body>' });
     if (global.__inquiry && /\/Home\/Index/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: visaHomeFixture });
@@ -336,6 +337,11 @@ const MOFA = {
   const ap2 = await apOpen({ personId: '8', name: 'تجربة', passportNo: 'Z9999999', nationality: 'EGY', visaType: '38', embassy: '302' });
   await apSubmit('123456'); await app.waitForFunction(() => window.apres.length > 1, null, { timeout: 40000 });
   const apr2 = await app.evaluate(() => window.apres[1]); assert.ok(apr2.notFound === true && /لم يتم العثور/.test(apr2.message), 'مفيش طلب: ' + JSON.stringify(apr2));
+  /* سيناريو 16: بعد «حفظ» رقم الطلب بييجي من غير E ← الإضافة بتحط E وتبعته لوحدها بالمطابقة بالجواز (حتى لو الصفحة مش من زرار النظام) */
+  const gotBefore = await app.evaluate(() => window.got.length);
+  const sp = await ctx.newPage(); await sp.goto('https://visa.mofa.gov.sa/SmartForm/PrintApplication/830068985');
+  await app.waitForFunction((n) => window.got.length > n, gotBefore, { timeout: 30000 });
+  const gr = await app.evaluate(() => window.got[window.got.length - 1]); assert.strictEqual(gr.appNumber, 'E830068985', 'اتحط E: ' + JSON.stringify(gr)); assert.strictEqual(gr.passportNo, 'A12345678'); assert.strictEqual(gr.status, 'submitted');
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

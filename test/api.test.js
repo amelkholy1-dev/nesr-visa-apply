@@ -7,7 +7,7 @@ const fs = require('fs');
 
 Object.assign(process.env, {
   DB_HOST: process.env.TEST_DB_HOST || '127.0.0.1', DB_NAME: process.env.TEST_DB_NAME || 'va1', DB_USER: process.env.TEST_DB_USER || 'u', DB_PASSWORD: process.env.TEST_DB_PASSWORD || 'p',
-  AUTH_SECRET: 'test-secret-test-secret', ADMIN_USER: 'admin', ADMIN_PASSWORD: 'Admin#12345', PORT: '3199',
+  AUTH_SECRET: 'test-secret-test-secret', PRINT_AGENT_KEY: 'test-print-key-0123456789abcdef', ADMIN_USER: 'admin', ADMIN_PASSWORD: 'Admin#12345', PORT: '3199',
   VISA_DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'va-data-'))
 });
 const db = require('../server/db');
@@ -257,6 +257,40 @@ const api = async (method, url, body, extra = {}) => {
   assert.strictEqual((await api('POST', `/api/people/${ap2}/result`, { status: 'submitted', appNumber: 'E200000003', appDate: '2026/06/01' })).json.ignored, undefined); assert.strictEqual((await api('GET', `/api/people/${ap2}/appno-lookup`)).json.appDate, '2026-06-01');
   assert.strictEqual((await api('GET', `/api/people/${ap2}`)).json.person.appNumber, 'E200000003', 'الأحدث بيغلب');
 
+  /* رقم الطلب من غير E بيتخزّن بـ E، وبيتطابق بالجواز */
+  const nb = await api('POST', '/api/people', { data: { nameAr: 'شخص رقم بدون E', passportNo: 'NE0000001' } }); const nid = nb.json.id;
+  assert.strictEqual((await api('POST', `/api/people/${nid}/result`, { status: 'submitted', appNumber: '830068985' })).json.appNumber, 'E830068985'); assert.strictEqual((await api('GET', `/api/people/${nid}`)).json.person.appNumber, 'E830068985');
+  assert.strictEqual((await api('POST', `/api/people/${nid}/result`, { status: 'submitted', appNumber: 'e830068985' })).status, 200); assert.strictEqual((await api('GET', `/api/people/${nid}`)).json.person.stages.sent.history.length, 0, 'نفس الرقم بصيغتين مش «رقم سابق»');
+  assert.strictEqual((await api('POST', `/api/people/${nid}/result`, { status: 'submitted', appNumber: '12' })).status, 400);
+  const byp = await api('POST', '/api/people/result-by-passport', { passportNo: 'ne0000001', appNumber: '829944969' }); assert.deepStrictEqual([byp.status, byp.json.personId, byp.json.appNumber], [200, nid, 'E829944969']);
+  assert.strictEqual((await api('POST', '/api/people/result-by-passport', { passportNo: 'ZZ9999999', appNumber: '829944969' })).status, 404);
+  /* ===== الطباعة: بروتوكول Masar Print Agent (نفس مسارات نظام الجوازات) + تجهيز الطباعة ===== */
+  const KEY = 'test-print-key-0123456789abcdef'; const AG = '/api/passports/barcode';
+  const raw = (m, u, b, key) => fetch(base + u, { method: m, headers: { 'Content-Type': 'application/json', ...(key ? { 'X-Agent-Key': key } : {}) }, body: b ? JSON.stringify(b) : undefined }).then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) }));
+  assert.strictEqual((await raw('POST', AG + '/agents/register', { agentId: 'PC1' })).status, 403, 'من غير مفتاح مرفوض'); assert.strictEqual((await raw('POST', AG + '/agents/register', { agentId: 'PC1' }, 'wrong-key-wrong-key-xx')).status, 403);
+  const reg = await raw('POST', AG + '/agents/register', { agentId: 'PC1', agentName: 'جهاز المكتب', computerName: 'OFFICE', printers: [{ name: 'BIXOLON XD5-40d', isDefault: true }, 'PDF'], defaultPrinter: 'BIXOLON XD5-40d', agentVersion: '25', capabilities: ['barcode_label'] }, KEY);
+  assert.deepStrictEqual([reg.status, reg.json.success, reg.json.agentId], [200, true, 'PC1']);
+  assert.strictEqual((await raw('POST', `/print-agent/${KEY}/api/passports/barcode/agents/register`, { agentId: 'PC1', printers: [{ name: 'BIXOLON XD5-40d' }] })).status, 200, 'العنوان اللي فيه المفتاح (/print-agent/<المفتاح>/…) شغّال زي نظام الجوازات');
+  assert.strictEqual((await raw('GET', `/print-agent/wrongkeywrongkey12345/api/passports/barcode/print-agent/health`)).status, 403); assert.strictEqual((await raw('GET', AG + '/print-agent/health', null, KEY)).json.success, true); assert.strictEqual((await raw('GET', AG + '/print-server/health', null, KEY)).json.success, true);
+  assert.strictEqual((await raw('GET', AG + '/agents/PC1/jobs/next', null, KEY)).json.job, null, 'مفيش أوامر');
+  const pinfo = (await api('GET', '/api/print/info')).json; assert.ok(pinfo.configured && pinfo.agentUrl.endsWith('/print-agent/' + KEY) && pinfo.agents.some((a) => a.agentId === 'PC1' && a.isOnline) && pinfo.settings.labelWidthMm === 52 && pinfo.settings.barcodeNarrow === 2 && pinfo.settings.dpi === 203, 'بيانات الطباعة والإعدادات الافتراضية زي نظام الجوازات');
+  const lblPayload = { version: 4, type: 'passport_barcode_label', printMode: 'native-first', code: 'E830068985', nativeLabelJson: '{"id":1,"functions":{}}', label: { widthMm: 52, heightMm: 31, dpi: 203 }, settings: {}, passport: null };
+  assert.strictEqual((await api('POST', '/api/print/jobs', { payload: 'x' })).status, 400);
+  const j1 = await api('POST', '/api/print/jobs', { payload: lblPayload, copies: 2, label: 'باركود رقم الطلب', personId: nid }); assert.deepStrictEqual([j1.status, j1.json.ok, j1.json.printerName], [200, true, 'BIXOLON XD5-40d'], 'جهاز واحد متصل: بيتختار لوحده');
+  assert.strictEqual((await api('GET', `/api/print/jobs/${j1.json.jobId}`)).json.status, 'pending');
+  const nx = (await raw('GET', AG + '/agents/PC1/jobs/next', null, KEY)).json.job; assert.ok(nx && nx.jobId === j1.json.jobId && nx.copies === 2 && nx.printerName === 'BIXOLON XD5-40d' && nx.payload.code === 'E830068985' && nx.payload.type === 'passport_barcode_label' && nx.jobType === 'barcode_label', 'الأمر وصل للبرنامج بنفس الصيغة');
+  assert.strictEqual((await raw('GET', AG + '/agents/PC1/jobs/next', null, KEY)).json.job, null, 'الأمر بيتسحب مرة واحدة'); assert.strictEqual((await api('GET', `/api/print/jobs/${j1.json.jobId}`)).json.status, 'printing');
+  assert.strictEqual((await raw('POST', AG + `/agents/PC1/jobs/${nx.jobId}/status`, { status: 'weird' }, KEY)).status, 400); assert.strictEqual((await raw('POST', AG + `/agents/PC1/jobs/${nx.jobId}/status`, { status: 'printed' }, KEY)).json.success, true); assert.strictEqual((await api('GET', `/api/print/jobs/${j1.json.jobId}`)).json.status, 'printed');
+  const j2 = await api('POST', '/api/print/jobs', { payload: lblPayload }); const nx2 = (await raw('GET', AG + '/agents/PC1/jobs/next', null, KEY)).json.job; await raw('POST', AG + `/agents/PC1/jobs/${nx2.jobId}/status`, { status: 'failed', errorMessage: 'الطابعة مفصولة' }, KEY); const fj = (await api('GET', `/api/print/jobs/${j2.json.jobId}`)).json; assert.deepStrictEqual([fj.status, fj.error], ['failed', 'الطابعة مفصولة']);
+  assert.strictEqual((await api('PUT', '/api/print/settings', { printAgentId: 'NOPE', labelWidthMm: 60, barcodeNarrow: 9 })).json.settings.barcodeNarrow, 4, 'القيم بتتظبط في حدودها');
+  assert.strictEqual((await api('POST', '/api/print/jobs', { payload: lblPayload })).status, 400, 'جهاز مختار مش موجود'); await api('PUT', '/api/print/settings', { printAgentId: 'PC1', printAgentPrinterName: 'مش موجودة' }); assert.strictEqual((await api('POST', '/api/print/jobs', { payload: lblPayload })).status, 400, 'طابعة مش على الجهاز'); await api('PUT', '/api/print/settings', { printAgentId: 'PC1' });
+  /* تجهيز الطباعة: الناقص + نوع الخطاب حسب الممثلية */
+  const pbat = (await api('POST', '/api/profiles', { name: 'دفعة الطباعة', data: { visaNumber: '1306311796', embassy: '302', visaKind: '13', unifiedNumber: '7001185532', sponsorName: 'شركة', jobText: 'سائق', visaDate: '1448/02/30' } })).json.id;
+  const pk1 = (await api('POST', '/api/people', { profileId: pbat, data: { nameAr: 'شخص للطباعة', passportNo: 'PK0000001' } })).json.id;
+  let pk = (await api('GET', `/api/print/pack/${pk1}`)).json; assert.deepStrictEqual([pk.letterKind, pk.visaNumber, pk.appNumber], ['cairo', '1306311796', '']); assert.ok(pk.missing.some((x) => /رقم الطلب/.test(x)));
+  await api('POST', `/api/people/${pk1}/result`, { status: 'submitted', appNumber: '830068985' }); pk = (await api('GET', `/api/print/pack/${pk1}`)).json; assert.strictEqual(pk.appNumber, 'E830068985'); assert.ok(!pk.missing.some((x) => /رقم الطلب/.test(x)));
+  const bz = await fetch(base + `/api/people/letters-bundle?ids=${pk1}&kind=auto`, { headers: { Cookie: cookie } }); const bzb = Buffer.from(await bz.arrayBuffer()); assert.deepStrictEqual([bz.status, bz.headers.get('content-type'), bzb.slice(0, 2).toString()], [200, 'application/zip', 'PK'], 'خطابات مجمّعة zip');
+  who = await loginAs('viewer1'); assert.strictEqual((await api('POST', '/api/print/jobs', { payload: lblPayload })).status, 403); assert.strictEqual((await api('GET', `/api/print/pack/${pk1}`)).status, 403); assert.strictEqual((await api('GET', `/api/people/letters-bundle?ids=${pk1}`)).status, 403); cookie = adminCookie2;
   // حماية: طلب من مصدر تاني
   const csrf = await fetch(base + '/api/people', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'https://evil.example' }, body: '{}' });
   assert.strictEqual(csrf.status, 403);

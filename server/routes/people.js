@@ -22,7 +22,7 @@ const router = express.Router();
 const P = require('../perms');
 /* صلاحية كل مسار (أول قاعدة تنطبق) */
 const RULES = [
-  ['GET', /^\/\d+\/(payload|wafid|lab|appno-lookup|letter\/.*)$/, 'people.fill'], ['POST', /^\/\d+\/result$/, 'people.fill'],
+  ['GET', /^\/(\d+\/(payload|wafid|lab|appno-lookup|letter\/.*)|letters-bundle)$/, 'people.fill'], ['POST', /^\/(\d+\/result|result-by-passport)$/, 'people.fill'],
   ['PUT', /^\/\d+\/stages\//, 'people.mark'], ['POST', /^\/bulk\//, 'people.mark'],
   ['DELETE', /^\/\d+$/, 'people.delete'], ['GET', /./, 'people.view'], ['*', /./, 'people.edit']
 ];
@@ -44,7 +44,7 @@ const A = require('../accounts');
 function brief(row, profile, pays) {
   const r = F.resolve(json(row.data), profile && profile.data, { personalPhoto: row.personal_photo, personalPhotoSize: sizeOf(row.id, row.personal_photo), passportImage: row.passport_image });
   return { id: row.id, name: row.name_ar, passportNo: row.passport_no, status: row.status, profileId: row.profile_id, profileName: profile ? profile.name : '',
-    appNumber: row.app_number, hasPhoto: !!row.personal_photo, hasPassport: !!row.passport_image, issues: r.issues.length, ready: r.ready, updatedAt: row.updated_at, filledAt: row.filled_at,
+    appNumber: row.app_number, visaKind: r.values.visaKind || '', embassy: r.values.embassy || '', visaNumber: (profile && profile.data && profile.data.visaNumber) || '', hasPhoto: !!row.personal_photo, hasPassport: !!row.passport_image, issues: r.issues.length, ready: r.ready, updatedAt: row.updated_at, filledAt: row.filled_at,
     stages: S.parse(row.stages), service: readiness(row, profile),
     expiry: F.expiryInfo(json(row.data).expiryDate, json(row.data).expectedEntryDate || (profile && profile.data && profile.data.expectedEntryDate)), archived: !!(profile && profile.archived),
     ...(pays ? { pay: A.balance(A.feeOf(json(row.data), profile && profile.data).fee, pays.get(row.id) || 0) } : {}) };
@@ -55,7 +55,7 @@ router.get('/', async (req, res) => {
     const where = [], vals = [];
     if (req.query.status) { where.push('status = ?'); vals.push(String(req.query.status)); }
     if (req.query.profile) { where.push('profile_id = ?'); vals.push(parseInt(req.query.profile, 10)); }
-    if (req.query.q) { where.push('(name_ar LIKE ? OR passport_no LIKE ?)'); const q = `%${String(req.query.q).trim().replace(/[%_]/g, '')}%`; vals.push(q, q); }
+    if (req.query.q) { where.push('(name_ar LIKE ? OR passport_no LIKE ? OR app_number LIKE ?)'); const q = `%${String(req.query.q).trim().replace(/[%_]/g, '')}%`; vals.push(q, q, q); }
     /* الدفعات المؤرشفة مش بتظهر إلا لو طلبتها (archived=1 للمؤرشف بس، archived=all للكل) */
     if (req.query.archived === '1') where.push('profile_id IN (SELECT id FROM profiles WHERE archived = 1)');
     else if (req.query.archived !== 'all') where.push('(profile_id IS NULL OR profile_id NOT IN (SELECT id FROM profiles WHERE archived = 1))');
@@ -171,27 +171,39 @@ router.get('/:id(\\d+)/payload', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* رقم الطلب: المنصة ساعات بتعرضه من غير حرف E (829944969) وفي الطباعة بالـ E (E829944969): بنخزّنه دايماً بالـ E */
+const normApp = (v) => { const a = String(v || '').trim().toUpperCase().replace(/\s+/g, ''); return /^\d{6,12}$/.test(a) ? 'E' + a : a; };
+async function recordResult(req, id, b) {
+  const status = ['filled', 'submitted', 'ready', 'draft', 'waiting'].includes(b.status) ? b.status : null;
+  if (!status) return { code: 400, body: { error: 'حالة غير معروفة' } };
+  const app = b.appNumber ? normApp(b.appNumber) : null;
+  if (app && !/^[A-Z]\d{6,12}$/.test(app)) return { code: 400, body: { error: 'رقم الطلب شكله غلط' } };
+  const cur = (await db.query('SELECT name_ar, app_number, stages FROM people WHERE id = ?', [id]))[0];
+  if (!cur) return { code: 404, body: { error: 'الشخص مش موجود' } };
+  const stages = S.parse(cur.stages); let stagesChanged = false;
+  const appDate = String(b.appDate || '').replace(/\//g, '-').match(/^\d{4}-\d{2}-\d{2}$/) ? String(b.appDate).replace(/\//g, '-') : '';
+  /* «أحدث رقم طلب»: لو الرقم الجديد تاريخه أقدم من المسجّل، مبنغيّرش حاجة */
+  if (app && appDate && cur.app_number && cur.app_number !== app && stages.sent.appDate && appDate < stages.sent.appDate) return { code: 200, body: { ok: true, ignored: true, reason: 'الرقم المسجّل (' + cur.app_number + ') أحدث (' + stages.sent.appDate + ')' } };
+  if (app && appDate && stages.sent.appDate !== appDate) { stages.sent.appDate = appDate; stagesChanged = true; }
+  if (app && cur.app_number && cur.app_number !== app) { stages.sent.history.unshift({ app: cur.app_number, at: new Date().toISOString().slice(0, 10) }); stagesChanged = true; } /* إعادة إرسال برقم طلب جديد: القديم بيتحفظ */
+  if (status === 'submitted' && stages.sent.state !== 'done') { S.patch(stages, 'sent', { state: 'done' }); stagesChanged = true; }
+  await db.query(`UPDATE people SET status = ?, app_number = COALESCE(?, app_number), filled_at = IF(? IN ('filled','submitted'), NOW(), filled_at)${stagesChanged ? ', stages = ?' : ''} WHERE id = ?`, stagesChanged ? [status, app, status, JSON.stringify(stages), id] : [status, app, status, id]);
+  audit.log(req, status === 'filled' || status === 'submitted' ? status : 'status', id, cur.name_ar, app || status);
+  return { code: 200, body: { ok: true, appNumber: app || cur.app_number || '' } };
+}
 /* نتيجة الإضافة: filled (اتملى) أو submitted (اتبعت + رقم الطلب) */
 router.post('/:id(\\d+)/result', async (req, res) => {
+  try { const r = await recordResult(req, parseInt(req.params.id, 10), req.body || {}); res.status(r.code).json(r.body); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+/* الإضافة لقت رقم الطلب في صفحة المنصة من غير ما نعرف الشخص: بنطابقه برقم الجواز (لازم يتطابق مع شخص واحد بس) */
+router.post('/result-by-passport', async (req, res) => {
   try {
-    const b = req.body || {}; const id = parseInt(req.params.id, 10);
-    const status = ['filled', 'submitted', 'ready', 'draft', 'waiting'].includes(b.status) ? b.status : null;
-    if (!status) return res.status(400).json({ error: 'حالة غير معروفة' });
-    const app = b.appNumber ? String(b.appNumber).trim().toUpperCase() : null;
-    if (app && !/^[A-Z]\d{6,12}$/.test(app)) return res.status(400).json({ error: 'رقم الطلب شكله غلط' });
-    const cur = (await db.query('SELECT name_ar, app_number, stages FROM people WHERE id = ?', [id]))[0];
-    if (!cur) return res.status(404).json({ error: 'الشخص مش موجود' });
-    const stages = S.parse(cur.stages); let stagesChanged = false;
-    const appDate = String(b.appDate || '').replace(/\//g, '-').match(/^\d{4}-\d{2}-\d{2}$/) ? String(b.appDate).replace(/\//g, '-') : '';
-    /* «أحدث رقم طلب»: لو الرقم الجديد تاريخه أقدم من المسجّل، مبنغيّرش حاجة */
-    if (app && appDate && cur.app_number && cur.app_number !== app && stages.sent.appDate && appDate < stages.sent.appDate) return res.json({ ok: true, ignored: true, reason: 'الرقم المسجّل (' + cur.app_number + ') أحدث (' + stages.sent.appDate + ')' });
-    if (app && appDate && stages.sent.appDate !== appDate) { stages.sent.appDate = appDate; stagesChanged = true; }
-    if (app && cur.app_number && cur.app_number !== app) { stages.sent.history.unshift({ app: cur.app_number, at: new Date().toISOString().slice(0, 10) }); stagesChanged = true; } /* إعادة إرسال برقم طلب جديد: القديم بيتحفظ */
-    if (status === 'submitted' && stages.sent.state !== 'done') { S.patch(stages, 'sent', { state: 'done' }); stagesChanged = true; }
-    await db.query(`UPDATE people SET status = ?, app_number = COALESCE(?, app_number), filled_at = IF(? IN ('filled','submitted'), NOW(), filled_at)${stagesChanged ? ', stages = ?' : ''} WHERE id = ?`, stagesChanged ? [status, app, status, JSON.stringify(stages), id] : [status, app, status, id]);
-    const pn = cur;
-    audit.log(req, status === 'filled' || status === 'submitted' ? status : 'status', id, pn ? pn.name_ar : '', app || status);
-    res.json({ ok: true });
+    const b = req.body || {}; const pn = String(b.passportNo || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (pn.length < 5) return res.status(400).json({ error: 'رقم الجواز ناقص' });
+    const rows = await db.query('SELECT id FROM people WHERE passport_no = ? LIMIT 2', [pn]);
+    if (!rows.length) return res.status(404).json({ error: 'مفيش شخص بالجواز ده في النظام', notFound: true });
+    if (rows.length > 1) return res.status(409).json({ error: 'فيه أكتر من شخص بنفس رقم الجواز' });
+    const r = await recordResult(req, rows[0].id, { ...b, status: 'submitted' }); res.status(r.code).json({ ...r.body, personId: rows[0].id });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -205,6 +217,28 @@ router.get('/:id(\\d+)/appno-lookup', async (req, res) => {
     const st = S.parse(row.stages);
     res.json({ personId: row.id, name: row.name_ar, passportNo: m.PASSPORTnumber || '', nationality: m.NATIONALITY || 'EGY', visaType: m.VisaKind || '', visaTypeText: (F.OPT.visaKind.find((o) => String(o.v) === String(m.VisaKind)) || {}).t || '', embassy: m.EmbassyCode || '', appNumber: row.app_number || '', appDate: st.sent.appDate || '' });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* خطابات الترشيح لكذا شخص مرة واحدة (ملف zip فيه Word لكل واحد): kind = suez | cairo | auto (حسب الممثلية: القاهرة 302، غير كده السويس) */
+router.get('/letters-bundle', async (req, res) => {
+  try {
+    const ids = String(req.query.ids || '').split(',').map((x) => parseInt(x, 10)).filter(Boolean).slice(0, 200); if (!ids.length) return res.status(400).json({ error: 'اختار أشخاص الأول' });
+    const archiver = require('archiver'); const z = archiver('zip', { zlib: { level: 6 } }); const used = new Set();
+    res.setHeader('Content-Type', 'application/zip'); res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodeURIComponent('nomination-letters.zip'));
+    z.on('error', () => { try { res.destroy(); } catch (e) { /* مش مهم */ } }); z.pipe(res);
+    for (const id of ids) {
+      const row = (await db.query('SELECT * FROM people WHERE id = ?', [id]))[0]; if (!row) continue;
+      const profile = await loadProfile(row.profile_id); const v = F.resolve(json(row.data), profile && profile.data, {}).values;
+      const kind = ['suez', 'cairo'].includes(req.query.kind) ? req.query.kind : (String(v.embassy) === '302' ? 'cairo' : 'suez');
+      let photo = null; try { if (row.personal_photo) photo = fs.readFileSync(fullPath(row.id, row.personal_photo)); } catch (e) { photo = null; }
+      const buf = await letters.build(kind, letterVars(row, v), photo);
+      let name = `${kind === 'cairo' ? 'القاهرة' : 'السويس'}-${String(v.passportNo || row.id).toUpperCase()}`; while (used.has(name)) name += '-' + row.id; used.add(name);
+      z.append(buf, { name: name + '.docx' });
+      audit.log(req, 'fill', row.id, row.name_ar, 'خطاب ترشيح ' + letters.KINDS[kind].label + ' (مجمّع)');
+      try { await patchStage(row.id, 'letter', { state: 'done', note: letters.KINDS[kind].label }); } catch (e) { /* مش مهم */ }
+    }
+    z.finalize();
+  } catch (e) { if (!res.headersSent) res.status(500).json({ error: e.message }); else try { res.destroy(); } catch (x) { /* مش مهم */ } }
 });
 
 /* بيانات حجز الفحص الطبي في وافد */

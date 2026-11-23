@@ -37,6 +37,37 @@
         <div class="row" style="margin-top:12px"><button class="btn pri" id="pmSave">حفظ</button></div></div>
       <div class="card"><h2>جرّب على صورة</h2><div class="muted small" style="margin-bottom:8px">اختار صورة شخصية وشوف قبل وبعد المعالجة (من غير ما تتحفظ في أي مكان).</div>
         <input type="file" id="pmFile" accept="image/jpeg,image/png"><div id="pmOut" style="margin-top:12px"></div></div>`;
+
+    /* طباعة الباركود: برنامج Masar Print Agent (نفس برنامج نظام الجوازات) */
+    const box = document.createElement('div'); view.appendChild(box);
+    const drawPrint = async () => {
+      let inf; try { inf = await NA.print.info(); } catch (er) { box.innerHTML = `<div class="card issues">${e(er.message)}</div>`; return; }
+      const s = inf.settings; const ag = inf.agents; const cur = ag.find((x) => x.agentId === s.printAgentId) || ag.find((x) => x.isOnline) || ag[0];
+      const num = (k, l, step) => `<label class="f">${l}<input type="number" step="${step || 1}" data-ps="${k}" value="${e(s[k])}"></label>`;
+      box.innerHTML = `<div class="card"><h2>طباعة الباركود (برنامج Masar Print Agent)</h2>
+        <div class="muted small" style="margin-bottom:10px">نفس برنامج الطباعة بتاع نظام الجوازات (طابعة BIXOLON). النظام بيحط الليبل في طابور والبرنامج على جهاز الطابعة بيسحبه ويطبعه.</div>
+        ${inf.configured ? `<label class="f">عنوان السيستم (الصقه في خانة «عنوان السيستم» في برنامج الطباعة)<div class="row" style="flex-wrap:nowrap"><input id="agUrl" readonly dir="ltr" value="${e(inf.agentUrl)}" style="flex:1"><button class="btn" id="agCopy" type="button">نسخ</button></div></label>
+          <ol class="small muted" style="margin:8px 0 0"><li>افتح برنامج الطباعة على جهاز الطابعة.</li><li>الصق العنوان ده في «عنوان السيستم» واختار الطابعة ودوس «حفظ وتشغيل».</li><li>ارجع هنا ودوس «تحديث» وهتلاقي الجهاز «متصل».</li></ol>
+          <div class="muted small" style="margin-top:6px">ملاحظة: البرنامج بيسمع عنوان واحد بس. لو عايز نفس الجهاز يطبع من نظام الجوازات ومن النظام ده، ركّب نسخة تانية من البرنامج أو بدّل العنوان.</div>`
+          : `<div class="card issues">مفتاح الطباعة مش متظبط على السيرفر. ضيف في Environment variables: <b dir="ltr">PRINT_AGENT_KEY</b> بقيمة 16 حرف وأرقام عشوائية على الأقل (أي كلام صعب)، وأعد التشغيل. بعدها هيظهر هنا العنوان.</div>`}
+        <h3 style="margin:14px 0 6px">الأجهزة</h3><div class="tbl-wrap"><table><thead><tr><th>الجهاز</th><th>الحالة</th><th>الطابعات</th></tr></thead><tbody>${ag.map((x) => `<tr><td><b>${e(x.agentName || x.agentId)}</b><div class="small muted">${e(x.computerName)}</div></td><td><span class="chip ${x.isOnline ? 'ok' : 'bad'}">${x.isOnline ? 'متصل' : 'مش متصل'}</span></td><td class="small">${e((x.printers || []).map((p) => p.name).join('، '))}</td></tr>`).join('') || '<tr><td colspan="3" class="muted" style="text-align:center">مفيش أجهزة سجّلت لسه.</td></tr>'}</tbody></table></div>
+        <div class="row" style="margin:8px 0"><button class="btn small" id="agRef" type="button">تحديث</button></div>
+        <div class="grid"><label class="f">جهاز الطباعة<select data-ps="printAgentId"><option value="">— اختار —</option>${ag.map((x) => `<option value="${e(x.agentId)}"${x.agentId === s.printAgentId ? ' selected' : ''}>${e(x.agentName || x.agentId)}${x.isOnline ? '' : ' (مش متصل)'}</option>`).join('')}</select></label>
+          <label class="f">الطابعة<select data-ps="printAgentPrinterName"><option value="">الافتراضية</option>${((cur && cur.printers) || []).map((p) => `<option${p.name === s.printAgentPrinterName ? ' selected' : ''}>${e(p.name)}</option>`).join('')}</select></label>
+          ${num('labelWidthMm', 'عرض الليبل (مم)')}${num('labelHeightMm', 'ارتفاع الليبل (مم)')}${num('dpi', 'الدقة (dpi)')}${num('printCopies', 'عدد النسخ')}</div>
+        <details class="fold" style="margin-top:12px"><summary>ضبط مكان الباركود والنص</summary><div class="fb"><div class="grid">${num('barcodeXmm', 'الباركود: يمين/شمال (مم)', 0.5)}${num('barcodeYmm', 'الباركود: فوق/تحت (مم)', 0.5)}${num('barcodeHeightMm', 'ارتفاع الباركود (مم)', 0.5)}${num('barcodeNarrow', 'سمك الخط الرفيع')}${num('barcodeWide', 'سمك الخط العريض')}
+          ${num('textXmm', 'النص: يمين/شمال (مم)', 0.5)}${num('textYmm', 'النص: فوق/تحت (مم)', 0.5)}${num('textWidthMm', 'عرض النص (مم)', 0.5)}${num('textHeightMm', 'ارتفاع النص (مم)', 0.5)}${num('textFontSize', 'حجم الخط')}${num('density', 'الكثافة (1-30)')}${num('speed', 'السرعة (1-6)')}${num('gapDots', 'الفراغ بين الليبل')}
+          <label class="f">شكل الليبل<select data-ps="outputMode"><option value="barcode_text"${s.outputMode === 'barcode_text' ? ' selected' : ''}>باركود + النص</option><option value="barcode_only"${s.outputMode === 'barcode_only' ? ' selected' : ''}>باركود بس</option><option value="text_only"${s.outputMode === 'text_only' ? ' selected' : ''}>نص بس</option></select></label>
+          <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-ps="textBold"${s.textBold ? ' checked' : ''}> النص بخط تقيل</label></div></div></details>
+        <div class="row" style="margin-top:12px"><button class="btn pri" id="psSave" type="button">حفظ</button><button class="btn" id="psTest" type="button" title="بيطبع ليبل تجربة بالكود E817519542">طباعة تجربة</button><span id="psMsg" class="small"></span></div></div>`;
+      const collectPs = () => { const o = {}; box.querySelectorAll('[data-ps]').forEach((el) => { o[el.dataset.ps] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value; }); return o; };
+      const cp = box.querySelector('#agCopy'); if (cp) cp.onclick = async () => { const u = box.querySelector('#agUrl'); u.select(); try { await navigator.clipboard.writeText(u.value); toast('اتنسخ', 'ok'); } catch (x) { document.execCommand('copy'); toast('اتنسخ', 'ok'); } };
+      box.querySelector('#agRef').onclick = drawPrint;
+      box.querySelector('[data-ps=printAgentId]').onchange = () => { const cs = collectPs(); const a2 = ag.find((x) => x.agentId === cs.printAgentId); const sel = box.querySelector('[data-ps=printAgentPrinterName]'); sel.innerHTML = '<option value="">الافتراضية</option>' + ((a2 && a2.printers) || []).map((p) => `<option>${e(p.name)}</option>`).join(''); };
+      box.querySelector('#psSave').onclick = async () => { try { await api('PUT', '/print/settings', collectPs()); toast('اتحفظ', 'ok'); drawPrint(); } catch (er) { fail(er); } };
+      box.querySelector('#psTest').onclick = async () => { const m = box.querySelector('#psMsg'); try { const cs = collectPs(); await api('PUT', '/print/settings', cs); m.textContent = 'بيبعت ليبل تجربة…'; const r = await NA.print.sendLabel('E817519542', cs, { copies: 1, label: 'ليبل تجربة' }); const j = await NA.print.waitJob(r.jobId, 60000); m.textContent = j.status === 'printed' ? 'اتطبع ✔' : j.status === 'failed' ? 'فشلت: ' + (j.error || '') : 'لسه في الطابور (البرنامج مش بيسحب؟)'; } catch (er) { m.textContent = ''; fail(er); } };
+    };
+    drawPrint();
     $('#pmSave').onclick = async () => { try { const m = view.querySelector('input[name=pm]:checked').value; await api('PUT', '/settings/photo', { mode: m }); NA.meta.photoProcess = m; toast('اتحفظ', 'ok'); } catch (er) { fail(er); } };
     $('#pmFile').onchange = async () => {
       const f = $('#pmFile').files[0]; if (!f) return; const out = $('#pmOut'); out.textContent = 'بيعالج الصورة…';

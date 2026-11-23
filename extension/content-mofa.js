@@ -286,17 +286,30 @@
     await run();
   }
 
-  /* بعد «حفظ»: لو الصفحة مش الفورم، بندوّر على رقم الطلب (حرف + 9 أرقام تقريباً) ونرجّعه للنظام */
-  async function onAfterSave(ctx) {
+  /* بعد «حفظ»: بنقرا رقم الطلب من الصفحة (المنصة ساعات بتعرضه من غير E: بنحط E قدامه) وبنبعته للنظام لوحده */
+  const findApp = () => {
     const text = (document.body && document.body.innerText) || '';
-    const near = text.match(/رقم\s*الطلب\s*[:：]?\s*([A-Za-z]\d{6,12})/) || text.match(/\b([A-Z]\d{9})\b/);
-    if (near) {
-      const app = near[1].toUpperCase();
-      const r = await send({ kind: 'result', data: { status: 'submitted', appNumber: app } });
-      wireNext(bar('<span>✅ رقم الطلب <b dir="ltr">' + esc(app) + '</b> ' + (r && r.delivered ? 'اتبعت لنظام طلبات التأشيرات.' : 'اتحفظ وهيتبعت أول ما تفتح النظام.') + '</span>' + queueHtml(ctx), 'ok'));
+    const m = text.match(/(?:رقم\s*الطلب|Application\s*(?:No|Number))\s*[:：#]?\s*([A-Za-z]?\d{6,12})/i) || text.match(/\b([Ee]\d{9})\b/) || location.pathname.match(/PrintApplication\/([A-Za-z]?\d{6,12})/i);
+    if (!m) return { app: '', passport: '' };
+    let app = m[1].toUpperCase(); if (/^\d+$/.test(app)) app = 'E' + app;
+    const p = text.match(/(?:رقم\s*الجواز|Passport\s*(?:No|Number))\s*[:：#]?\s*([A-Za-z]{0,2}\d{6,9})/i);
+    return { app, passport: p ? p[1].toUpperCase() : '' };
+  };
+  async function onAfterSave(ctx) {
+    const { app, passport } = findApp();
+    if (app) {
+      const r = await send({ kind: 'result', data: { status: 'submitted', appNumber: app, passportNo: passport } });
+      wireNext(bar('<span>✅ رقم الطلب <b dir="ltr">' + esc(app) + '</b> ' + (r && r.delivered ? 'اتسجّل في النظام لوحده.' : 'اتحفظ وهيتسجّل أول ما تفتح النظام.') + '</span>' + queueHtml(ctx), 'ok'));
     } else {
       bar('<span>الصفحة دي مش فورم ومفيهاش رقم طلب واضح. لو الطلب اتبعت، انسخ رقم الطلب وسجّله في النظام بإيدك.</span>', 'warn');
     }
+  }
+  /* صفحة اتفتحت من غير زرار النظام (من غير ctx): لو فيها رقم طلب ورقم جواز بنسجّله بالمطابقة بالجواز، وغير كده بس بنعرضه */
+  async function onAfterSaveSolo() {
+    const { app, passport } = findApp(); if (!app) return;
+    if (!passport) return void bar('<span>رقم الطلب <b dir="ltr">' + esc(app) + '</b>: مقدرتش أعرف الجواز من الصفحة. سجّله في النظام بإيدك (أو من «هات رقم إنجاز»).</span>', 'warn');
+    const r = await send({ kind: 'result', data: { status: 'submitted', appNumber: app, passportNo: passport } });
+    bar('<span>✅ رقم الطلب <b dir="ltr">' + esc(app) + '</b> (جواز ' + esc(passport) + ') ' + (r && r.delivered ? 'اتبعت للنظام وبيتسجّل لوحده.' : 'اتحفظ وهيتسجّل أول ما تفتح النظام.') + '</span>', 'ok');
   }
 
   /* صفحات الدخول/الرئيسية: الإضافة بتوجّهك لصفحة دخول الشركات وبعد ما تدخل بتفتح الفورم لوحدها */
@@ -309,7 +322,7 @@
 
   (async function run() {
     const { ctx } = await send({ kind: 'get-ctx' });
-    if (!ctx || !ctx.mofa) return;
+    if (!ctx || !ctx.mofa) { if (/\/SmartForm\//i.test(location.pathname) && !/TraditionalApp/i.test(location.pathname)) await onAfterSaveSolo(); return; }
     if (document.getElementById('myform') && q('VisaKind')) return onForm(ctx);
     if (/\/SmartForm\//i.test(location.pathname) && !/TraditionalApp/i.test(location.pathname)) return onAfterSave(ctx);
     if (ctx.stage && ctx.stage !== 'form') return onLoginFlow(ctx);

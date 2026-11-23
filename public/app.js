@@ -40,6 +40,12 @@
   const ping = () => window.postMessage({ source: 'nesr-visaapply', type: 'VA_PING' }, location.origin);
   function setExt() { const p = $('#extState'); p.className = 'pill ' + (extReady ? 'ok' : 'warn'); p.textContent = extReady ? 'الإضافة شغّالة' : 'الإضافة مش متركّبة'; }
   async function onResult(d) {
+    if (!d.personId && d.passportNo && d.appNumber) {
+      /* الإضافة لقت رقم الطلب من غير ما تعرف الشخص: بنطابقه بالجواز */
+      try { const r = await api('POST', '/people/result-by-passport', { passportNo: d.passportNo, appNumber: d.appNumber }); toast('رقم الطلب ' + (r.appNumber || d.appNumber) + ' اتسجّل لصاحب الجواز ' + d.passportNo, 'ok'); if (/^#\/(people)?$/.test(location.hash) || location.hash === '#/people') render(); }
+      catch (er) { toast('رقم الطلب ' + d.appNumber + ': ' + er.message, 'err'); }
+      return;
+    }
     if (!d.personId) return;
     try {
       if (d.status === 'submitted' && d.appNumber) { await api('POST', `/people/${d.personId}/result`, { status: 'submitted', appNumber: d.appNumber }); toast('✅ رقم الطلب ' + d.appNumber + ' اتسجّل', 'ok'); }
@@ -384,7 +390,7 @@
           ${fieldsCard('بيانات حجز وافد', bothFields.filter((f) => tabOfK(f.k) === 'wafid'), 'بتتورّث من الدفعة. اكتب هنا بس لو الشخص ده مختلف.')}`,
         lab: () => `${svcHead('lab', 'المعامل (معامل الصحة العامة)', '<button class="btn pri" id="lab" title="يفتح موقع المعامل ويملا فورم الحجز">احجز المعمل</button>', 'رقم الموبايل والرقم القومي بتتكتب في تبويب «بيانات الشخص»، ورقم الطلب (إنجاز) في تبويب التأشيرة.')}
           ${fieldsCard('بيانات حجز المعمل', bothFields.filter((f) => tabOfK(f.k) === 'lab'), 'بتتورّث من الدفعة. اكتب هنا بس لو الشخص ده مختلف.')}`,
-        letters: () => `${svcHead('letters', 'الخطابات (خطاب الترشيح)', '<button class="btn pri" id="letSuez" title="يحمّل خطاب Word بنفس تنسيق نموذج المكتب">خطاب السويس</button><button class="btn pri" id="letCairo" title="يحمّل استمارة Word بنفس تنسيق نموذج المكتب">خطاب القاهرة</button>')}
+        letters: () => `${svcHead('letters', 'الخطابات (خطاب الترشيح)', '<button class="btn pri" id="prep" title="باركود رقم الطلب + باركود التأشيرة (برنامج الطباعة) + خطاب الترشيح">تجهيز الطباعة</button><button class="btn" id="letSuez" title="يحمّل خطاب Word بنفس تنسيق نموذج المكتب">خطاب السويس</button><button class="btn" id="letCairo" title="يحمّل استمارة Word بنفس تنسيق نموذج المكتب">خطاب القاهرة</button>')}
           ${summaryCard('بيانات الخطابات (من الدفعة)', ['visaNumber', 'unifiedNumber', 'sponsorName', 'jobText', 'visaDate', 'boxNumber', 'agencyNumber'])}`,
         accounts: () => `${fieldsCard('تكلفة الفرد', bothFields.filter((f) => tabOfK(f.k) === 'accounts'), 'لو سيبتها فاضية بتاخد تكلفة الدفعة.')}<div id="payBox"><div class="card muted">بيحمّل الحسابات…</div></div>`
       };
@@ -480,7 +486,7 @@
         const send = async () => { try { const r = await api('PUT', `/people/${id}/stages/${k}`, { state: row.querySelector('.stS').value, date: row.querySelector('.stD').value, note: row.querySelector('.stN').value }); person.stages = r.stages; row.querySelector('.stD').value = r.stages[k].date; toast('اتحفظت المرحلة', 'ok'); } catch (er) { fail(er); } };
         ['.stS', '.stD', '.stN'].forEach((c) => { row.querySelector(c).onchange = send; });
       });
-      const an = $('#appNoBtn'); if (an) an.onclick = async () => { const v = $('#appNo').value.trim().toUpperCase(); if (!/^[A-Z]\d{6,12}$/.test(v)) return toast('رقم الطلب شكله غلط (حرف + أرقام، زي E123456789)', 'err'); try { await api('POST', `/people/${id}/result`, { status: 'submitted', appNumber: v }); toast('اتسجّل رقم الطلب', 'ok'); pagePerson(id); } catch (er) { fail(er); } };
+      const an = $('#appNoBtn'); if (an) an.onclick = async () => { const v = $('#appNo').value.trim().toUpperCase(); if (!/^[A-Z]?\d{6,12}$/.test(v)) return toast('رقم الطلب شكله غلط (أرقام، أو E وبعدها أرقام، زي E123456789)', 'err'); try { await api('POST', `/people/${id}/result`, { status: 'submitted', appNumber: v }); toast('اتسجّل رقم الطلب', 'ok'); pagePerson(id); } catch (er) { fail(er); } };
       const af = $('#appNoFetch'); if (af) af.onclick = () => NA.appno.start([String(id)], { onDone: (n) => { if (n) pagePerson(id); } });
 
       $('#mrzBtn').onclick = async () => {
@@ -514,6 +520,7 @@
       };
       const wf = $('#wafid'); if (wf) wf.onclick = async () => { try { await save(); wafidRequest(id); } catch (er) { fail(er); } };
       const letter = async (kind) => { try { await save(); } catch (er) { return fail(er); } return letterDownload(id, kind); };
+      const pp = $('#prep'); if (pp) pp.onclick = async () => { try { await save(); } catch (er) { return fail(er); } NA.print.prepare([String(id)]); };
       const ls = $('#letSuez'); if (ls) ls.onclick = () => letter('suez'); const lc = $('#letCairo'); if (lc) lc.onclick = () => letter('cairo');
       const lb = $('#lab'); if (lb) lb.onclick = async () => { try { await save(); labRequest(id); } catch (er) { fail(er); } };
       const fl = $('#fill'); if (fl) fl.onclick = async () => { try { await save(); fillRequest(id); } catch (er) { fail(er); } };

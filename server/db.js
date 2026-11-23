@@ -71,6 +71,36 @@ const TABLES = [
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY ix_pay_person (person_id), KEY ix_pay_date (paid_at)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS print_agents (
+    agent_id VARCHAR(120) PRIMARY KEY,
+    name VARCHAR(160) NOT NULL DEFAULT '',
+    computer VARCHAR(160) NOT NULL DEFAULT '',
+    ip VARCHAR(80) NOT NULL DEFAULT '',
+    printers LONGTEXT NULL,
+    default_printer VARCHAR(200) NOT NULL DEFAULT '',
+    version VARCHAR(60) NOT NULL DEFAULT '',
+    capabilities LONGTEXT NULL,
+    last_seen DATETIME NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS print_jobs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    agent_id VARCHAR(120) NOT NULL,
+    printer_name VARCHAR(200) NOT NULL DEFAULT '',
+    job_type VARCHAR(40) NOT NULL DEFAULT 'barcode_label',
+    batch_id VARCHAR(120) NULL,
+    payload LONGTEXT NULL,
+    copies INT NOT NULL DEFAULT 1,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    error VARCHAR(1000) NOT NULL DEFAULT '',
+    person_id INT NULL,
+    label VARCHAR(120) NOT NULL DEFAULT '',
+    created_by INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    picked_at DATETIME NULL,
+    printed_at DATETIME NULL,
+    KEY ix_pj_agent (agent_id, status), KEY ix_pj_created (created_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
   `CREATE TABLE IF NOT EXISTS settings (
     k VARCHAR(60) PRIMARY KEY,
     v LONGTEXT NULL,

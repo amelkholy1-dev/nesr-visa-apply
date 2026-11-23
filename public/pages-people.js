@@ -18,11 +18,16 @@
         <input type="search" id="q" placeholder="بحث بالاسم أو رقم الجواز" value="${e(state.q || '')}">
         <select id="pf"><option value="">كل الدفعات (ملفات الضبط)</option>${profs.map((p) => `<option value="${p.id}"${String(state.pf) === String(p.id) ? ' selected' : ''}>${e(p.name)}${p.archived ? ' (مؤرشفة)' : ''}</option>`).join('')}</select>
         <select id="st" style="display:none"><option value="">كل الحالات</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${state.st === k ? ' selected' : ''}>${e(v[0])}</option>`).join('')}</select>
+        <select id="kf" title="نوع التأشيرة"><option value="">كل أنواع التأشيرات</option>${(meta.options.visaKind || []).map((o) => `<option value="${e(o.v)}"${String(state.kf) === String(o.v) ? ' selected' : ''}>${e(o.t)}</option>`).join('')}</select>
+        <select id="ef" title="الممثلية (السويس / القاهرة)"><option value="">كل الممثليات</option>${(meta.options.embassy || []).filter((o) => ['320', '302', '321'].includes(String(o.v))).map((o) => `<option value="${e(o.v)}"${String(state.ef) === String(o.v) ? ' selected' : ''}>${e(o.t)}</option>`).join('')}</select>
+        <select id="anf" title="رقم الطلب (إنجاز)"><option value="">رقم الطلب: الكل</option><option value="has"${state.anf === 'has' ? ' selected' : ''}>عنده رقم طلب</option><option value="no"${state.anf === 'no' ? ' selected' : ''}>من غير رقم طلب</option></select>
+        ${can('payments.view') ? `<select id="pyf" title="الدفع"><option value="">الدفع: الكل</option><option value="paid"${state.pyf === 'paid' ? ' selected' : ''}>خالص</option><option value="partial"${state.pyf === 'partial' ? ' selected' : ''}>دفع جزء</option><option value="unpaid"${state.pyf === 'unpaid' ? ' selected' : ''}>لسه ما دفعش</option><option value="due"${state.pyf === 'due' ? ' selected' : ''}>عليه متبقي</option></select>` : ''}
         <select id="sf"><option value="">كل المراحل</option>${stages.map((x) => `<option value="p:${x.k}"${state.sf === 'p:' + x.k ? ' selected' : ''}>لسه: ${e(x.label)}</option>${x.booking ? `<option value="b:${x.k}"${state.sf === 'b:' + x.k ? ' selected' : ''}>محجوز: ${e(x.label)}</option>` : ''}<option value="d:${x.k}"${state.sf === 'd:' + x.k ? ' selected' : ''}>تم: ${e(x.label)}</option>`).join('')}</select>
         <select id="svf"><option value="">كل الجاهزية</option>${SERVICES.map(([k, l]) => `<option value="${k}:ok"${state.svf === k + ':ok' ? ' selected' : ''}>جاهز: ${l}</option><option value="${k}:no"${state.svf === k + ':no' ? ' selected' : ''}>ناقص: ${l}</option>`).join('')}</select>
         <select id="sortBy"><option value="new"${state.sort === 'new' || !state.sort ? ' selected' : ''}>الأحدث</option><option value="old"${state.sort === 'old' ? ' selected' : ''}>الأقدم</option><option value="name"${state.sort === 'name' ? ' selected' : ''}>الاسم</option></select>
         <label style="display:flex;gap:6px;align-items:center;font-size:13.5px"><input type="checkbox" id="exOnly"${state.ex ? ' checked' : ''}> جوازات قريبة الانتهاء</label>
         <label style="display:flex;gap:6px;align-items:center;font-size:13.5px"><input type="checkbox" id="archOnly"${state.arch ? ' checked' : ''}> المؤرشفة بس</label>
+        <button class="btn small" id="clrF" type="button">مسح الفلاتر</button>
       </div><div class="fchips" id="stChips"></div></div>
       <div id="bulk"></div>
       <div class="card" style="padding:0"><div class="tbl-wrap"><table><thead><tr><th style="width:34px"><input type="checkbox" id="selAll" title="تحديد الكل"></th><th>الشخص</th><th>الدفعة</th><th>الحالة</th><th>الجاهزية (دوس على أي خدمة تشوف الناقص)</th><th>المراحل</th>${can('payments.view') ? '<th>الدفع</th>' : ''}<th></th></tr></thead>
@@ -36,7 +41,7 @@
     const bulkHtml = (n) => {
       const sel = (id, opts, ph) => `<select id="${id}" style="padding:6px 8px;border-radius:9px;border:0;max-width:170px">${ph ? `<option value="">${ph}</option>` : ''}${opts}</select>`;
       return `<div class="bulkbar"><span class="cnt">${n} محدّد</span><button class="btn small" id="clearSel">إلغاء التحديد</button><span class="sep"></span>
-        ${can('people.fill') ? `<div class="grp"><span class="gl">ابدأ طابور:</span><button class="btn pri" id="queueBtn">عمل إنجاز (${n})</button><button class="btn" id="wafQueueBtn">احجز وافد (${n})</button><button class="btn" id="labQueueBtn">احجز المعمل (${n})</button><button class="btn" id="appnoBtn" title="يجيب رقم الطلب (إنجاز) من المنصة لكل المحدّدين اللي لسه معندهمش رقم">هات أرقام إنجاز (${n})</button></div><span class="sep"></span>` : ''}
+        ${can('people.fill') ? `<div class="grp"><span class="gl">ابدأ طابور:</span><button class="btn pri" id="queueBtn">عمل إنجاز (${n})</button><button class="btn" id="wafQueueBtn">احجز وافد (${n})</button><button class="btn" id="labQueueBtn">احجز المعمل (${n})</button><button class="btn" id="prepBtn" title="باركود رقم الطلب + باركود التأشيرة + خطاب الترشيح لكل المحدّدين">تجهيز الطباعة (${n})</button><button class="btn" id="appnoBtn" title="يجيب رقم الطلب (إنجاز) من المنصة لكل المحدّدين اللي لسه معندهمش رقم">هات أرقام إنجاز (${n})</button></div><span class="sep"></span>` : ''}
         ${can('people.mark') ? `<div class="grp"><span class="gl">اعلّم:</span>${sel('bkStage', stages.map((x) => `<option value="${x.k}" data-b="${x.booking ? 1 : 0}">${e(x.label)}</option>`).join(''))}
           ${sel('bkState', '<option value="done">تم ✔</option><option value="booked">محجوز</option><option value="">لسه (إلغاء)</option>')}<input type="date" id="bkDate" title="تاريخ (اختياري)" style="padding:5px 8px;border-radius:9px;border:0"><button class="btn pri" id="bkApply">علّم</button></div>
           <span class="sep"></span><div class="grp"><span class="gl">الحالة:</span>${sel('bkStatus', Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${e(v[0])}</option>`).join(''), '— اختار —')}<button class="btn" id="bkStatusGo">غيّر</button></div>` : ''}
@@ -55,6 +60,7 @@
         NA.fillRequest(items[0].id, items.slice(1).map((x) => ({ id: x.id, name: x.name })), items.length, true);
       };
       const wq = $('#wafQueueBtn'); if (wq) wq.onclick = async () => { const items = itemsOf(ids()); if (!(await ensureExt())) return; toast(`بدأ طابور وافد: ${items.length} شخص. بعد ما تخلّص كل واحد دوس «الشخص التالي» في صفحة وافد.`, 'ok'); NA.wafidRequest(items[0].id, items.slice(1).map((x) => ({ id: x.id, name: x.name })), items.length, true); };
+      const pb = $('#prepBtn'); if (pb) pb.onclick = () => NA.print.prepare(ids());
       const ab = $('#appnoBtn'); if (ab) ab.onclick = () => NA.appno.start(ids(), { skipHave: true, onDone: () => load().catch(() => {}) });
       const lq = $('#labQueueBtn'); if (lq) lq.onclick = async () => { const items = itemsOf(ids()); if (!(await ensureExt())) return; toast(`بدأ طابور المعمل: ${items.length} شخص. بعد ما تخلّص كل واحد دوس «الشخص التالي» في صفحة المعمل.`, 'ok'); NA.labRequest(items[0].id, items.slice(1).map((x) => ({ id: x.id, name: x.name })), items.length, true); };
       const ba = $('#bkApply'); if (ba) {
@@ -84,7 +90,7 @@
       const items = [
         fill ? ['go', 'عمل إنجاز (ملء الطلب في المنصة)'] : null, fill ? ['appno', 'هات رقم إنجاز من المنصة'] : null,
         fill ? ['wafid', 'احجز الفحص الطبي (وافد)'] : null, fill ? ['lab', 'احجز المعمل'] : null,
-        fill ? ['hr'] : null, fill ? ['suez', 'خطاب الترشيح — السويس'] : null, fill ? ['cairo', 'خطاب الترشيح — القاهرة'] : null,
+        fill ? ['hr'] : null, fill ? ['prep', 'تجهيز الطباعة (باركودات + خطاب)'] : null, fill ? ['suez', 'خطاب الترشيح — السويس'] : null, fill ? ['cairo', 'خطاب الترشيح — القاهرة'] : null,
         mark ? ['hr'] : null, mark ? ['m:sent', 'علّم: اتبعت للمنصة'] : null, mark ? ['m:medical', 'علّم: تم الفحص الطبي'] : null, mark ? ['m:lab', 'علّم: تم المعمل'] : null, mark ? ['m:letter', 'علّم: اتطبع الخطاب'] : null,
         can('payments.view') ? ['hr'] : null, can('payments.view') ? ['pay', 'الحسابات والدفع'] : null,
         ['hr'], ['open', 'فتح الشخص']
@@ -100,6 +106,7 @@
           if (a === 'wafid') { if (!payGate(p)) return; return NA.wafidRequest(id); }
           if (a === 'lab') { if (!payGate(p)) return; return NA.labRequest(id); }
           if (a === 'suez' || a === 'cairo') return NA.letterDownload(id, a);
+          if (a === 'prep') return NA.print.prepare([id]);
           if (a === 'pay') return NA.payModal(id, p.name, () => load().catch(fail));
           if (a === 'open') { location.hash = '#/people/' + id; return; }
           if (a.startsWith('m:')) { await api('PUT', `/people/${id}/stages/${a.slice(2)}`, { state: 'done' }); toast('اتعلّمت', 'ok'); await load(); }
@@ -122,8 +129,12 @@
       return `<span class="fchip${!$('#st').value ? ' on' : ''}" data-st="">الكل<b>${all.length}</b></span>` + Object.entries(STATUS).map(([k, v]) => `<span class="fchip${$('#st').value === k ? ' on' : ''}" data-st="${k}">${e(v[0])}<b>${counts[k] || 0}</b></span>`).join('');
     };
     const apply = () => {
-      const st = { q: $('#q').value, st: $('#st').value, pf: $('#pf').value, ex: $('#exOnly').checked, arch: $('#archOnly').checked, sf: $('#sf').value, svf: $('#svf').value, sort: $('#sortBy').value }; try { sessionStorage.setItem('peopleFilter', JSON.stringify(st)); } catch (x) { /* مش مهم */ }
+      const st = { q: $('#q').value, st: $('#st').value, pf: $('#pf').value, ex: $('#exOnly').checked, arch: $('#archOnly').checked, kf: $('#kf').value, ef: $('#ef').value, anf: $('#anf').value, pyf: $('#pyf') ? $('#pyf').value : '', sf: $('#sf').value, svf: $('#svf').value, sort: $('#sortBy').value }; try { sessionStorage.setItem('peopleFilter', JSON.stringify(st)); } catch (x) { /* مش مهم */ }
       shown = all.filter((p) => (!st.st || p.status === st.st) && (!st.ex || (p.expiry && (p.expiry.short || p.expiry.expired))));
+      if (st.kf) shown = shown.filter((p) => String(p.visaKind) === String(st.kf));
+      if (st.ef) shown = shown.filter((p) => String(p.embassy) === String(st.ef));
+      if (st.anf) shown = shown.filter((p) => (st.anf === 'has') === !!p.appNumber);
+      if (st.pyf) shown = shown.filter((p) => { const s2 = p.pay && p.pay.state; return st.pyf === 'due' ? (s2 === 'unpaid' || s2 === 'partial') : s2 === st.pyf; });
       if (st.sf) { const [mode, key] = st.sf.split(':'); shown = shown.filter((p) => { const c = (p.stages || {})[key] || {}; return mode === 'p' ? !c.state : mode === 'b' ? c.state === 'booked' : c.state === 'done'; }); }
       if (st.svf) { const [k, m] = st.svf.split(':'); shown = shown.filter((p) => ((((p.service || {})[k]) || []).length === 0) === (m === 'ok')); }
       if (st.sort === 'old') shown = shown.slice().sort((a, b) => a.id - b.id); else if (st.sort === 'name') shown = shown.slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'ar')); else shown = shown.slice().sort((a, b) => b.id - a.id);
@@ -134,7 +145,8 @@
     };
     let qT; $('#q').oninput = () => { clearTimeout(qT); qT = setTimeout(() => load().catch(fail), 250); };
     $('#pf').onchange = () => load().catch(fail); $('#archOnly').onchange = () => load().catch(fail);
-    ['st', 'exOnly', 'sf', 'svf', 'sortBy'].forEach((i) => { $('#' + i).onchange = apply; });
+    ['st', 'exOnly', 'sf', 'svf', 'sortBy', 'kf', 'ef', 'anf', 'pyf'].forEach((i) => { if ($('#' + i)) $('#' + i).onchange = apply; });
+    $('#clrF').onclick = () => { view.querySelectorAll('.filters select').forEach((x) => { if (x.id !== 'sortBy') x.value = ''; }); view.querySelectorAll('.filters input[type=checkbox]').forEach((x) => { x.checked = false; }); $('#q').value = ''; load().catch(fail); };
     $('#stChips').onclick = (ev) => { const c = ev.target.closest('.fchip'); if (!c) return; $('#st').value = c.dataset.st; apply(); };
     $('#selAll').onchange = () => { view.querySelectorAll('.sel').forEach((c) => { c.checked = $('#selAll').checked; }); wireBulk(); };
     const tash = $('#tashBtn'); if (tash) tash.onclick = () => { const ids = selectedIds().length ? selectedIds() : shown.map((p) => p.id); if (!ids.length) return toast('مفيش أشخاص للتصدير', 'err'); window.location.href = `/api/export/tasaheel.xls?ids=${ids.slice(0, 1500).join(',')}`; toast('بينزّل ملف تساهيل (' + ids.length + ' شخص)', 'ok'); };

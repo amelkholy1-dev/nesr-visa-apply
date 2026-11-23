@@ -33,6 +33,11 @@ function zipApp() {
 
 function writeEnv() {
   const file = path.join(OUT, 'hostinger-env.txt');
+  if (fs.existsSync(file) && !/PRINT_AGENT_KEY=/.test(fs.readFileSync(file, 'utf8'))) {
+    /* مفتاح برنامج طباعة الباركود (جديد): بنضيفه على الملف القديم من غير ما نمس باقي المفاتيح */
+    fs.appendFileSync(file, '\n# مفتاح برنامج طباعة الباركود (Masar Print Agent) — ضيفه في Environment variables:\nPRINT_AGENT_KEY=' + crypto.randomBytes(24).toString('base64url') + '\n');
+    console.log('اتضاف PRINT_AGENT_KEY في hostinger-env.txt (ضيفه في Environment variables على الاستضافة)');
+  }
   if (fs.existsSync(file)) { console.log('hostinger-env.txt موجود من قبل — اتساب زي ما هو (المفاتيح اللي فيه ممكن تكون اتكتبت على الاستضافة)'); return; }
   const rnd = (n) => crypto.randomBytes(n).toString('base64url');
   fs.writeFileSync(file, [
@@ -45,6 +50,8 @@ function writeEnv() {
     'ADMIN_USER=admin',
     'ADMIN_PASSWORD=' + rnd(12),
     'TZ=Africa/Cairo',
+    '# مفتاح برنامج طباعة الباركود (Masar Print Agent):',
+    'PRINT_AGENT_KEY=' + rnd(24),
     '# اختياري (قراءة الجواز من الصورة تلقائي): GEMINI_API_KEY=<المفتاح>',
     ''
   ].join('\n'));

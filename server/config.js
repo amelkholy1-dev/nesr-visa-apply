@@ -19,6 +19,7 @@ module.exports = {
   authSecret,
   brand: env('BRAND_NAME', 'إنجاز'),
   brandTag: env('BRAND_TAG', 'نظام إدارة طلبات التأشيرات'),
+  printAgentKey: env('PRINT_AGENT_KEY'),   /* مفتاح برنامج طباعة الباركود (Masar Print Agent) — 16 حرف على الأقل */
   adminUser: env('ADMIN_USER', 'admin'),
   adminPassword: env('ADMIN_PASSWORD'),
   geminiKey: env('GEMINI_API_KEY'),
