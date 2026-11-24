@@ -51,9 +51,11 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now() };
       /* التبويب بيتفتح في الخلفية: إنت فاضل في النظام، والإضافة بتبعتلك صورة الكابتشا هناك وإنت اللي بتكتبها */
       const o = await store.get('visainfoTab'); if (o.visainfoTab) { try { await chrome.tabs.remove(o.visainfoTab); } catch (e) { /* اتقفل */ } }
-      const only = ctx.mode === 'doc'; /* «مستند التأشيرة فقط»: بنبدأ من الخطوة 2 على طول (كابتشا واحدة) */
-      const tab = await chrome.tabs.create({ url: only ? VISADOC_URL : VISAINFO_URL, active: false });
-      await store.set({ ['vctx_' + tab.id]: { ...ctx, inline: true, stage: '', phase: only ? 'inquiry' : 'enjaz', doc: true }, visainfoTab: tab.id });
+      /* زرار واحد: الأول «مستند التأشيرة» (نوع التأشيرة، عدد الدخول، مدة الإقامة، رقم المستند) وبعده «التفويض على تأشيرة» (الجهة والمهن) في نفس التبويب.
+         mode = doc ← المستند بس · info ← التفويض بس */
+      const infoOnly = ctx.mode === 'info'; const then = ctx.mode === 'doc' || infoOnly ? '' : 'enjaz';
+      const tab = await chrome.tabs.create({ url: infoOnly ? VISAINFO_URL : VISADOC_URL, active: false });
+      await store.set({ ['vctx_' + tab.id]: { ...ctx, inline: true, stage: '', phase: infoOnly ? 'enjaz' : 'inquiry', then }, visainfoTab: tab.id });
       reply({ ok: true });
     } else if (msg.kind === 'visainfo-ctl') {
       /* أوامر من صفحة النظام لتبويب المنصة: submit (الكابتشا اللي كتبتها) · refresh (صورة تانية) · open (افتح التبويب) · cancel */
@@ -63,10 +65,16 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
         if (msg.op === 'cancel') { await chrome.tabs.remove(tid); await store.remove('visainfoTab'); }
         else if (msg.op === 'open') { await chrome.tabs.update(tid, { active: true }); const t = await chrome.tabs.get(tid); if (t.windowId) await chrome.windows.update(t.windowId, { focused: true }); }
         else if (msg.op === 'refresh') await chrome.tabs.sendMessage(tid, { kind: 'vi-refresh' });
+        else if (msg.op === 'enjaz') { const k = 'vctx_' + tid; const o2 = await store.get(k); await store.set({ [k]: { ...(o2[k] || {}), phase: 'enjaz', stage: '', then: '' } }); await chrome.tabs.update(tid, { url: VISAINFO_URL }); }
         else if (msg.op === 'submit') { const cap = String(msg.captcha || '').trim(); if (!/^[A-Za-z0-9]{1,8}$/.test(cap)) { reply({ ok: false, error: 'اكتب رمز الصورة زي ما هو' }); return; } await chrome.tabs.sendMessage(tid, { kind: 'vi-submit', captcha: cap }); }
         else { reply({ ok: false, error: 'أمر مش معروف' }); return; }
         reply({ ok: true });
       } catch (e) { await store.remove('visainfoTab'); reply({ ok: false, error: 'تبويب المنصة اتقفل: دوس «بحث وجلب المهن» تاني' }); }
+    } else if (msg.kind === 'visainfo-next') {
+      /* بعد المستند (أو لو المستند ما جابش بيانات): نفس التبويب بيروح لـ «التفويض على تأشيرة» */
+      const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
+      if (ctx.then === 'enjaz' && sender.tab) { await store.set({ [key]: { ...ctx, phase: 'enjaz', stage: '', then: '', embassy: (msg.data && msg.data.embassy) || ctx.embassy || '' } }); await chrome.tabs.update(sender.tab.id, { url: VISAINFO_URL }); reply({ ok: true, next: true }); }
+      else reply({ ok: true, next: false });
     } else if (msg.kind === 'visainfo-captcha') {
       const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
       const t = await findAppTab(ctx.originTabId);
@@ -82,7 +90,14 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
       const t = await findAppTab(ctx.originTabId);
       if (!t) { reply({ ok: false, error: 'افتح صفحة نظام طلبات التأشيرات (visa.nisrelkhaleeg.com) في تبويب وجرّب تاني' }); return; }
-      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-visainfo-doc', data: msg.data }); reply({ ok: true }); if (ctx.inline && sender.tab) { await store.remove('visainfoTab'); try { await chrome.tabs.remove(sender.tab.id); } catch (e) { /* اتقفل */ } } }
+      try {
+        await chrome.tabs.sendMessage(t.id, { kind: 'va-visainfo-doc', data: { ...msg.data, next: ctx.then === 'enjaz' } }); reply({ ok: true, next: ctx.then === 'enjaz' });
+        if (ctx.inline && sender.tab) {
+          if (ctx.then === 'enjaz') { const emb = { 'السويس': '320', 'القاهرة': '302', 'الاسكندرية': '321', 'الإسكندرية': '321' }; const names = [...new Set(((msg.data && msg.data.rows) || []).map((r) => r.embassy).filter(Boolean))]; const code = names.length === 1 ? emb[names[0]] : '';
+            await store.set({ [key]: { ...ctx, phase: 'enjaz', stage: '', then: '', embassy: code || ctx.embassy || '' } }); await chrome.tabs.update(sender.tab.id, { url: VISAINFO_URL }); }
+          else { await store.remove('visainfoTab'); try { await chrome.tabs.remove(sender.tab.id); } catch (e) { /* اتقفل */ } }
+        }
+      }
       catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ. اعمل F5 فيها وجرّب تاني' }); }
     } else if (msg.kind === 'visainfo-stage') {
       const key = 'vctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); if (o[key]) await store.set({ [key]: { ...o[key], stage: String(msg.stage || '') } }); reply({ ok: true });
@@ -95,8 +110,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       try {
         await chrome.tabs.sendMessage(t.id, { kind: 'va-visainfo', data: msg.data }); reply({ ok: true });
         if (ctx.inline && sender.tab) {
-          if (ctx.doc && ctx.phase !== 'inquiry') { await store.set({ [key]: { ...ctx, phase: 'inquiry', stage: '' } }); await chrome.tabs.update(sender.tab.id, { url: VISADOC_URL }); } /* الخطوة 2 في نفس التبويب */
-          else { await store.remove('visainfoTab'); try { await chrome.tabs.remove(sender.tab.id); } catch (e) { /* اتقفل */ } }
+          await store.remove('visainfoTab'); try { await chrome.tabs.remove(sender.tab.id); } catch (e) { /* اتقفل */ } /* المستند اتجاب قبلها: خلصنا */
         }
       }
       catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ. اعمل F5 فيها وجرّب تاني' }); }

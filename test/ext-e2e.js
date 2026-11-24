@@ -234,89 +234,76 @@ const MOFA = {
   const nx3 = await app.evaluate(() => window.nexts[window.nexts.length - 1]);
   assert.deepStrictEqual([nx3.personId, nx3.target, nx3.queue.length, nx3.total], ['32', 'lab', 0, 2]);
   global.__inquiry = true;
-  /* سيناريو 10: «التفويض على تأشيرة» من ملف الضبط، من جوه النظام — التبويب بيتفتح في الخلفية، صورة الكابتشا بتتبعت للنظام، إنت بتكتبها (غلط ثم صح)، والنتيجة بترجع والتبويب بيتقفل */
-  const [vpage] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', embassy: '' })]); /* الممثلية فاضية ← الإضافة تختار السويس لوحدها */
-  await vpage.waitForTimeout(1500); await vpage.reload().catch(async () => { await vpage.waitForTimeout(2000); await vpage.reload(); }); /* Playwright مبيلقطش أول طلب لتبويب اتفتح في الخلفية (مشكلة في الاختبار بس، مش في Chrome): بنعمل إعادة تحميل عشان الصفحة التجريبية تتحمّل */
+  /* سيناريو 10: زرار واحد «جلب بيانات التأشيرة من المنصة»: الأول مستند التأشيرة (كابتشا غلط ثم صح) وبعده «التفويض على تأشيرة» في نفس التبويب (كابتشا غلط ثم صح)، والتبويب بيتقفل */
+  const openVi = async (data) => { const [p] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), data)]); await p.waitForTimeout(1500); await p.reload().catch(async () => { await p.waitForTimeout(2000); await p.reload(); }); return p; };
+  const viSubmit = (c) => app.evaluate((cap) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: cap } }, location.origin), c);
+  const vpage = await openVi({ name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', embassy: '' });
   await app.waitForFunction(() => window.caps.length > 0, null, { timeout: 40000 });
   const c1 = await app.evaluate(() => window.caps[0]);
-  assert.ok(String(c1.image).startsWith('data:image/png;base64,') && !c1.error, 'صورة الكابتشا وصلت للنظام');
-  const v10 = await vpage.evaluate(() => ({ visa: document.getElementById('VisaNumber').value, reg: document.getElementById('SponserID').value, emb: document.getElementById('Embassy').value, cap: document.getElementById('Captcha').value }));
-  assert.deepStrictEqual([v10.visa, v10.reg, v10.emb, v10.cap], ['1000000001', '7000000001', '320', ''], 'صفحة البحث اتملت والكابتشا فاضية: ' + JSON.stringify(v10));
-  /* صورة تانية */
+  assert.ok(String(c1.image).startsWith('data:image/png;base64,') && !c1.error && c1.step === 2 && !c1.only, 'أول خطوة: كابتشا مستند التأشيرة');
+  const h2 = await vpage.evaluate(() => ({ type: document.getElementById('SearchingType').value, no: document.getElementById('ApplicationNumber').value, sp: document.getElementById('SponserID').value, cap: document.getElementById('Captcha').value }));
+  assert.deepStrictEqual([h2.type, h2.no, h2.sp, h2.cap], ['2', '1000000001', '7000000001', ''], 'استعلام المستند اتملا برقم التأشيرة والكابتشا فاضية: ' + JSON.stringify(h2));
   await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'refresh' } }, location.origin));
   await app.waitForFunction(() => window.caps.length > 1, null, { timeout: 20000 });
   assert.notStrictEqual((await app.evaluate(() => window.caps[1])).image, c1.image, 'صورة كابتشا تانية');
-  /* كود غلط ← المنصة بترجّعنا لصفحة البحث ← النظام بياخد كابتشا جديدة بتنبيه */
-  const nc = await app.evaluate(() => window.caps.length);
-  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '000000' } }, location.origin));
-  await app.waitForFunction((n) => window.caps.length > n, nc, { timeout: 30000 });
-  assert.strictEqual((await app.evaluate(() => window.caps[window.caps.length - 1])).error, true, 'كود غلط ← تنبيه + كابتشا جديدة');
-  /* كود صح ← النتيجة ترجع والتبويب يتقفل */
-  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '123456' } }, location.origin));
-  await app.waitForFunction(() => window.visa.length > 0, null, { timeout: 40000 });
+  let nc = await app.evaluate(() => window.caps.length); await viSubmit('000000'); await app.waitForFunction((n) => window.caps.length > n, nc, { timeout: 30000 });
+  const e2 = await app.evaluate(() => window.caps[window.caps.length - 1]); assert.ok(e2.step === 2 && e2.error === true, 'كود غلط في المستند: ' + JSON.stringify(e2).slice(0, 120));
+  await viSubmit('123456'); await app.waitForFunction(() => window.docs.length > 0, null, { timeout: 40000 });
+  const doc = await app.evaluate(() => window.docs[0]);
+  assert.deepStrictEqual([doc.docNumber, doc.docDate, doc.sponsorName, doc.visaKindId, doc.next], ['1000000002', '1447/09/25', 'شركة تجربة للنقل', '13', true], JSON.stringify(doc));
+  assert.deepStrictEqual(doc.rows, [{ visaKind: 'عمل موسمي', embassy: 'السويس', gender: 'ذكر', nationality: 'مصر', job: 'سائق حافلة', entries: 'سفرة واحدة', residence: '90' }], 'صف مستند التأشيرة');
+  assert.ok(/t=2&n=1000000001&s=7000000001/.test(global.__printUrl), 'اتبعت للمنصة: ' + global.__printUrl);
+  /* الخطوة 2: نفس التبويب بيروح لـ «التفويض على تأشيرة» وجهة القدوم من المستند (السويس) */
+  await app.waitForFunction(() => window.caps.some((c) => c.step === 1 && c.image), null, { timeout: 40000 });
+  const v10 = await vpage.evaluate(() => ({ visa: document.getElementById('VisaNumber').value, reg: document.getElementById('SponserID').value, emb: document.getElementById('Embassy').value, cap: document.getElementById('Captcha').value }));
+  assert.deepStrictEqual([v10.visa, v10.reg, v10.emb, v10.cap], ['1000000001', '7000000001', '320', ''], 'صفحة التفويض اتملت والكابتشا فاضية: ' + JSON.stringify(v10));
+  nc = await app.evaluate(() => window.caps.length); await viSubmit('000000'); await app.waitForFunction((n) => window.caps.length > n, nc, { timeout: 30000 });
+  assert.ok((await app.evaluate(() => window.caps[window.caps.length - 1])).error === true, 'كود غلط ← تنبيه + كابتشا جديدة');
+  await viSubmit('123456'); await app.waitForFunction(() => window.visa.length > 0, null, { timeout: 40000 });
   assert.ok(/VisaNumber=1000000001/.test(global.__visaPost) && /SponserID=7000000001/.test(global.__visaPost) && /Embassy=320/.test(global.__visaPost) && /Captcha=123456/.test(global.__visaPost), 'اتبعت للمنصة: ' + global.__visaPost);
   const vi = await app.evaluate(() => window.visa[0]);
   assert.deepStrictEqual([vi.visaNumber, vi.visaDate, vi.sponsorName, vi.unifiedNumber, vi.embassyCode, vi.embassyName], ['1000000001', '1447/09/25', 'شركة تجربة للنقل', '7000000001', '320', 'السويس'], JSON.stringify(vi));
-  assert.deepStrictEqual(vi.delegations, [{ number: '20000001', embassy: 'السويس', count: '14', job: 'سائق حافلة', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }], 'التفاويض: السويس فيها بيانات فوقف عندها');
-  assert.strictEqual(vi.embassyCode, '320');
+  assert.deepStrictEqual(vi.delegations, [{ number: '20000001', embassy: 'السويس', count: '14', job: 'سائق حافلة', agencyNumber: '30000001', agencyName: 'وكالة تجربة' }], 'التفاويض: السويس');
   assert.deepStrictEqual(vi.jobs, [{ count: '8', job: 'سائق حافلة', nationality: 'مصر', embassy: 'السويس', remaining: '3' }], 'المهن: السويس');
-  /* الخطوة 2: نفس التبويب بيروح لاستعلام «مستند التأشيرة» ← كابتشا تانية في النظام (step 2) ← كود غلط ثم صح ← نتيجة المستند */
-  await app.waitForFunction(() => window.caps.some((c) => c.step === 2), null, { timeout: 40000 });
-  const h2 = await vpage.evaluate(() => ({ type: document.getElementById('SearchingType').value, no: document.getElementById('ApplicationNumber').value, sp: document.getElementById('SponserID').value, cap: document.getElementById('Captcha').value }));
-  assert.deepStrictEqual([h2.type, h2.no, h2.sp, h2.cap], ['2', '1000000001', '7000000001', ''], 'استعلام المستند اتملا برقم التأشيرة والكابتشا فاضية: ' + JSON.stringify(h2));
-  const nc2 = await app.evaluate(() => window.caps.length);
-  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '000000' } }, location.origin));
-  await app.waitForFunction((n) => window.caps.length > n, nc2, { timeout: 30000 });
-  const e2 = await app.evaluate(() => window.caps[window.caps.length - 1]); assert.ok(e2.step === 2 && e2.error === true, 'كود غلط في الخطوة 2: ' + JSON.stringify(e2).slice(0, 120));
-  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '123456' } }, location.origin));
-  await app.waitForFunction(() => window.docs.length > 0, null, { timeout: 40000 });
-  const doc = await app.evaluate(() => window.docs[0]);
-  assert.deepStrictEqual([doc.docNumber, doc.docDate, doc.sponsorName, doc.visaKindId], ['1000000002', '1447/09/25', 'شركة تجربة للنقل', '13'], JSON.stringify(doc));
-  assert.deepStrictEqual(doc.rows, [{ visaKind: 'عمل موسمي', embassy: 'السويس', gender: 'ذكر', nationality: 'مصر', job: 'سائق حافلة', entries: 'سفرة واحدة', residence: '90' }], 'صف مستند التأشيرة');
-  assert.ok(/t=2&n=1000000001&s=7000000001/.test(global.__printUrl), 'اتبعت للمنصة: ' + global.__printUrl);
-  await vpage.waitForEvent('close', { timeout: 15000 }).catch(() => {}); assert.ok(vpage.isClosed(), 'تبويب المنصة اتقفل لوحده');
-  /* سيناريو 14: البيانات في القاهرة مش السويس ← الإضافة تجرّب لوحدها وتغيّر جهة القدوم وتقف عند أول واحدة فيها بيانات */
-  global.__inquiry = true; global.__cairoOnly = true;
+  await vpage.waitForEvent('close', { timeout: 15000 }).catch(() => {}); assert.ok(vpage.isClosed(), 'تبويب المنصة اتقفل لوحده بعد الخطوتين');
+  /* سيناريو 14 (التفويض بس، mode=info): البيانات في القاهرة مش السويس ← الإضافة تجرّب لوحدها وتقف عند أول واحدة فيها بيانات */
+  global.__cairoOnly = true;
   const nVisa6 = await app.evaluate(() => window.visa.length); const nCaps6 = await app.evaluate(() => window.caps.length);
-  const [vp6] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', embassy: '' })]);
-  await vp6.waitForTimeout(1500); await vp6.reload().catch(async () => { await vp6.waitForTimeout(2000); await vp6.reload(); });
+  const vp6 = await openVi({ name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', embassy: '', mode: 'info' });
   await app.waitForFunction((n) => window.caps.length > n, nCaps6, { timeout: 40000 });
-  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '123456' } }, location.origin));
-  await app.waitForFunction((n) => window.visa.length > n, nVisa6, { timeout: 60000 });
+  assert.strictEqual((await app.evaluate(() => window.caps[window.caps.length - 1])).step, 1, 'mode=info بيبدأ بالتفويض');
+  await viSubmit('123456'); await app.waitForFunction((n) => window.visa.length > n, nVisa6, { timeout: 60000 });
   const v6 = await app.evaluate(() => window.visa[window.visa.length - 1]);
-  assert.deepStrictEqual([v6.embassyCode, v6.embassyName, v6.triedEmbassies], ['302', 'القاهرة', ['السويس', 'القاهرة']], 'جرّب السويس ثم القاهرة ولقى بيانات في القاهرة: ' + JSON.stringify([v6.embassyCode, v6.triedEmbassies]));
+  assert.deepStrictEqual([v6.embassyCode, v6.embassyName, v6.triedEmbassies], ['302', 'القاهرة', ['السويس', 'القاهرة']], 'جرّب السويس ثم القاهرة: ' + JSON.stringify([v6.embassyCode, v6.triedEmbassies]));
   assert.deepStrictEqual(v6.delegations.map((x) => x.embassy), ['القاهرة'], 'تفاويض القاهرة بس');
-  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'cancel' } }, location.origin));
   await vp6.waitForEvent('close', { timeout: 15000 }).catch(() => {}); global.__cairoOnly = false;
-  /* سيناريو 12: «مستند التأشيرة فقط» — بيبدأ من استعلام المستند على طول (كابتشا واحدة) وبيتقفل بعد النتيجة */
-  global.__inquiry = true; global.__printUrl = '';
+  /* سيناريو 12: «مستند التأشيرة بس» (mode=doc) — كابتشا واحدة والتبويب بيتقفل بعد النتيجة */
+  global.__printUrl = '';
   const nDocs = await app.evaluate(() => window.docs.length); const nCaps4 = await app.evaluate(() => window.caps.length);
-  const [vp4] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', mode: 'doc', embassy: '' })]);
-  await vp4.waitForTimeout(1500); await vp4.reload().catch(async () => { await vp4.waitForTimeout(2000); await vp4.reload(); });
+  const vp4 = await openVi({ name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', mode: 'doc', embassy: '' });
   await app.waitForFunction((n) => window.caps.length > n, nCaps4, { timeout: 40000 });
-  const c4 = await app.evaluate(() => window.caps[window.caps.length - 1]); assert.ok(c4.step === 2 && c4.only === true && String(c4.image).startsWith('data:image/png'), 'كابتشا مستند التأشيرة فقط');
-  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '123456' } }, location.origin));
-  await app.waitForFunction((n) => window.docs.length > n, nDocs, { timeout: 40000 });
-  assert.ok(/t=2&n=1000000001/.test(global.__printUrl), 'اتبعت للمنصة: ' + global.__printUrl);
+  const c4 = await app.evaluate(() => window.caps[window.caps.length - 1]); assert.ok(c4.step === 2 && c4.only === true && String(c4.image).startsWith('data:image/png'), 'كابتشا مستند التأشيرة بس');
+  await viSubmit('123456'); await app.waitForFunction((n) => window.docs.length > n, nDocs, { timeout: 40000 });
+  assert.strictEqual((await app.evaluate(() => window.docs[window.docs.length - 1])).next, false);
   await vp4.waitForEvent('close', { timeout: 15000 }).catch(() => {}); assert.ok(vp4.isClosed(), 'التبويب اتقفل بعد المستند');
-  /* سيناريو 13: مستند التأشيرة رجع من غير بيانات ← النظام بياخد السبب (نص الجدول) بدل ما يسكت */
-  global.__inquiry = true; global.__printEmpty = true;
+  /* سيناريو 13: المستند رجع من غير بيانات ← النظام بياخد السبب، وبيكمّل لوحده ببيانات التأشيرة والمهن */
+  global.__printEmpty = true;
   const nCaps5 = await app.evaluate(() => window.caps.length);
-  const [vp5] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', mode: 'doc', embassy: '' })]);
-  await vp5.waitForTimeout(1500); await vp5.reload().catch(async () => { await vp5.waitForTimeout(2000); await vp5.reload(); });
+  const vp5 = await openVi({ name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', embassy: '' });
   await app.waitForFunction((n) => window.caps.length > n, nCaps5, { timeout: 40000 });
-  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '123456' } }, location.origin));
-  await app.waitForFunction(() => window.caps.some((c) => c.empty === true && /لا توجد بيانات/.test(c.message || '')), null, { timeout: 40000 });
+  await viSubmit('123456');
+  await app.waitForFunction(() => window.caps.some((c) => c.empty === true && c.next === true && /لا توجد بيانات/.test(c.message || '')), null, { timeout: 40000 });
+  await app.waitForFunction((n) => window.caps.slice(n).some((c) => c.step === 1 && c.image), nCaps5, { timeout: 40000 });
+  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'cancel' } }, location.origin)); await vp5.waitForEvent('close', { timeout: 15000 }).catch(() => {});
   global.__printEmpty = false;
-  /* سيناريو 11: صفحة الاستعلام في المنصة مش زي المتوقع (تحويل/دخول…) ← النظام بيتقاله بدل ما يفضل مستني */
+  /* سيناريو 11: صفحة استعلام المستند مش زي المتوقع (تحويل/دخول…) ← النظام بيتقاله، والإضافة بتكمّل بالتفويض */
   global.__inquiry = 'broken';
   const nCaps3 = await app.evaluate(() => window.caps.length); const nVisa3 = await app.evaluate(() => window.visa.length);
-  const [vp3] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: d }, location.origin), { name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', embassy: '' })]);
-  await vp3.waitForTimeout(1500); await vp3.reload().catch(async () => { await vp3.waitForTimeout(2000); await vp3.reload(); });
-  await app.waitForFunction((n) => window.caps.length > n, nCaps3, { timeout: 40000 });
-  await app.evaluate(() => window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO_CTL', data: { op: 'submit', captcha: '123456' } }, location.origin));
-  await app.waitForFunction((n) => window.visa.length > n, nVisa3, { timeout: 40000 });
+  const vp3 = await openVi({ name: 'ملف تجربة', visaNumber: '1000000001', unifiedNumber: '7000000001', embassy: '' });
   await app.waitForFunction(() => window.caps.some((c) => c.step === 2 && c.image === '' && /Home\/Index/.test(c.message || '')), null, { timeout: 40000 });
+  await app.waitForFunction((n) => window.caps.slice(n).some((c) => c.step === 1 && c.image), nCaps3, { timeout: 40000 });
+  await viSubmit('123456'); await app.waitForFunction((n) => window.visa.length > n, nVisa3, { timeout: 40000 });
+  await vp3.waitForEvent('close', { timeout: 15000 }).catch(() => {}); global.__inquiry = true;
   /* سيناريو 15: «هات رقم إنجاز»: بيكتب بيانات الشخص، الكابتشا في النظام (غلط ثم صح)، ويقرا رقم الطلب ويقفل التبويب */
   const apOpen = async (payload) => {
     const n = await app.evaluate(() => window.apcaps.length);

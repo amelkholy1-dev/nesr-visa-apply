@@ -27,7 +27,7 @@
     }
     if (m.type === 'VA_VISAINFO' && m.data) {
       try {
-        chrome.runtime.sendMessage({ kind: 'open-visainfo', payload: { name: String(m.data.name || '').slice(0, 120), visaNumber: String(m.data.visaNumber || '').replace(/\D/g, '').slice(0, 20), unifiedNumber: String(m.data.unifiedNumber || '').replace(/\D/g, '').slice(0, 10), mode: m.data.mode === 'doc' ? 'doc' : '', embassy: String(m.data.embassy || '').replace(/\D/g, '').slice(0, 6) } }, (r) => {
+        chrome.runtime.sendMessage({ kind: 'open-visainfo', payload: { name: String(m.data.name || '').slice(0, 120), visaNumber: String(m.data.visaNumber || '').replace(/\D/g, '').slice(0, 20), unifiedNumber: String(m.data.unifiedNumber || '').replace(/\D/g, '').slice(0, 10), mode: ['doc', 'info'].includes(m.data.mode) ? m.data.mode : '', embassy: String(m.data.embassy || '').replace(/\D/g, '').slice(0, 6) } }, (r) => {
           if (chrome.runtime.lastError || !r || !r.ok) post('VA_ERROR', { message: 'الإضافة اتحدّثت أو اتقفلت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); else post('VA_ACK', {});
         });
       } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }

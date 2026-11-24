@@ -64,6 +64,7 @@
   function onVisaCaptcha(d) {
     clearTimeout(capTimer); if (!$('#visaCapBox')) return;
     const img = typeof d.image === 'string' && d.image.startsWith('data:image/png;base64,') ? d.image : '';
+    if (!img && d.next) { visaLogAdd(d.message || ''); capWait((d.message || 'مستند التأشيرة ما جابش بيانات') + ' — بنكمّل ببيانات التأشيرة والمهن…', 40000, 'الخطوة 2 (بيانات التأشيرة والمهن) ما ردّتش. افتح تبويب المنصة وشوف إيه اللي ظاهر.'); return; }
     if (!img) {
       visaLogAdd(d.message || 'مفيش صورة كابتشا');
       capCard(`<b>${e(d.message || 'مقدرتش أجيب صورة الكابتشا من المنصة.')}</b><details class="muted small" style="margin-top:6px"><summary>تفاصيل</summary>${(window.__visaLog || []).map((x) => `<div>${e(x)}</div>`).join('')}</details><div class="row" style="margin-top:8px"><button class="btn" id="capOpen">افتح تبويب المنصة واكتب الكابتشا هناك</button><button class="btn" id="capRetry">جرّب تاني</button></div>`);
@@ -72,7 +73,7 @@
     }
     const step = d.step === 2 ? 2 : 1;
     visaLogAdd(img ? 'وصلت صورة الكابتشا (' + (d.only ? 'مستند التأشيرة' : 'الخطوة ' + step) + ')' : (d.message || 'مفيش صورة كابتشا'));
-    capCard(`<b>${d.only ? 'مستند التأشيرة: ' : step === 2 ? 'الخطوة 2 من 2 (مستند التأشيرة): ' : 'الخطوة 1 من 2 (التفويض): '}اكتب رمز الصورة (الكابتشا) ودوس بحث</b>${d.error ? `<div class="pill bad" style="margin-inline-start:8px">${e(d.message || 'الكود غلط: اكتب الكود الجديد')}</div>` : ''}
+    capCard(`<b>${d.only ? 'مستند التأشيرة: ' : step === 2 ? 'الخطوة 1 من 2 (مستند التأشيرة): ' : 'الخطوة 2 من 2 (بيانات التأشيرة والمهن): '}اكتب رمز الصورة (الكابتشا) ودوس بحث</b>${d.error ? `<div class="pill bad" style="margin-inline-start:8px">${e(d.message || 'الكود غلط: اكتب الكود الجديد')}</div>` : ''}
       <div class="row" style="margin-top:8px;align-items:center"><img id="capImg" src="${img}" alt="الكابتشا" style="height:46px;border:1px solid var(--line);border-radius:6px;background:#fff"><button class="btn small" id="capRefresh" type="button">صورة تانية</button>
       <input id="capIn" maxlength="8" dir="ltr" autocomplete="off" inputmode="text" style="width:130px;padding:8px;font-size:20px;letter-spacing:3px"><button class="btn pri" id="capGo" type="button">بحث</button><button class="btn small" id="capCancel" type="button">${step === 2 ? 'تخطّي' : 'إلغاء'}</button></div><div class="muted small" id="capMsg" style="margin-top:4px"></div>`);
     const inp = $('#capIn'); inp.focus();
@@ -114,7 +115,7 @@
     const pk = $('#visaPick');
     if (pk) pk.onclick = () => { const c = box.querySelector('input[name=visaPickRow]:checked'); if (!c) return toast('اختار صف الأول', 'err'); const ok = apply(rows[Number(c.value)]); toast(ok.length ? 'اتحطّت: ' + ok.join('، ') + '. دوس حفظ بعد المراجعة' : 'ماحطّيتش حاجة', ok.length ? 'ok' : 'err'); };
     toast(rows.length > 1 ? 'اتجابت البيانات: اختار التفويض/المهنة وادوس موافق' : 'اتملّت بيانات التأشيرة في الملف: راجعها ودوس حفظ', 'ok');
-    capWait('الخطوة 2 من 2: بنفتح استعلام مستند التأشيرة…', 40000, 'الخطوة 2 (مستند التأشيرة) ما ردّتش. افتح تبويب المنصة وشوف إيه اللي ظاهر.'); /* الإضافة بتكمّل في نفس التبويب الخلفي */
+    { const cb = $('#visaCapBox'); if (cb) cb.innerHTML = ''; } /* المستند اتجاب قبلها: خلصنا */
   }
   /* الخطوة 2: «مستند تأشيرة»: نوع التأشيرة، عدد الدخول، مدة الإقامة، المهنة، جهة القدوم */
   function onVisaDoc(d) {
@@ -138,7 +139,8 @@
     const box = $('#visaDocBox');
     if (box) box.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8;margin-top:8px"><b>من مستند التأشيرة${d.docNumber ? ' رقم ' + e(d.docNumber) : ''}${d.docDate ? ' (' + e(d.docDate) + ')' : ''}</b>
       <ul class="list">${done.length ? `<li>اتملّى في الملف: ${e(done.join('، '))}</li>` : '<li>مفيش حاجة اتملّت</li>'}${skipped.length ? `<li>كمّلها بإيدك: ${e(skipped.join('، '))}</li>` : ''}</ul></div>`;
-    toast('اتملّت بيانات مستند التأشيرة في الملف: راجعها ودوس حفظ', 'ok');
+    toast(d.next ? 'اتملّت بيانات مستند التأشيرة. دلوقتي بنجيب بيانات التأشيرة والمهن…' : 'اتملّت بيانات مستند التأشيرة في الملف: راجعها ودوس حفظ', 'ok');
+    if (d.next) capWait('الخطوة 2 من 2: بنفتح «التفويض على تأشيرة» ونجيب الجهة والمهن…', 40000, 'الخطوة 2 (بيانات التأشيرة والمهن) ما ردّتش. افتح تبويب المنصة وشوف إيه اللي ظاهر.');
   }
   async function fillRequest(id, queue, total, quiet) {
     try {
@@ -630,7 +632,7 @@
   const PTABS = ['visa', 'wafid', 'lab', 'letters', 'personal', 'accounts'];
   const PTITLE = { visa: 'التأشيرة (إنجاز)', wafid: 'الفحص الطبي (وافد)', lab: 'المعامل', letters: 'الخطابات', personal: 'افتراضيات الأشخاص', accounts: 'الحسابات' };
   const secTitle = (g, tab) => (g.id === 'defaults' ? (tab === 'visa' ? 'المهنة' : 'قيم افتراضية لبيانات الأشخاص') : g.title);
-  const LOOKUP_HTML = '<div class="f" style="align-self:end"><button class="btn pri" id="visaLookup" type="button" title="بيدوّر في المنصة من الخلفية وبيعرضلك الكابتشا هنا تكتبها، وبعدها تختار المهنة هنا">بحث وجلب المهن</button><button class="btn" id="visaDocOnly" type="button" style="margin-inline-start:6px" title="بيجيب نوع التأشيرة وعدد الدخول والمهنة من مستند التأشيرة بس (كابتشا واحدة)">مستند التأشيرة فقط</button></div>';
+  const LOOKUP_HTML = '<div class="f" style="align-self:end"><button class="btn pri" id="visaLookup" type="button" title="بيجيب الأول مستند التأشيرة (نوع التأشيرة، عدد الدخول، مدة الإقامة، رقم المستند) وبعدها بيانات التأشيرة (الجهة والمهن). الكابتشا بتظهرلك هنا">جلب بيانات التأشيرة من المنصة</button></div>';
   function profileTabsHtml(d, opts) {
     const tOf = (k) => (meta.tabOf || {})[k] || 'personal';
     const panel = (tab) => meta.groups.map((g) => { const fs = g.fields.filter((f) => tOf(f.k) === tab); if (!fs.length) return '';
@@ -690,11 +692,10 @@
       if (!extReady) return toast('إضافة Chrome مش متركّبة. من «الإضافة» نزّلها وركّبها الأول.', 'err');
       visaReset(); visaLogAdd(mode === 'doc' ? 'بدأ جلب مستند التأشيرة' : 'بدأ البحث');
       const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_VISAINFO', data: { name: $('#pname').value, visaNumber: dd.visaNumber, unifiedNumber: dd.unifiedNumber, mode, embassy: dd.embassy } }, location.origin); setTimeout(() => res(false), 4000); });
-      if (ok) { visaLogAdd('الإضافة فتحت المنصة في الخلفية'); capWait(mode === 'doc' ? 'بنفتح استعلام مستند التأشيرة في الخلفية…' : 'بنفتح المنصة في الخلفية ونجيب الكابتشا…', 25000, 'مفيش كابتشا وصلت من المنصة خلال 25 ثانية. افتح تبويب المنصة وشوف إيه اللي ظاهر.'); }
+      if (ok) { visaLogAdd('الإضافة فتحت المنصة في الخلفية'); capWait('الخطوة 1 من 2: بنفتح استعلام مستند التأشيرة في الخلفية ونجيب الكابتشا…', 25000, 'مفيش كابتشا وصلت من المنصة خلال 25 ثانية. افتح تبويب المنصة وشوف إيه اللي ظاهر.'); }
       else toast('الإضافة ما ردّتش. اعمل F5 للصفحة وجرّب تاني.', 'err');
     };
     if ($('#visaLookup')) $('#visaLookup').onclick = () => startLookup('');
-    if ($('#visaDocOnly')) $('#visaDocOnly').onclick = () => startLookup('doc');
     $('#psave').onclick = async () => {
       try {
         const body = { name: $('#pname').value, data: collect(ed), isDefault: $('#pdef').checked };

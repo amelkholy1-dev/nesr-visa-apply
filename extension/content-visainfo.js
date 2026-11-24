@@ -41,7 +41,7 @@
     putInput(problems, 'ApplicationNumber', ctx.visaNumber, 'رقم المستند/التأشيرة'); putInput(problems, 'SponserID', ctx.unifiedNumber, 'الرقم الموحد (رقم السجل)');
     const failedBefore = ctx.stage === 'submitted'; if (failedBefore) await send({ kind: 'visainfo-stage', stage: '' });
     const shown = (document.querySelector('.field-validation-error, .validation-summary-errors, .alert-danger, #dlgMessageContent p') || {}).textContent;
-    bar('<div><b>🔎 ' + esc(ctx.name || 'ملف الضبط') + '</b> — الخطوة 2: استعلام مستند التأشيرة. اتكتبت الأرقام، والكابتشا بتظهرلك في <b>صفحة النظام</b>: اكتبها هناك ودوس «بحث».</div>' + (problems.length ? '<ul style="margin:4px 18px;padding:0">' + problems.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : ''));
+    bar('<div><b>🔎 ' + esc(ctx.name || 'ملف الضبط') + '</b> — مستند التأشيرة. اتكتبت الأرقام، والكابتشا بتظهرلك في <b>صفحة النظام</b>: اكتبها هناك ودوس «بحث».</div>' + (problems.length ? '<ul style="margin:4px 18px;padding:0">' + problems.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : ''));
     const image = await captchaImage();
     await send({ kind: 'visainfo-captcha', data: { step: 2, only: ctx.mode === 'doc', image, error: failedBefore, problems, message: failedBefore ? (norm(shown) || 'الكود غلط أو الرقم مش مقبول: اكتب الكود الجديد، أو دوس «تخطّي» لو الرقم مش رقم مستند') : '' } });
   }
@@ -163,7 +163,8 @@
       const gridTxt = cut((document.querySelector('#gridDocumentVisaList tr.jtable-no-data-row') || document.querySelector('#gridDocumentVisaList') || {}).textContent, 80);
       const msg = 'مستند التأشيرة رقم «' + ((info.docNumber) || 'مش ظاهر في الصفحة') + '» (اللي بحثنا عنه: ' + (ctx.visaNumber || '') + ') رجع من غير بيانات' + (gridTxt ? ' (الجدول: «' + gridTxt + '»)' : ' (الجدول ما اتحمّلش)') + (dlg ? ' — المنصة قالت: ' + dlg : '') + '.';
       bar('<div>⚠️ ' + esc(msg) + '</div>');
-      await send({ kind: 'visainfo-captcha', data: { step: 2, only: ctx.mode === 'doc', image: '', error: true, empty: true, message: msg } });
+      await send({ kind: 'visainfo-captcha', data: { step: 2, only: ctx.mode === 'doc', image: '', error: true, empty: true, message: msg, next: ctx.then === 'enjaz' } });
+      if (ctx.then === 'enjaz') { await sleep(1500); await send({ kind: 'visainfo-next' }); } /* بنكمّل ببيانات التأشيرة والمهن برضه */
       return;
     }
     const r = await send({ kind: 'visainfo-doc', data: info });
@@ -180,7 +181,7 @@
     const tell = (message) => send({ kind: 'visainfo-captcha', data: { step, only: ctx.mode === 'doc', image: '', error: true, message } });
     try {
       const want = phase === 'enjaz' ? () => isEnjazSearch() || isEnjazResult() : () => isHomeSearch() || isDocResult();
-      if (!(await waitFor(want, 12000))) { await status('الصفحة مش اللي متوقعينها'); await tell('صفحة المنصة مش زي المتوقع (' + location.pathname + '). افتح تبويب المنصة وشوف إيه اللي ظاهر.'); return; }
+      if (!(await waitFor(want, 12000))) { await status('الصفحة مش اللي متوقعينها'); await tell('صفحة المنصة مش زي المتوقع (' + location.pathname + '). افتح تبويب المنصة وشوف إيه اللي ظاهر.'); if (phase === 'inquiry' && ctx.then === 'enjaz') { await sleep(1500); await send({ kind: 'visainfo-next' }); } return; }
       await status('الصفحة ظاهرة زي المتوقع');
       if (phase === 'enjaz') { if (isEnjazSearch()) await runSearch(ctx); else await runResult(); }
       else if (isHomeSearch()) await runHomeSearch(ctx); else await runDoc(ctx);
