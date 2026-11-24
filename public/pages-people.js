@@ -91,8 +91,8 @@
       const fill = can('people.fill'), mark = can('people.mark');
       const items = [
         fill ? ['go', 'عمل إنجاز (ملء الطلب في المنصة)'] : null, fill ? ['appno', 'هات رقم إنجاز من المنصة'] : null, fill ? ['net', 'طباعة ورقة النت'] : null,
-        fill ? ['wafid', 'احجز الفحص الطبي (وافد)'] : null, fill ? ['lab', 'احجز المعمل'] : null,
-        fill ? ['hr'] : null, fill ? ['prep', 'تجهيز الطباعة (باركودات + خطاب)'] : null, fill ? ['bcApp', 'اطبع باركود رقم الطلب بس'] : null, fill ? ['bcVisa', 'اطبع باركود التأشيرة بس'] : null, fill ? ['suez', 'خطاب الترشيح — السويس'] : null, fill ? ['cairo', 'خطاب الترشيح — القاهرة'] : null,
+        fill ? ['wafid', 'احجز الفحص الطبي (وافد)'] : null, fill ? ['wres', 'نتيجة الكشف الطبي (وافد) — طباعة + PDF'] : null, fill ? ['lab', 'احجز المعمل'] : null,
+        fill ? ['hr'] : null, fill ? ['prep', 'تجهيز الطباعة (باركودات + خطاب)'] : null, fill ? ['bcApp', 'اطبع باركود رقم الطلب بس'] : null, fill ? ['bcVisa', 'اطبع باركود التأشيرة بس'] : null, fill ? ['suez', 'اطبع خطاب الترشيح — السويس'] : null, fill ? ['cairo', 'اطبع خطاب الترشيح — القاهرة'] : null,
         mark ? ['hr'] : null, mark ? ['m:sent', 'علّم: اتبعت للمنصة'] : null, mark ? ['m:medical', 'علّم: تم الفحص الطبي'] : null, mark ? ['m:lab', 'علّم: تم المعمل'] : null, mark ? ['m:letter', 'علّم: اتطبع الخطاب'] : null,
         can('payments.view') ? ['hr'] : null, can('payments.view') ? ['pay', 'الحسابات والدفع'] : null,
         ['hr'], ['open', 'فتح الشخص']
@@ -109,7 +109,8 @@
           if (a === 'appno') return NA.appno.start([String(id)], { onDone: (n) => { if (n) load().catch(fail); } });
           if (a === 'wafid') { if (!payGate(p)) return; return NA.wafidRequest(id); }
           if (a === 'lab') { if (!payGate(p)) return; return NA.labRequest(id); }
-          if (a === 'suez' || a === 'cairo') return NA.letterDownload(id, a);
+          if (a === 'suez' || a === 'cairo') return NA.letterPrint([{ id, kind: a, name: p.name }]);
+          if (a === 'wres') return NA.wafidResult(id);
           if (a === 'prep') return NA.print.prepare([id]);
           if (a === 'net') return NA.netPrint(p.appNumber, p.name);
           if (a === 'bcApp') return NA.print.quickLabel(id, 'app');

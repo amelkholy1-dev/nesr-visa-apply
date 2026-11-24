@@ -2,10 +2,12 @@
 /* الوسيط بين نظام طلبات التأشيرات وصفحة الفورم في المنصة. كل البيانات بتتنقل جوه المتصفح بين تبويبين، مفيش أي سيرفر تالت. */
 const FORM_URL = 'https://visa.mofa.gov.sa/SmartForm/TraditionalApp';
 const WAFID_URL = 'https://wafid.com/ar/book-appointment/';
+const WAFID_RESULT_URL = 'https://wafid.com/en/medical-status-search/'; /* نتيجة الكشف الطبي */
 const LAB_URL = 'https://clab.mohp.gov.eg/booking';
 const VISAINFO_URL = 'https://visa.mofa.gov.sa/enjaz/getvisainformation/person';
 const APPNO_URL = 'https://visa.mofa.gov.sa/visaperson/getapplicantdata'; /* «البحث عن طلب مقدم» (رقم الطلب / إنجاز) */
 const VISADOC_URL = 'https://visa.mofa.gov.sa/Home/Index'; /* استعلام «مستند التأشيرة» (الخطوة 2) */
+const ENJAZ_MAIN_URL = 'https://visa.mofa.gov.sa/Enjaz/Main'; /* «إنجاز»: طباعة الطلب (ورقة النت) برقم الطلب */
 const LOGIN_URL = 'https://visa.mofa.gov.sa/Account/Login/enjazcompany';
 const store = chrome.storage.session;
 const APP_TAB_RE = /^https:\/\/[a-z0-9-]+\.nisrelkhaleeg\.com\//;
@@ -115,16 +117,34 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       }
       catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ. اعمل F5 فيها وجرّب تاني' }); }
     } else if (msg.kind === 'open-netprint') {
-      /* طباعة ورقة النت: تبويب ظاهر على طباعة الطلب برقم الطلب (من غير E) */
+      /* طباعة ورقة النت: تبويب ظاهر على «إنجاز» برقم الطلب (من غير E) */
       const appNo = String((msg.payload && msg.payload.appNo) || '').replace(/\D/g, '').slice(0, 12);
       if (!appNo) { reply({ ok: false }); return; }
-      const tab = await chrome.tabs.create({ url: 'https://visa.mofa.gov.sa/Enjaz/PrintApplication?ApplicationNo=' + appNo, active: true });
+      /* صفحة «إنجاز»: الإضافة بتكتب رقم الطلب وتدوس «طباعة» (فتح رابط الطباعة مباشرة مش بيشتغل في المنصة) */
+      const tab = await chrome.tabs.create({ url: ENJAZ_MAIN_URL, active: true });
       await store.set({ ['nctx_' + tab.id]: { appNo, name: String((msg.payload && msg.payload.name) || '').slice(0, 120), stage: '', at: Date.now() } });
       reply({ ok: true });
     } else if (msg.kind === 'get-net-ctx') {
       const key = 'nctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); reply({ ctx: o[key] || null });
     } else if (msg.kind === 'net-stage') {
       const key = 'nctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); if (o[key]) await store.set({ [key]: { ...o[key], stage: String(msg.stage || '') } }); reply({ ok: true });
+    } else if (msg.kind === 'open-wafidres') {
+      /* نتيجة الكشف الطبي في وافد: تبويب ظاهر على «Medical Examination Result» بالجواز والجنسية */
+      const p = msg.payload || {};
+      const ctx = { personId: String(p.personId || '').slice(0, 12), name: String(p.name || '').slice(0, 120), passportNo: String(p.passportNo || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20), nationality: String(p.nationality || 'EGY').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3), print: p.print !== false, originTabId: sender.tab && sender.tab.id, stage: '', at: Date.now() };
+      if (!ctx.passportNo) { reply({ ok: false }); return; }
+      const tab = await chrome.tabs.create({ url: WAFID_RESULT_URL, active: true });
+      await store.set({ ['rctx_' + tab.id]: ctx });
+      reply({ ok: true });
+    } else if (msg.kind === 'get-wafidres-ctx') {
+      const key = 'rctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); reply({ ctx: o[key] || null });
+    } else if (msg.kind === 'wafidres-stage') {
+      const key = 'rctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); if (o[key]) await store.set({ [key]: { ...o[key], stage: String(msg.stage || '') } }); reply({ ok: true });
+    } else if (msg.kind === 'wafidres-result') {
+      const key = 'rctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
+      const t = await findAppTab(ctx.originTabId);
+      if (!t) { reply({ ok: false }); return; }
+      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-wafidres', data: { ...(msg.data || {}), personId: ctx.personId } }); reply({ ok: true }); } catch (e) { reply({ ok: false }); }
     } else if (msg.kind === 'open-appno') {
       /* رقم الطلب (إنجاز): تبويب مخفي بيفتح «البحث عن طلب مقدم»، والكابتشا بتتكتب في صفحة النظام */
       const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now(), stage: '' };
@@ -246,4 +266,4 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
     if (next !== ctx.stage) await store.set({ [key]: { ...ctx, stage: next } });
   } catch (e) { /* مش مهم */ }
 });
-chrome.tabs.onRemoved.addListener((id) => { store.remove(['ctx_' + id, 'wctx_' + id, 'lctx_' + id, 'vctx_' + id, 'actx_' + id, 'nctx_' + id]).catch(() => {}); });
+chrome.tabs.onRemoved.addListener((id) => { store.remove(['ctx_' + id, 'wctx_' + id, 'lctx_' + id, 'vctx_' + id, 'actx_' + id, 'nctx_' + id, 'rctx_' + id]).catch(() => {}); });

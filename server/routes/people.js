@@ -22,7 +22,7 @@ const router = express.Router();
 const P = require('../perms');
 /* صلاحية كل مسار (أول قاعدة تنطبق) */
 const RULES = [
-  ['GET', /^\/(\d+\/(payload|wafid|lab|appno-lookup|letter\/.*)|letters-bundle)$/, 'people.fill'], ['POST', /^\/(\d+\/result|result-by-passport)$/, 'people.fill'],
+  ['GET', /^\/(\d+\/(payload|wafid|lab|appno-lookup|letter\/.*)|letters-bundle)$/, 'people.fill'], ['POST', /^\/(\d+\/(result|wafid-result)|result-by-passport)$/, 'people.fill'],
   ['PUT', /^\/\d+\/stages\//, 'people.mark'], ['POST', /^\/bulk\//, 'people.mark'],
   ['DELETE', /^\/\d+$/, 'people.delete'], ['GET', /./, 'people.view'], ['*', /./, 'people.edit']
 ];
@@ -287,6 +287,23 @@ router.get('/:id(\\d+)/letter/:kind(suez|cairo)', async (req, res) => {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodeURIComponent('nomination-' + req.params.kind + '-' + (vars.passport || row.id) + '.docx'));
     res.send(buf);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* نتيجة الكشف الطبي من وافد (الإضافة بتقراها من «Medical Examination Result»): Fit ← مرحلة الفحص الطبي «تم» بتاريخ الفحص. Unfit ← ملاحظة بس */
+router.post('/:id(\\d+)/wafid-result', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10); const b = req.body || {};
+    const row = (await db.query('SELECT name_ar, passport_no FROM people WHERE id = ?', [id]))[0];
+    if (!row) return res.status(404).json({ error: 'الشخص مش موجود' });
+    const pn = String(b.passportNo || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (pn && row.passport_no && pn !== String(row.passport_no).toUpperCase()) return res.status(409).json({ error: 'النتيجة لجواز تاني (' + pn + ')' });
+    const status = b.status === 'fit' ? 'fit' : b.status === 'unfit' ? 'unfit' : '';
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.examDate || '')) ? b.examDate : '';
+    const note = (status === 'fit' ? 'Fit' : status === 'unfit' ? 'Unfit (غير لائق)' : String(b.statusText || 'نتيجة').slice(0, 30)) + (b.center ? ' — ' + String(b.center).slice(0, 80) : '');
+    const stages = await patchStage(id, 'medical', status === 'fit' ? { state: 'done', date: date || undefined, note } : { note });
+    audit.log(req, 'stage', id, row.name_ar, 'نتيجة الكشف الطبي (وافد): ' + note + (date ? ' ' + date : ''));
+    res.json({ ok: true, status, date, stages });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

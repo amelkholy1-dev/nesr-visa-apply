@@ -31,6 +31,7 @@
     if (m.type === 'VA_ACK') { bridge.pending.splice(0).forEach((f) => f(true)); }
     if (m.type === 'VA_ERROR') { toast(m.data && m.data.message || 'مشكلة في الإضافة', 'err'); bridge.pending.splice(0).forEach((f) => f(false)); }
     if (m.type === 'VA_RESULT' && m.data) onResult(m.data);
+    if (m.type === 'VA_WAFIDRES_RESULT' && m.data) onWafidResult(m.data);
     if (m.type === 'VA_VISAINFO_RESULT' && m.data) onVisaInfo(m.data);
     if (m.type === 'VA_VISAINFO_CAPTCHA' && m.data) onVisaCaptcha(m.data);
     if (m.type === 'VA_VISAINFO_DOC' && m.data) onVisaDoc(m.data);
@@ -186,13 +187,33 @@
       window.location.href = `/api/people/${id}/letter/${kind}`; toast('بيتحمّل خطاب الترشيح (Word)…', 'ok');
     } catch (er) { fail(er); }
   }
+  const verLess = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); } return false; };
   /* ورقة النت (طباعة الطلب من إنجاز) برقم الطلب: الإضافة بتفتحها وبتطبعها على ورقة واحدة */
   async function netPrint(appNumber, name) {
     const digits = String(appNumber || '').replace(/\D/g, ''); if (!digits) return toast('الشخص ده لسه مالوش رقم طلب (إنجاز): سجّله أو دوس «هات رقم إنجاز» الأول', 'err');
     if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
     if (!extReady) return toast('إضافة Chrome مش متركّبة. من «إضافة Chrome» نزّلها وركّبها الأول.', 'err');
+    if (extVersion && verLess(extVersion, '1.17.0')) return toast(`الإضافة عندك قديمة (${extVersion}). طباعة ورقة النت محتاجة 1.17.0: من «إضافة Chrome» نزّل الجديدة، وفي chrome://extensions دوس Reload، وبعدين F5 هنا.`, 'err');
     const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_NETPRINT', data: { appNo: digits, name } }, location.origin); setTimeout(() => res(false), 4000); });
-    if (ok) toast('بيفتح ورقة النت للطلب E' + digits + ' في المنصة ويطبعها…', 'ok'); else toast('الإضافة ما ردّتش: اعمل Reload للإضافة (لازم 1.16.0) وF5 للصفحة.', 'err');
+    if (ok) toast('بيفتح «إنجاز» في المنصة، يكتب رقم الطلب E' + digits + ' ويطبع الصفحة الأولى…', 'ok'); else toast('الإضافة ما ردّتش: اعمل Reload للإضافة (لازم 1.17.0) وF5 للصفحة.', 'err');
+  }
+  /* نتيجة الكشف الطبي (وافد): الإضافة بتفتح «Medical Examination Result» بالجواز، تنزّل الـ PDF وتطبعه، وترجّع النتيجة هنا */
+  async function wafidResult(id) {
+    if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
+    if (!extReady) return toast('إضافة Chrome مش متركّبة. من «إضافة Chrome» نزّلها وركّبها الأول.', 'err');
+    if (extVersion && verLess(extVersion, '1.17.0')) return toast(`الإضافة عندك قديمة (${extVersion}). نتيجة وافد محتاجة 1.17.0: من «إضافة Chrome» نزّل الجديدة، وفي chrome://extensions دوس Reload، وبعدين F5 هنا.`, 'err');
+    let d; try { d = await api('GET', `/people/${id}/appno-lookup`); } catch (er) { return fail(er); }
+    if (!d.passportNo) return toast('رقم الجواز فاضي عند الشخص ده', 'err');
+    const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_WAFIDRES', data: { personId: String(id), name: d.name, passportNo: d.passportNo, nationality: d.nationality || 'EGY' } }, location.origin); setTimeout(() => res(false), 4000); });
+    if (ok) toast('بيفتح نتيجة الكشف في وافد لجواز ' + d.passportNo + '…', 'ok'); else toast('الإضافة ما ردّتش: اعمل Reload للإضافة (لازم 1.17.0) وF5 للصفحة.', 'err');
+  }
+  async function onWafidResult(d) {
+    if (!d.personId) return;
+    try {
+      const r = await api('POST', `/people/${d.personId}/wafid-result`, { status: d.status, statusText: d.statusText, examDate: d.examDate, center: d.center, passportNo: d.passportNo });
+      toast(r.status === 'fit' ? `نتيجة الكشف: Fit ✔ (اتعلّم «تم الفحص الطبي»${r.date ? ' بتاريخ ' + r.date : ''})` : r.status === 'unfit' ? 'نتيجة الكشف: Unfit (غير لائق) — اتسجّلت كملاحظة' : 'نتيجة الكشف اتسجّلت', r.status === 'unfit' ? 'err' : 'ok');
+      if (location.hash === '#/people/' + d.personId) pagePerson(d.personId);
+    } catch (er) { fail(er); }
   }
   /* ===== أدوات ===== */
   const opt = (name) => (meta.options[name] || []);
@@ -397,11 +418,11 @@
           ${resolved && resolved.warns.length ? `<div class="card"><ul class="list warns">${resolved.warns.map((x) => `<li>${e(x)}</li>`).join('')}</ul></div>` : ''}
           ${summaryCard('بيانات التأشيرة (من الدفعة)', profFields.filter((f) => tabOfK(f.k) === 'visa').map((f) => f.k))}
           ${fieldsCard('الوصول والمهنة', bothFields.filter((f) => tabOfK(f.k) === 'visa'), 'القيم دي بتتورّث من الدفعة. اكتب هنا بس لو الشخص ده مختلف.')}`,
-        wafid: () => `${svcHead('wafid', 'الفحص الطبي (وافد)', '<button class="btn pri" id="wafid" title="يفتح وافد ويملا فورم الحجز">احجز الفحص</button>', 'رقم الموبايل ومكان إصدار الجواز والرقم القومي بتتكتب في تبويب «بيانات الشخص».')}
+        wafid: () => `${svcHead('wafid', 'الفحص الطبي (وافد)', '<button class="btn pri" id="wafid" title="يفتح وافد ويملا فورم الحجز">احجز الفحص</button><button class="btn" id="wafidRes" title="يفتح «نتيجة الفحص الطبي» في وافد بالجواز، ينزّل الـ PDF ويفتح نافذة الطباعة، ويسجّل النتيجة">نتيجة الكشف (طباعة + PDF)</button>', 'رقم الموبايل ومكان إصدار الجواز والرقم القومي بتتكتب في تبويب «بيانات الشخص».')}
           ${fieldsCard('بيانات حجز وافد', bothFields.filter((f) => tabOfK(f.k) === 'wafid'), 'بتتورّث من الدفعة. اكتب هنا بس لو الشخص ده مختلف.')}`,
         lab: () => `${svcHead('lab', 'المعامل (معامل الصحة العامة)', '<button class="btn pri" id="lab" title="يفتح موقع المعامل ويملا فورم الحجز">احجز المعمل</button>', 'رقم الموبايل والرقم القومي بتتكتب في تبويب «بيانات الشخص»، ورقم الطلب (إنجاز) في تبويب التأشيرة.')}
           ${fieldsCard('بيانات حجز المعمل', bothFields.filter((f) => tabOfK(f.k) === 'lab'), 'بتتورّث من الدفعة. اكتب هنا بس لو الشخص ده مختلف.')}`,
-        letters: () => `${svcHead('letters', 'الخطابات (خطاب الترشيح)', '<button class="btn pri" id="prep" title="باركود رقم الطلب + باركود التأشيرة (برنامج الطباعة) + خطاب الترشيح">تجهيز الطباعة</button><button class="btn" id="letSuez" title="يحمّل خطاب Word بنفس تنسيق نموذج المكتب">خطاب السويس</button><button class="btn" id="letCairo" title="يحمّل استمارة Word بنفس تنسيق نموذج المكتب">خطاب القاهرة</button>')}
+        letters: () => `${svcHead('letters', 'الخطابات (خطاب الترشيح)', '<button class="btn pri" id="prep" title="باركود رقم الطلب + باركود التأشيرة (برنامج الطباعة) + خطاب الترشيح">تجهيز الطباعة</button><button class="btn" id="letSuezP" title="يفتح نافذة الطباعة على طول (صفحة واحدة)">اطبع خطاب السويس</button><button class="btn" id="letCairoP" title="يفتح نافذة الطباعة على طول (صفحة واحدة)">اطبع خطاب القاهرة</button><button class="btn" id="letSuez" title="يحمّل خطاب Word بنفس تنسيق نموذج المكتب">السويس (Word)</button><button class="btn" id="letCairo" title="يحمّل استمارة Word بنفس تنسيق نموذج المكتب">القاهرة (Word)</button>')}
           ${summaryCard('بيانات الخطابات (من الدفعة)', ['visaNumber', 'unifiedNumber', 'sponsorName', 'jobText', 'visaDate', 'boxNumber', 'agencyNumber'])}`,
         accounts: () => `${fieldsCard('تكلفة الفرد', bothFields.filter((f) => tabOfK(f.k) === 'accounts'), 'لو سيبتها فاضية بتاخد تكلفة الدفعة.')}<div id="payBox"><div class="card muted">بيحمّل الحسابات…</div></div>`
       };
@@ -531,9 +552,12 @@
         } catch (er) { fail(er); } finally { oc.disabled = false; oc.textContent = 'قراءة تلقائية من الصورة'; }
       };
       const wf = $('#wafid'); if (wf) wf.onclick = async () => { try { await save(); wafidRequest(id); } catch (er) { fail(er); } };
+      const wr = $('#wafidRes'); if (wr) wr.onclick = async () => { try { await save(); wafidResult(id); } catch (er) { fail(er); } };
       const letter = async (kind) => { try { await save(); } catch (er) { return fail(er); } return letterDownload(id, kind); };
       const pp = $('#prep'); if (pp) pp.onclick = async () => { try { await save(); } catch (er) { return fail(er); } NA.print.prepare([String(id)]); };
       const ls = $('#letSuez'); if (ls) ls.onclick = () => letter('suez'); const lc = $('#letCairo'); if (lc) lc.onclick = () => letter('cairo');
+      const letterP = async (kind) => { try { await save(); } catch (er) { return fail(er); } return NA.letterPrint([{ id, kind, name: data.nameAr }]); };
+      const lsp = $('#letSuezP'); if (lsp) lsp.onclick = () => letterP('suez'); const lcp = $('#letCairoP'); if (lcp) lcp.onclick = () => letterP('cairo');
       const lb = $('#lab'); if (lb) lb.onclick = async () => { try { await save(); labRequest(id); } catch (er) { fail(er); } };
       const fl = $('#fill'); if (fl) fl.onclick = async () => { try { await save(); fillRequest(id); } catch (er) { fail(er); } };
       const dl = $('#del'); if (dl) dl.onclick = async () => { if (!confirm('تحذف الشخص ده نهائياً؟')) return; try { await api('DELETE', `/people/${id}`); location.hash = '#/people'; } catch (er) { fail(er); } };
@@ -794,7 +818,7 @@
     } catch (er) { if (er.status !== 401) view.innerHTML = `<div class="card issues">${e(er.message)}</div>`; }
   }
   /* بنشارك الأدوات مع ملفات الصفحات (pages-*.js) */
-  Object.assign(NA, { api, e, $, view, toast, fail, STATUS, can, ping, fillRequest, wafidRequest, labRequest, letterDownload, netPrint, stageDots, fmtDate });
+  Object.assign(NA, { api, e, $, view, toast, fail, STATUS, can, ping, fillRequest, wafidRequest, labRequest, letterDownload, netPrint, wafidResult, stageDots, fmtDate });
   Object.defineProperties(NA, { me: { get: () => me, configurable: true }, meta: { get: () => meta, configurable: true }, extReady: { get: () => extReady, configurable: true }, extVersion: { get: () => extVersion, configurable: true } });
   /* أزرار القايمة: رجوع/عودة، بحث عن شاشة، تصغير القايمة */
   { const lg = document.querySelector('.sidebar .brand .logo'); if (lg) lg.innerHTML = NA.icon('template', 22); }

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!-- نسخة مبسّطة بأرقام وبيانات وهمية من صفحة «نتيجة الفحص الطبي» في وافد (wafid.com/en/medical-status-search/). للاختبار بس.
+     علامة RESULT تحت بتتبدّل بكارت النتيجة بعد «Check». -->
+<html lang="en" dir="ltr"><head><meta charset="UTF-8"><title>Wafid | وافد</title></head>
+<body class="ltr-mode"><main>
+<div class="ui vertical basic segment medical-status-search" dir="ltr"><div class="ui container container-dashboard"><h1>Your Medical Examinations Results</h1>
+<div class="ui fluid card gcc-card"><div class="content">
+<form class="ui form" method="post" novalidate="">
+<input type="hidden" name="csrfmiddlewaretoken" value="test">
+<div class="form-fields-container">
+<div class="field inline reverse"><div id="id_search_variant">
+<div><label for="id_search_variant_0"><input type="radio" name="search_variant" value="passport" required id="id_search_variant_0" checked> By Passport Number</label></div>
+<div><label for="id_search_variant_1"><input type="radio" name="search_variant" value="slip" required id="id_search_variant_1"> Wafid slip number</label></div>
+</div></div>
+<div class="two fields"><div class="field"><label>Passport NO</label><input type="text" name="passport" id="id_passport" value="" placeholder="Enter Passport No"></div>
+<div class="field"><label>Nationality</label><select name="nationality" id="id_nationality"><option value="">Select nationality</option><option value="15">Bangladeshi</option><option value="55">Egyptian</option><option value="1">Indian</option></select></div></div>
+<div class="field"><div class="two fields">
+<input class="g-recaptcha" type="hidden" name="captcha" id="id_captcha" value="">
+<!--ERR-->
+</div>
+<div class="form-buttons-container left aligned"><button class="ui primary center large aligned button" id="med-status-form-submit" type="submit">Check</button></div>
+</div></div></form></div></div></div></div>
+<!--RESULT-->
+</main>
+<script>setTimeout(function () { document.getElementById('id_captcha').value = 'page-token'; }, 600);</script>
+</body></html>

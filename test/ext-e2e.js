@@ -53,6 +53,9 @@ const appnoResultFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'app
 const appListFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-applist.html'), 'utf8');
 const enjazMainFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'enjaz-main.html'), 'utf8');
 const enjazPrintFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'enjaz-print.html'), 'utf8');
+const wafidStatusFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'wafid-status.html'), 'utf8');
+const wafidCardFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'wafid-status-card.html'), 'utf8');
+const TINY_PDF = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF';
 const labFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'lab-booking.html'), 'utf8');
 /* بيحاكي سلوك APEX في صفحة المعمل: الأقسام مخفية لحد اختيار نوع الجنسية، والرقم القومي بيحسب تاريخ الميلاد والجنس */
 const LMOCK = `<script>
@@ -69,9 +72,9 @@ const LMOCK = `<script>
 </script>`;
 
 const appHtml = `<!doctype html><meta charset=utf-8><body><script>
-window.apcaps=[];window.apres=[];window.got=[];window.visa=[];window.docs=[];window.caps=[];window.nexts=[];window.ready=false;window.acks=0;
+window.apcaps=[];window.apres=[];window.wres=[];window.got=[];window.visa=[];window.docs=[];window.caps=[];window.nexts=[];window.ready=false;window.acks=0;
 window.addEventListener('message',function(e){ if(e.source!==window)return; var m=e.data; if(!m||m.source!=='nesr-visaapply-ext')return;
- if(m.type==='VA_READY')window.ready=true; if(m.type==='VA_ACK')window.acks++; if(m.type==='VA_RESULT')window.got.push(m.data); if(m.type==='VA_ERROR')window.got.push({error:m.data.message}); if(m.type==='VA_NEXT')window.nexts.push(m.data); if(m.type==='VA_VISAINFO_RESULT')window.visa.push(m.data); if(m.type==='VA_VISAINFO_CAPTCHA')window.caps.push(m.data); if(m.type==='VA_VISAINFO_DOC')window.docs.push(m.data); if(m.type==='VA_APPNO_CAPTCHA')window.apcaps.push(m.data); if(m.type==='VA_APPNO_RESULT')window.apres.push(m.data); });
+ if(m.type==='VA_READY')window.ready=true; if(m.type==='VA_ACK')window.acks++; if(m.type==='VA_RESULT')window.got.push(m.data); if(m.type==='VA_ERROR')window.got.push({error:m.data.message}); if(m.type==='VA_NEXT')window.nexts.push(m.data); if(m.type==='VA_VISAINFO_RESULT')window.visa.push(m.data); if(m.type==='VA_VISAINFO_CAPTCHA')window.caps.push(m.data); if(m.type==='VA_VISAINFO_DOC')window.docs.push(m.data); if(m.type==='VA_APPNO_CAPTCHA')window.apcaps.push(m.data); if(m.type==='VA_APPNO_RESULT')window.apres.push(m.data); if(m.type==='VA_WAFIDRES_RESULT')window.wres.push(m.data); });
 window.fill=function(d){ window.postMessage({source:'nesr-visaapply',type:'VA_FILL',data:d},location.origin); };
 window.postMessage({source:'nesr-visaapply',type:'VA_PING'},location.origin);
 </script></body>`;
@@ -95,6 +98,7 @@ const MOFA = {
   let loggedIn = true;
   await ctx.route('https://visa.mofa.gov.sa/**', (r) => {
     const rq = r.request();
+    if (/\/SmartForm\/Search/i.test(rq.url())) { global.__searchCalls = (global.__searchCalls || 0) + 1; const pn = new URLSearchParams(rq.postData() || '').get('PassportNo'); return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ Result: 'OK', Records: (global.__searchRecs || []).filter((x) => !pn || x.PASSPORT_NO === pn), TotalRecordCount: 3 }) }); }
     if (/\/Base\/GetEntryDurations/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(global.__only90 ? [{ Value: '', Text: '' }, { Value: 90, Text: '90' }] : [{ Value: 365, Text: '365' }]) });
     if (/\/Base\/GetResidenceDurations/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ Value: 90, Text: '90' }]) });
     if (/GetOccupationsByClassificationId/.test(rq.url())) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(/jobClassificationId=832/.test(rq.url()) ? [{ Value: 8321, Text: 'سائق سيارة' }, { Value: 8322, Text: 'سائق حافلة' }] : [{ Value: 1431, Text: 'مدير فندق' }]) });
@@ -109,7 +113,7 @@ const MOFA = {
       return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: appnoResultFixture.replace('PASSPORT_PLACEHOLDER', f.get('PassportNumber')) });
     }
     if (/\/Enjaz\/PrintApplication/i.test(rq.url())) { const no = (rq.url().match(/ApplicationNo=(\d+)/) || [])[1]; if (global.__netDirectFails && rq.method() === 'GET') return r.fulfill({ status: 302, headers: { Location: 'https://visa.mofa.gov.sa/Enjaz/Main' }, body: '' }); return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: enjazPrintFixture.replace('EAPPNO', 'E' + (no || '')) }); }
-    if (/\/Enjaz\/Main/i.test(rq.url())) { if (rq.method() === 'POST') { global.__netPost = rq.postData() || ''; const no = (global.__netPost.match(/AppNo=(\d+)/) || [])[1]; return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: enjazPrintFixture.replace('EAPPNO', 'E' + (no || '')) }); } return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: enjazMainFixture }); }
+    if (/\/Enjaz\/Main/i.test(rq.url())) { if (rq.method() === 'POST') { global.__netPost = rq.postData() || ''; const no = (global.__netPost.match(/AppNo=(\d+)/) || [])[1]; if (no === '828000000') return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: enjazMainFixture.replace('</body>', '<div class="alert alert-danger">لا يوجد طلب بهذا الرقم</div></body>') }); return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: enjazPrintFixture.replace('EAPPNO', 'E' + (no || '')) }); } return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: enjazMainFixture }); }
     if (/\/SmartForm\/?(\?.*)?$/i.test(rq.url()) && rq.method() === 'GET') return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: appListFixture });
     if (/\/SmartForm\/PrintApplication\//i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h2>تم تقديم الطلب</h2><div>رقم الطلب: 830068985</div><div>رقم الجواز : A12345678</div></body>' });
     if (/\/Home\/PrintVisa/i.test(rq.url())) { global.__printUrl = rq.url(); return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: global.__printEmpty ? printEmptyFixture : visaPrintFixture }); }
@@ -122,10 +126,39 @@ const MOFA = {
     if (rq.method() === 'POST' || /\/SmartForm\/Result/.test(rq.url())) { postBody = rq.postData() || ''; return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h2>تم تقديم الطلب بنجاح</h2><p>رقم الطلب: E123456789</p></body>' }); }
     return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: fixture.replace('</body>', MOCK + '</body>') });
   });
+  global.__searchRecs = [{ ID: 829000001, FullName: 'BADR KHALIL BADR ABOUELENIN', PASSPORT_NO: 'A42014007' }, { ID: 830099999, FullName: 'SAMIR TEST HASSAN', PASSPORT_NO: 'A42014007' }];
   const app = await ctx.newPage(); await app.goto('https://visa.nisrelkhaleeg.com/'); await app.waitForTimeout(1500);
+  async function wresTest() {
+  /* سيناريو 18: نتيجة الكشف الطبي في وافد — بيكتب الجواز والجنسية، يستنى تحقق وافد، يدوس Check، ينزّل الـ PDF ويرجّع النتيجة */
+  const wresOpen = async (d) => { const [p] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((x) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_WAFIDRES', data: x }, location.origin), d)]); return p; };
+  const wr1 = await wresOpen({ personId: '7', name: 'شخص تجربة', passportNo: 'A12345678', nationality: 'EGY' });
+  await app.waitForFunction(() => window.wres.length > 0, null, { timeout: 30000 }).catch(async (er) => { console.log('wafid page:', wr1.url(), await wr1.evaluate(() => ({ bar: (document.getElementById('nesr-wres-bar') || {}).textContent, pass: (document.getElementById('id_passport') || {}).value, cap: (document.getElementById('id_captcha') || {}).value, res: document.documentElement.dataset.vaWafidResult })).catch((e) => e.message), global.__wresPost); throw er; });
+  const w1 = await app.evaluate(() => window.wres[0]);
+  assert.deepStrictEqual([w1.personId, w1.status, w1.examDate, w1.passportNo, w1.center], ['7', 'fit', '2026-08-23', 'A12345678', 'Test Clinic'], 'نتيجة وافد: ' + JSON.stringify(w1));
+  const wf = new URLSearchParams(global.__wresPost); assert.deepStrictEqual([wf.get('search_variant'), wf.get('passport'), wf.get('nationality'), wf.get('captcha')], ['passport', 'A12345678', '55', 'page-token'], 'الجواز والجنسية اتكتبوا والتحقق من الصفحة نفسها: ' + global.__wresPost);
+  await wr1.waitForFunction(() => document.documentElement.dataset.vaWafidPdf === '1', null, { timeout: 15000 }); assert.ok(global.__wresPdf >= 1, 'الـ PDF اتنزّل');
+  await wr1.close();
+  /* مفيش نتيجة: رسالة واضحة ومفيش حاجة بتتبعت */
+  const nW = await app.evaluate(() => window.wres.length);
+  const wr2 = await wresOpen({ personId: '8', name: 'تجربة', passportNo: 'Z9999999', nationality: 'EGY' });
+  await wr2.waitForFunction(() => { const b = document.getElementById('nesr-wres-bar'); return b && /ما طلّعش نتيجة/.test(b.textContent); }, null, { timeout: 30000 });
+  assert.ok(/No records found/.test(await wr2.textContent('#nesr-wres-bar')), 'رسالة وافد ظهرت'); assert.strictEqual(await app.evaluate(() => window.wres.length), nW, 'مفيش نتيجة اتبعتت');
+  await wr2.close();
+  }
   assert.ok(await app.evaluate(() => window.ready), 'الإضافة ردّت في صفحة النظام');
 
-  await ctx.route('https://wafid.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: wafidFixture.replace('</body>', WMOCK + '</body>') }));
+  await ctx.route('https://wafid.com/**', (r) => {
+    const rq = r.request();
+    if (/\/medical-status\/TESTTOKEN\/download\/?$/.test(rq.url())) { global.__wresPdf = (global.__wresPdf || 0) + 1; return r.fulfill({ status: 200, contentType: 'application/pdf', body: TINY_PDF }); }
+    if (/\/medical-status-search\/?/.test(rq.url())) {
+      if (rq.method() !== 'POST') return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: wafidStatusFixture });
+      global.__wresPost = rq.postData() || ''; const f = new URLSearchParams(global.__wresPost);
+      if (f.get('passport') === 'Z9999999') return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: wafidStatusFixture.replace('<!--ERR-->', '<div class="ui error message">No records found</div>') });
+      return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: wafidStatusFixture.replace('<!--RESULT-->', wafidCardFixture.replace('PASSNO', f.get('passport')).replace('STATUS', f.get('passport') === 'U1111111' ? 'Unfit' : 'Fit')) });
+    }
+    return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: wafidFixture.replace('</body>', WMOCK + '</body>') });
+  });
+  if (process.env.EXT_ONLY === 'wres') { await wresTest(); console.log('EXT E2E OK (وافد بس)'); await ctx.close(); process.exit(0); }
   const [form] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.fill(d), { personId: '7', name: 'بدر خليل', mofa: MOFA, issues: [], warns: ['تنبيه تجريبي'], photo: PHOTO })]);
   await form.waitForLoadState('domcontentloaded');
   await form.waitForSelector('#nesr-va-again', { timeout: 60000 });
@@ -158,6 +191,9 @@ const MOFA = {
   const got2 = await app.evaluate(() => window.got); const sub = got2.find((g) => g.status === 'submitted');
   assert.ok(sub && sub.appNumber === 'E123456789' && sub.personId === '7', 'رقم الطلب رجع للنظام: ' + JSON.stringify(got2));
   /* بعد «حفظ» المنصة بترجّع لـ «قائمة طلبات التأشيرات» والرقم من غير E ← الإضافة بتلاقي صف الجواز (أحدث طلب) وتبعته بـ E */
+  /* اللقطة قبل «حفظ» اتاخدت من البحث: الطلب القديم 829000001 + طلب لشخص تاني بنفس الجواز. بعد الحفظ الجديد 830068985 بيظهر ← لازم ياخده هو بس (مش القديم ولا التاني الأحدث بتاع اسم تاني) */
+  assert.ok(global.__searchCalls >= 1, 'اللقطة قبل الحفظ اتاخدت');
+  global.__searchRecs.push({ ID: 830068985, FullName: 'BADR KHALIL BADR ABOUELENIN', PASSPORT_NO: 'A42014007' });
   const nGot = await app.evaluate(() => window.got.length);
   await form.evaluate(() => { window.location.href = '/SmartForm'; });
   await app.waitForFunction((n) => window.got.slice(n).some((g) => g.status === 'submitted'), nGot, { timeout: 20000 });
@@ -343,15 +379,21 @@ const MOFA = {
   const sp = await ctx.newPage(); await sp.goto('https://visa.mofa.gov.sa/SmartForm/PrintApplication/830068985');
   await app.waitForFunction((n) => window.got.length > n, gotBefore, { timeout: 30000 });
   const gr = await app.evaluate(() => window.got[window.got.length - 1]); assert.strictEqual(gr.appNumber, 'E830068985', 'اتحط E: ' + JSON.stringify(gr)); assert.strictEqual(gr.passportNo, 'A12345678'); assert.strictEqual(gr.status, 'submitted');
-  /* سيناريو 17: طباعة ورقة النت برقم الطلب — مباشرة، ولو المنصة رجّعت «إنجاز» بيكتب الرقم ويدوس «طباعة» */
+  /* سيناريو 17: طباعة ورقة النت برقم الطلب — بتفتح «إنجاز»، تكتب الرقم وتدوس «طباعة»، وتطبع الصفحة الأولى بس */
   const netOpen = async (appNo) => { const [p] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_NETPRINT', data: d }, location.origin), { appNo, name: 'شخص تجربة' })]); await p.waitForTimeout(1500); await p.reload().catch(() => {}); return p; };
-  const np1 = await netOpen('828935966'); await np1.waitForFunction(() => document.documentElement.dataset.vaNetPrinted === '1', null, { timeout: 20000 });
-  assert.ok((await np1.textContent('#nesr-net-bar')).includes('E828935966') && (await np1.evaluate(() => !!document.getElementById('nesr-net-style'))), 'ورقة النت اتفتحت واتجهّزت للطباعة');
+  global.__netPost = '';
+  const np1 = await netOpen('828935966'); await np1.waitForFunction(() => document.documentElement.dataset.vaNetPrinted === '1', null, { timeout: 25000 });
+  assert.ok(/AppNo=828935966/.test(global.__netPost) && /PrintApplication=PrintApplication/.test(global.__netPost), 'كتب رقم الطلب في «إنجاز» ودوس طباعة: ' + global.__netPost);
+  assert.ok((await np1.textContent('#nesr-net-bar')).includes('E828935966'), 'ورقة النت اتفتحت');
+  await np1.emulateMedia({ media: 'print' });
+  const pr = await np1.evaluate(() => { const r = document.getElementById('nesr-net-root'); const others = [...document.body.children].filter((x) => x !== r && getComputedStyle(x).display !== 'none').map((x) => x.className || x.id); return { root: !!r && getComputedStyle(r).display !== 'none', clipped: r && getComputedStyle(r).overflow === 'hidden', code: r && /E828935966/.test(r.textContent), others }; });
+  assert.ok(pr.root && pr.clipped && pr.code && !pr.others.length, 'الطباعة: الورقة بس ومقصوصة على صفحة واحدة: ' + JSON.stringify(pr));
   await np1.close();
-  global.__netDirectFails = true; global.__netPost = '';
-  const np2 = await netOpen('828935967'); await np2.waitForFunction(() => document.documentElement.dataset.vaNetPrinted === '1', null, { timeout: 25000 });
-  assert.ok(/AppNo=828935967/.test(global.__netPost) && /PrintApplication=PrintApplication/.test(global.__netPost), 'كتب رقم الطلب في «إنجاز» ودوس طباعة: ' + global.__netPost);
-  await np2.close(); global.__netDirectFails = false;
+  /* رقم غلط: المنصة بترجّع «إنجاز» برسالة ← الإضافة بتقول بوضوح وما بتطبعش */
+  const np3 = await netOpen('828000000'); await np3.waitForFunction(() => { const b = document.getElementById('nesr-net-bar'); return b && /ما فتحتش/.test(b.textContent); }, null, { timeout: 25000 });
+  assert.ok(/لا يوجد طلب/.test(await np3.textContent('#nesr-net-bar')) && !(await np3.evaluate(() => document.documentElement.dataset.vaNetPrinted)), 'رسالة المنصة ظهرت');
+  await np3.close();
+  await wresTest();
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

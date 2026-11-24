@@ -264,6 +264,12 @@ const api = async (method, url, body, extra = {}) => {
 
   /* رقم الطلب من غير E بيتخزّن بـ E، وبيتطابق بالجواز */
   const nb = await api('POST', '/api/people', { data: { nameAr: 'شخص رقم بدون E', passportNo: 'NE0000001' } }); const nid = nb.json.id;
+  /* نتيجة الكشف الطبي من وافد: Fit ← «تم الفحص الطبي» بتاريخ الفحص؛ Unfit ← ملاحظة بس؛ جواز تاني ← مرفوض */
+  const wr1 = await api('POST', `/api/people/${nid}/wafid-result`, { status: 'unfit', examDate: '2026-08-20', center: 'Test Clinic', passportNo: 'NE0000001' });
+  assert.strictEqual(wr1.status, 200); let stg = (await api('GET', `/api/people/${nid}`)).json.person.stages.medical; assert.ok(stg.state !== 'done' && /Unfit/.test(stg.note), 'Unfit ملاحظة بس: ' + JSON.stringify(stg));
+  assert.strictEqual((await api('POST', `/api/people/${nid}/wafid-result`, { status: 'fit', examDate: '2026-08-23', passportNo: 'XX9999999' })).status, 409, 'جواز تاني مرفوض');
+  const wr2 = await api('POST', `/api/people/${nid}/wafid-result`, { status: 'fit', examDate: '2026-08-23', center: 'Test Clinic', passportNo: 'NE0000001' }); assert.strictEqual(wr2.json.status, 'fit');
+  stg = (await api('GET', `/api/people/${nid}`)).json.person.stages.medical; assert.deepStrictEqual([stg.state, stg.date], ['done', '2026-08-23'], 'Fit اتعلّم: ' + JSON.stringify(stg)); assert.ok(/Fit — Test Clinic/.test(stg.note));
   assert.strictEqual((await api('POST', `/api/people/${nid}/result`, { status: 'submitted', appNumber: '830068985' })).json.appNumber, 'E830068985'); assert.strictEqual((await api('GET', `/api/people/${nid}`)).json.person.appNumber, 'E830068985');
   assert.strictEqual((await api('POST', `/api/people/${nid}/result`, { status: 'submitted', appNumber: 'e830068985' })).status, 200); assert.strictEqual((await api('GET', `/api/people/${nid}`)).json.person.stages.sent.history.length, 0, 'نفس الرقم بصيغتين مش «رقم سابق»');
   assert.strictEqual((await api('POST', `/api/people/${nid}/result`, { status: 'submitted', appNumber: '12' })).status, 400);

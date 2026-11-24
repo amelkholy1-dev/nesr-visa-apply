@@ -263,6 +263,7 @@
 
   async function onForm(ctx) {
     const flagKey = 'va_filled_' + ctx.personId + '_' + ctx.at;
+    takeBaseline(ctx); /* أرقام الطلبات الموجودة للجواز قبل «حفظ» (عشان بعد الحفظ ناخد الجديد بس) */
     const run = async () => {
       report.ok = []; report.manual = []; report.failed = []; report.changed = [];
       const status = (t) => bar('<span>🦅 ' + esc(ctx.name || '') + ' — ' + esc(t) + '</span>', 'info');
@@ -329,31 +330,48 @@
   }
 
   /* بعد «حفظ» المنصة بترجّعك لـ «قائمة طلبات التأشيرات» (/SmartForm) والرقم في الجدول من غير E.
-     بندوّر على صف الشخص بالجواز (أحدث طلب) — من الجدول الظاهر، ولو مش ظاهر بنسأل نفس البحث اللي الصفحة بتعمله (/SmartForm/Search). */
+     عشان ناخد الطلب اللي لسه اتعمل بالظبط (مش طلب قديم لنفس الجواز): وإحنا في الفورم، قبل «حفظ»، بناخد لقطة بأرقام الطلبات
+     الموجودة للجواز ده. بعد الحفظ بنسأل نفس البحث اللي الصفحة بتعمله (/SmartForm/Search) على طول، وبناخد الرقم الجديد
+     اللي مكانش في اللقطة، وبنفس الاسم الإنجليزي. */
+  const passOf = (ctx) => String((ctx.mofa && ctx.mofa.PASSPORTnumber) || '').toUpperCase().replace(/\s+/g, '');
+  const baseKey = (ctx) => 'va_base_' + ctx.personId + '_' + ctx.at;
+  const letters = (v) => String(v || '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
+  async function searchApps(pass) {
+    const r = await fetch('/SmartForm/Search?jtStartIndex=0&jtPageSize=50', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' }, body: 'AppNo=&PassportNo=' + encodeURIComponent(pass) });
+    const j = await r.json(); if (!j || (j.Result && String(j.Result).toUpperCase() !== 'OK')) throw new Error('search');
+    return (j.Records || []).map((x) => ({ id: String(x.ID || '').replace(/\D/g, ''), pass: String(x.PASSPORT_NO || '').toUpperCase().replace(/\s+/g, ''), name: letters(x.FullName) })).filter((x) => x.id && x.pass === pass);
+  }
+  /* لقطة قبل «حفظ» (مرة واحدة لكل ملء) */
+  async function takeBaseline(ctx) {
+    const pass = passOf(ctx); if (!pass) return;
+    try { if (sessionStorage.getItem(baseKey(ctx))) return; } catch (e) { return; }
+    try { const recs = await searchApps(pass); sessionStorage.setItem(baseKey(ctx), JSON.stringify(recs.map((x) => x.id))); } catch (e) { /* هنعتمد على الاسم بس */ }
+  }
   async function onListPage(ctx) {
     const filledHere = (() => { try { return sessionStorage.getItem('va_filled_' + ctx.personId + '_' + ctx.at) === '1'; } catch (e) { return false; } })();
     if (!filledHere) return; /* الفورم ما اتملاش في التبويب ده: ممكن يكون طلب قديم، مش بنسجّل حاجة */
-    const pass = String((ctx.mofa && ctx.mofa.PASSPORTnumber) || '').toUpperCase().replace(/\s+/g, ''); if (!pass) return;
-    const kind = String((ctx.mofa && ctx.mofa.VisaKind) || '');
+    const pass = passOf(ctx); if (!pass) return;
     const sentKey = 'va_app_sent_' + ctx.personId + '_' + ctx.at; try { if (sessionStorage.getItem(sentKey)) return; } catch (e) { /* مش مهم */ }
-    bar('<span>🔎 بدوّر على رقم الطلب في «قائمة طلبات التأشيرات»…</span>', 'info');
+    let base = null; try { base = JSON.parse(sessionStorage.getItem(baseKey(ctx)) || 'null'); } catch (e) { base = null; }
+    const m = ctx.mofa || {}; const first = letters(m.EFIRSTNAME).split(' ')[0] || ''; const family = letters(m.EFAMILY).split(' ').pop() || '';
+    const nameOk = (n) => { const w = ' ' + letters(n) + ' '; return (!first || w.includes(' ' + first + ' ')) && (!family || w.includes(' ' + family + ' ')); };
+    const fresh = (x) => (!base || !base.includes(x.id)) && nameOk(x.name);
+    bar('<span>🔎 بجيب رقم الطلب الجديد من «قائمة طلبات التأشيرات»…</span>', 'info');
     const fromTable = () => {
-      const g = document.getElementById('gridViewSearch'); if (!g) return '';
-      const heads = [...g.querySelectorAll('thead th')].map((th) => norm(th.textContent)); const iId = heads.findIndex((h) => h.includes('رقم الطلب')), iP = heads.findIndex((h) => h.includes('رقم الجواز'));
-      if (iId < 0 || iP < 0) return '';
-      const ids = [...g.querySelectorAll('tr.jtable-data-row')].map((tr) => [...tr.children]).filter((td) => td[iP] && String(td[iP].textContent).toUpperCase().replace(/\s+/g, '') === pass).map((td) => String(td[iId].textContent).replace(/\D/g, '')).filter(Boolean);
-      return ids.sort((a, b) => Number(b) - Number(a))[0] || '';
+      const g = document.getElementById('gridViewSearch'); if (!g) return [];
+      const heads = [...g.querySelectorAll('thead th')].map((th) => norm(th.textContent)); const iId = heads.findIndex((h) => h === 'رقم الطلب' || h.includes('رقم الطلب')), iP = heads.findIndex((h) => h.includes('رقم الجواز')), iN = heads.findIndex((h) => h === 'الاسم');
+      if (iId < 0 || iP < 0) return [];
+      return [...g.querySelectorAll('tr.jtable-data-row')].map((tr) => [...tr.children]).filter((td) => td[iP] && String(td[iP].textContent).toUpperCase().replace(/\s+/g, '') === pass)
+        .map((td) => ({ id: String(td[iId].textContent).replace(/\D/g, ''), pass, name: iN >= 0 && td[iN] ? td[iN].textContent : '' })).filter((x) => x.id);
     };
-    let id = ''; for (let k = 0; k < 24 && !id; k++) { id = fromTable(); if (!id) await sleep(500); }
-    if (!id) {
-      try {
-        const r = await fetch('/SmartForm/Search?jtStartIndex=0&jtPageSize=20', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' }, body: 'AppNo=&PassportNo=' + encodeURIComponent(pass) });
-        const j = await r.json(); const recs = (j.Records || []).filter((x) => String(x.PASSPORT_NO || '').toUpperCase().replace(/\s+/g, '') === pass);
-        const sameKind = recs.filter((x) => !kind || String(x.Visakind) === kind); const pick = (sameKind.length ? sameKind : recs).map((x) => String(x.ID || '').replace(/\D/g, '')).filter(Boolean).sort((a, b) => Number(b) - Number(a));
-        id = pick[0] || '';
-      } catch (e) { /* هنقول تحت */ }
+    const pickNew = (list) => list.filter(fresh).map((x) => x.id).sort((a, b) => Number(b) - Number(a))[0] || '';
+    let id = ''; let apiOk = false; const t0 = Date.now();
+    while (!id && Date.now() - t0 < 20000) {
+      id = pickNew(fromTable());
+      if (!id) { try { id = pickNew(await searchApps(pass)); apiOk = true; } catch (e) { /* نجرّب تاني */ } }
+      if (!id) await sleep(700);
     }
-    if (!id) return void bar('<span>⚠️ ملقتش طلب لجواز <b dir="ltr">' + esc(pass) + '</b> في القايمة. لو الطلب اتحفظ، سجّل رقمه في النظام بإيدك أو دوس «هات رقم إنجاز».</span>', 'warn');
+    if (!id) return void bar('<span>⚠️ ملقتش طلب <b>جديد</b> لجواز <b dir="ltr">' + esc(pass) + '</b>' + (first ? ' باسم ' + esc(first + ' ' + family) : '') + ' في القايمة' + (apiOk ? '' : ' (البحث في المنصة ما ردّش)') + '. لو الطلب اتحفظ، سجّل رقمه في النظام بإيدك أو دوس «هات رقم إنجاز».</span>', 'warn');
     const app = 'E' + id; try { sessionStorage.setItem(sentKey, app); } catch (e) { /* مش مهم */ }
     const r = await send({ kind: 'result', data: { status: 'submitted', appNumber: app, passportNo: pass } });
     wireNext(bar('<span>✅ رقم الطلب <b dir="ltr">' + esc(app) + '</b> ' + (r && r.delivered ? 'اتسجّل في النظام لوحده.' : 'اتحفظ وهيتسجّل أول ما تفتح النظام.') + '</span>' + queueHtml(ctx), 'ok'));
