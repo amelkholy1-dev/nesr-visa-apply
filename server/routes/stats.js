@@ -48,7 +48,7 @@ router.get('/stats/overview', P.need('stats.view'), async (req, res) => {
         if (c.state === 'booked' && c.date && c.date >= today && c.date <= in7) alerts.upcoming.push({ personId: p.id, name: p.name_ar, stage: x.label, date: c.date });
         if (x.k === 'sent' && c.state === 'done') { if (c.date && daily.has(c.date)) daily.get(c.date).sent++; if (c.date) vs.sentDays.push(Math.max(0, daysBetween(created, c.date))); } }
       const rd = R.readiness(p, prof, 0); for (const [k] of R.SERVICES) if (!rd[k].length) { service[k]++; vs.service[k]++; }
-      const ex = F.expiryInfo(d.expiryDate, d.expectedEntryDate || (prof && prof.data.expectedEntryDate));
+      const ex = F.expiryInfo(d.expiryDate, F.autoEntryDate() || d.expectedEntryDate || (prof && prof.data.expectedEntryDate));
       if (p.status !== 'submitted') { if (ex.expired) { alerts.expired.push({ personId: p.id, name: p.name_ar }); vs.expiring++; } else if (ex.short) { alerts.expiring.push({ personId: p.id, name: p.name_ar, days: ex.days }); vs.expiring++; } }
       if (p.status === 'waiting') alerts.waiting.push({ personId: p.id, name: p.name_ar });
       if (!p.personal_photo) alerts.noPhoto++; if (!p.profile_id) alerts.noProfile++; if (!p.app_number && st.sent.state !== 'done' && p.status === 'submitted') alerts.noAppNumber++;

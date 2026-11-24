@@ -20,7 +20,8 @@ const OPT = {
 const GROUPS = [
   { id: 'lookup', title: 'رقم التأشيرة والرقم الموحد', fields: [
     { k: 'visaNumber', label: 'رقم التأشيرة (رقم الصادر)', type: 'text', scope: 'profile', max: 20, ltr: true, hint: 'مثلاً: 1306025676' },
-    { k: 'unifiedNumber', label: 'الرقم الموحد (رقم السجل)', type: 'text', scope: 'profile', max: 10, ltr: true, hint: 'مثلاً: 7011022865' }
+    { k: 'unifiedNumber', label: 'الرقم الموحد (رقم السجل)', type: 'text', scope: 'profile', max: 10, ltr: true, hint: 'مثلاً: 7011022865' },
+    { k: 'docNumber', label: 'رقم مستند التأشيرة (بيتطلب لتأشيرة «عمل»)', type: 'text', scope: 'profile', max: 20, ltr: true, hint: 'بيتملي من «مستند التأشيرة فقط»' }
   ] },
   { id: 'letters', title: 'خطابات الترشيح (السويس / القاهرة)', fields: [
     { k: 'visaDate', label: 'تاريخ التأشيرة (هجري)', type: 'text', scope: 'profile', max: 12, ltr: true, hint: 'مثلاً: 1448/02/30 — بيتملي من «بحث وجلب المهن»' },
@@ -56,8 +57,8 @@ const GROUPS = [
   { id: 'entry', title: 'الوصول', fields: [
     { k: 'comingThrough', label: 'وسيلة الوصول', type: 'select', opt: 'comingThrough', scope: 'both' },
     { k: 'entryPoint', label: 'منفذ الدخول', type: 'select', opt: 'entryPoint', scope: 'both', req: true },
-    { k: 'expectedEntryDate', label: 'التاريخ المتوقع للدخول', type: 'date', scope: 'both', req: true },
-    { k: 'purpose', label: 'الغرض', type: 'text', scope: 'both', max: 100 },
+    { k: 'expectedEntryDate', label: 'التاريخ المتوقع للدخول (لو التلقائي متقفل)', type: 'date', scope: 'both', hint: 'تلقائي: يوم عمل الطلب + 17 يوم' },
+    { k: 'purpose', label: 'الغرض (لو فاضي: «نوع التأشيرة لدى الجهة الطالبة»)', type: 'text', scope: 'both', max: 100 },
     { k: 'carNumber', label: 'رقم الرحلة/السيارة', type: 'text', scope: 'both', max: 20 }
   ] },
   { id: 'accounts', title: 'الحسابات', fields: [
@@ -109,7 +110,7 @@ const USES = {
   visaKind: ['mofa'], nationality: ['mofa', 'tash'], embassy: ['mofa'], entriesText: ['mofa'], entryDays: ['mofa'], residence: ['mofa'], medCity: ['wafid'], medVisa: ['wafid'], medPosition: ['wafid'], autoDeclare: ['mofa', 'wafid'],
   sponsorName: ['mofa', 'letter'], sponsorNumber: ['mofa', 'letter'], sponsorAddress: ['mofa'], sponsorPhone: ['mofa'], comingThrough: ['mofa'], entryPoint: ['mofa'], expectedEntryDate: ['mofa'], purpose: ['mofa'], carNumber: ['mofa'],
   passportType: ['mofa'], issueCountry: ['mofa'], religion: ['mofa'], social: ['mofa', 'wafid'], degree: ['mofa', 'letter'], degreeSource: ['mofa'], homeAddress: ['mofa'], email: ['mofa', 'wafid', 'lab', 'tash'], jobClass: ['mofa'], jobText: ['mofa', 'lab', 'letter'],
-  visaNumber: ['letter', 'lab'], unifiedNumber: ['letter'], visaDate: ['letter'], boxNumber: ['letter'], agencyNumber: ['letter'], labDest: ['lab'], labJob: ['lab'], fee: ['accounts']
+  visaNumber: ['letter', 'lab'], docNumber: ['mofa'], unifiedNumber: ['letter'], visaDate: ['letter'], boxNumber: ['letter'], agencyNumber: ['letter'], labDest: ['lab'], labJob: ['lab'], fee: ['accounts']
 };
 /* كل خانة في أنهي تبويب بتظهر (صفحة الشخص وصفحة الدفعة): personal بيانات الشخص · visa التأشيرة (إنجاز) · wafid · lab · letters · accounts */
 const TABS = [
@@ -131,6 +132,15 @@ const sanitizePerson = (d) => pick(d, PERSON_KEYS);
 const mofaDate = (iso) => (/^\d{4}-\d{2}-\d{2}$/.test(String(iso || '')) ? String(iso).replace(/-/g, '/') : '');
 const text = (list, v) => { const o = (list || []).find(x => String(x.v) === String(v)); return o ? o.t : ''; };
 
+/* التاريخ المتوقع للدخول بيتحسب تلقائي وقت عمل الطلب: النهارده (بتوقيت مصر) + عدد أيام (الافتراضي 17، 0 = متقفل) — بيتظبط من الإعدادات */
+let AUTO_ENTRY_DAYS = 17;
+const setAutoEntryDays = (n) => { const x = parseInt(n, 10); AUTO_ENTRY_DAYS = Number.isFinite(x) && x >= 0 && x <= 365 ? x : 17; };
+const getAutoEntryDays = () => AUTO_ENTRY_DAYS;
+function autoEntryDate(now = new Date()) {
+  if (!AUTO_ENTRY_DAYS) return '';
+  const d = new Date(now.getTime() + AUTO_ENTRY_DAYS * 86400000);
+  return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }); /* YYYY-MM-DD */
+}
 /* بيدمج ملف الضبط + بيانات الشخص ويرجّع: القيم النهائية + الحقول بأسماء المنصة + مشاكل (blocking) وتنبيهات */
 function resolve(person, profile, files = {}) {
   const prof = profile || {};
@@ -139,6 +149,9 @@ function resolve(person, profile, files = {}) {
   for (const k of new Set([...PROFILE_KEYS, ...PERSON_KEYS])) {
     const own = p[k]; v[k] = own !== undefined && own !== null && String(own).trim() !== '' ? String(own).trim() : (prof[k] !== undefined && prof[k] !== null ? String(prof[k]).trim() : '');
   }
+  { const auto = autoEntryDate(); if (auto) v.expectedEntryDate = auto; } /* تلقائي: النهارده + 17 يوم */
+  /* الغرض: لو الشخص ما كتبش غرض بإيده، بيتكتب «نوع التأشيرة لدى الجهة الطالبة» زي ما المنصة بتطبعه */
+  { const own = String((p.purpose === undefined || p.purpose === null) ? '' : p.purpose).trim(); const kind = text(OPT.visaKind, v.visaKind); v.purpose = own || [kind, v.sponsorName ? 'لدى ' + v.sponsorName : ''].filter(Boolean).join(' ').slice(0, 100); }
   const ar = names.splitArabic(v.nameAr);
   const arParts = { first: v.nameArFirst || ar.first, father: v.nameArFather || ar.father, grand: v.nameArGrand || ar.grand, family: v.nameArFamily || ar.family };
   const enParts = { first: v.nameEnFirst, father: v.nameEnFather, grand: v.nameEnGrand, family: v.nameEnFamily };
@@ -157,7 +170,7 @@ function resolve(person, profile, files = {}) {
     ADDRESS_HOME: v.homeAddress, Personal_Email: v.email,
     SPONSER_NAME: v.sponsorName, SPONSER_NUMBER: v.sponsorNumber || v.unifiedNumber, SPONSER_ADDRESS: v.sponsorAddress, SPONSER_PHONE: v.sponsorPhone,
     COMING_THROUGH: v.comingThrough, entryPointText: text(OPT.entryPoint, v.entryPoint) || v.entryPoint, ENTRY_POINT: v.entryPoint,
-    ExpectedEntryDate: mofaDate(v.expectedEntryDate), porpose: v.purpose, car_number: v.carNumber
+    ExpectedEntryDate: mofaDate(v.expectedEntryDate), porpose: v.purpose, car_number: v.carNumber, DocumentNumber: v.docNumber
   };
 
   /* المشاكل المانعة (blocking) والتنبيهات */
@@ -165,6 +178,7 @@ function resolve(person, profile, files = {}) {
   const need = (k, label) => { if (!String(mofa[k] || '').trim()) issues.push(`${label} ناقص`); };
   const len = (k, label, max) => { if (String(mofa[k] || '').length > max) issues.push(`${label} أطول من ${max} حرف (${String(mofa[k]).length})`); };
   need('VisaKind', 'نوع التأشيرة'); need('EmbassyCode', 'الممثلية');
+  if (String(v.visaKind) === '1' && !v.docNumber) issues.push('رقم مستند التأشيرة ناقص (مطلوب لتأشيرة «عمل»): اكتبه في الدفعة أو دوس «مستند التأشيرة فقط»');
   need('EFIRSTNAME', 'الاسم الإنجليزي (الأول)'); need('EFAMILY', 'اسم العائلة بالإنجليزي');
   need('PASSPORTnumber', 'رقم الجواز'); need('PASSPORType', 'نوع الجواز'); need('PASSPORT_ISSUE_PLACE', 'دولة الإصدار');
   need('PASSPORT_ISSUE_DATE', 'تاريخ الإصدار'); need('PASSPORT_EXPIRY_DATe', 'تاريخ الانتهاء'); need('BIRTH_PLACE', 'مكان الميلاد'); need('BIRTH_DATE', 'تاريخ الميلاد');
@@ -201,4 +215,4 @@ function expiryInfo(expiryDate, entryDate, now = new Date()) {
   return { days: Math.round((exp - today) / 86400000), short: exp < limit, expired: exp < today };
 }
 
-module.exports = { expiryInfo, meta, resolve, sanitizeProfile, sanitizePerson, PROFILE_KEYS, PERSON_KEYS, OPT, mofaDate };
+module.exports = { setAutoEntryDays, getAutoEntryDays, autoEntryDate, expiryInfo, meta, resolve, sanitizeProfile, sanitizePerson, PROFILE_KEYS, PERSON_KEYS, OPT, mofaDate };

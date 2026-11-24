@@ -46,7 +46,7 @@ function brief(row, profile, pays) {
   return { id: row.id, name: row.name_ar, passportNo: row.passport_no, status: row.status, profileId: row.profile_id, profileName: profile ? profile.name : '',
     appNumber: row.app_number, visaKind: r.values.visaKind || '', embassy: r.values.embassy || '', visaNumber: (profile && profile.data && profile.data.visaNumber) || '', hasPhoto: !!row.personal_photo, hasPassport: !!row.passport_image, issues: r.issues.length, ready: r.ready, updatedAt: row.updated_at, filledAt: row.filled_at,
     stages: S.parse(row.stages), service: readiness(row, profile),
-    expiry: F.expiryInfo(json(row.data).expiryDate, json(row.data).expectedEntryDate || (profile && profile.data && profile.data.expectedEntryDate)), archived: !!(profile && profile.archived),
+    expiry: F.expiryInfo(json(row.data).expiryDate, F.autoEntryDate() || json(row.data).expectedEntryDate || (profile && profile.data && profile.data.expectedEntryDate)), archived: !!(profile && profile.archived),
     ...(pays ? { pay: A.balance(A.feeOf(json(row.data), profile && profile.data).fee, pays.get(row.id) || 0) } : {}) };
 }
 

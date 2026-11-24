@@ -80,7 +80,7 @@ const api = async (method, url, body, extra = {}) => {
   assert.strictEqual(up.status, 200);
   pl = (await api('GET', `/api/people/${id}/payload`)).json;
   assert.strictEqual(pl.ready, true, 'جاهز: ' + pl.issues.join('|'));
-  assert.strictEqual(pl.mofa.BIRTH_DATE, '1983/01/01'); assert.strictEqual(pl.mofa.ExpectedEntryDate, '2027/01/15');
+  assert.strictEqual(pl.mofa.BIRTH_DATE, '1983/01/01'); assert.strictEqual(pl.mofa.ExpectedEntryDate, require('../server/fields').autoEntryDate().replace(/-/g, '/'), 'التاريخ المتوقع تلقائي: النهارده + 17');
   // أسماء أطول من 15
   await api('PUT', `/api/people/${id}`, { profileId: profId, data: { nameAr: 'x', passportNo: 'A42014007', nameEnFamily: 'ABDELRAHMANELSAYEDX' } });
   assert.ok((await api('GET', `/api/people/${id}/payload`)).json.issues.some(x => x.includes('Family Name')), 'طول الاسم');

@@ -184,6 +184,13 @@
     await setSelect('NATIONALITY', m.NATIONALITY || 'EGY', 'الجنسية');
     await sleep(500);
     await setSelect('EmbassyCode', m.EmbassyCode, 'الممثلية');
+    /* تأشيرة «عمل»: المنصة بتطلب «هل يوجد مستند تأشيرة» و«رقم المستند» */
+    await sleep(500);
+    { const shownEl = (el) => !!el && el.offsetParent !== null; const ask = document.querySelector('.tr-event-is-document-exist'); const docBox = document.querySelector('.tr_DocumentNumber');
+      if (shownEl(ask) || shownEl(docBox) || String(m.VisaKind) === '1') {
+        if (m.DocumentNumber) { if (q('IsDocumentNoExist')) { setRadio('IsDocumentNoExist', '1', 'هل يوجد مستند تأشيرة: نعم'); await sleep(400); } setInput('DocumentNumber', m.DocumentNumber, 'رقم المستند'); }
+        else if (shownEl(ask) || shownEl(docBox)) note('رقم المستند', 'manual', 'مطلوب لتأشيرة «عمل»: اكتبه في الدفعة (رقم مستند التأشيرة) أو دوس «مستند التأشيرة فقط»');
+      } }
     setStatus('عدد مرات الدخول والصلاحية…');
     await sleep(500);
     await setSelect('NUMBER_OF_ENTRIES', m.NUMBER_OF_ENTRIES, 'عدد مرات الدخول', { firstIfEmpty: true });
@@ -261,6 +268,15 @@
       const status = (t) => bar('<span>🦅 ' + esc(ctx.name || '') + ' — ' + esc(t) + '</span>', 'info');
       status('بيملا الفورم…');
       try { await fillAll(ctx, status); } catch (e) { report.failed.push('حصل خطأ غير متوقع: ' + String(e && e.message || e)); }
+      /* أي خانة مطلوبة ظاهرة في الصفحة ولسه فاضية (مهم لأنواع التأشيرة اللي ليها خانات زيادة): بنعرضها بالاسم عشان تكمّلها بإيدك */
+      const pageEmpty = (() => { const out = new Set(); const form = document.getElementById('myform') || document;
+        form.querySelectorAll('input.required, select.required, textarea.required, input[aria-required="true"], select[aria-required="true"]').forEach((el) => {
+          if (el.disabled || el.type === 'hidden' || el.type === 'file' || el.type === 'radio' || el.type === 'checkbox' || el.offsetParent === null) return;
+          if (/captcha/i.test(el.id || el.name || '')) return; if (String(el.value || '').trim() !== '') return;
+          const grp = el.closest('.form-group'); let lab = '';
+          if (grp) { const labels = [...grp.querySelectorAll('label.control-label')]; const col = el.closest('[class*="col-"]'); const prev = col && col.previousElementSibling; lab = (prev && prev.matches('label') ? prev.textContent : (labels[0] && labels[0].textContent)) || ''; }
+          lab = String(lab || el.name || el.id).replace(/\s+/g, ' ').replace(/\*/g, '').trim().slice(0, 60); if (lab) out.add(lab); });
+        return [...out].slice(0, 15); })();
       try { sessionStorage.setItem(flagKey, '1'); } catch (e) { /* مش مهم */ }
       const cap = q('Captcha'); if (cap) mark(cap);
       for (const n of ['Endorsement', 'IsPrivacyPolicyAgreed', 'UmraTermsAndConditions']) { const c = document.querySelector('input[type="checkbox"][name="' + n + '"]'); if (c && !c.checked) { const p = c.closest('label,div') || c; mark(p); } }
@@ -269,7 +285,7 @@
         '<ol style="margin:4px 18px;padding:0"><li>راجع الخانات اللي حواليها إطار برتقالي</li><li>' + (ctx.declared ? 'الإقرارات اتعلّمت. اكتب الكابتشا' : 'علّم على الإقرارات واكتب الكابتشا') + '</li><li>دوس «حفظ»</li></ol>' +
         (ctx.issues.length ? '<div>⛔ في النظام:</div>' + list(ctx.issues) : '') + (report.failed.length ? '<div>❌ مش اتملى:</div>' + list(report.failed) : '') +
         (report.changed.length ? '<div>⚠️ اتغيّر عن ملف الضبط (راجعه):</div>' + list(report.changed) : '') +
-        (report.manual.length ? '<div>✋ فاضي في النظام (اكتبه بإيدك):</div>' + list(report.manual) : '') + (ctx.warns.length ? '<div>ℹ️</div>' + list(ctx.warns) : '') +
+        (report.manual.length ? '<div>✋ فاضي في النظام (اكتبه بإيدك):</div>' + list(report.manual) : '') + (pageEmpty.length ? '<div>📝 خانات مطلوبة في الصفحة لسه فاضية (املاها بإيدك):</div>' + list(pageEmpty) : '') + (ctx.warns.length ? '<div>ℹ️</div>' + list(ctx.warns) : '') +
         queueHtml(ctx) + '<div style="margin-top:6px"><button id="nesr-va-again" style="background:#fff;color:#1d4486;border:0;border-radius:8px;padding:6px 12px;font:700 12px Tahoma;cursor:pointer">املى تاني</button> <button id="nesr-va-hide" style="background:#ffffff33;color:#fff;border:1px solid #fff6;border-radius:8px;padding:6px 12px;font:700 12px Tahoma;cursor:pointer">إخفاء</button></div>', bad ? 'warn' : 'ok');
       wireNext(b);
       const again = b.querySelector('#nesr-va-again'); if (again) again.addEventListener('click', () => { try { sessionStorage.removeItem(flagKey); } catch (e) { /* مش مهم */ } run(); });

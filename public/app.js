@@ -134,6 +134,7 @@
     const jobs = uniq('job'); if (jobs.length === 1 && !(has('jobText') || {}).value && put('jobText', jobs[0])) done.push('المهنة (' + jobs[0] + ')');
     const embs = uniq('embassy'); const code = embs.length === 1 ? (opt('embassy').find((o) => o.t === embs[0]) || {}).v : ''; if (code && !(has('embassy') || {}).value && put('embassy', code)) done.push('الممثلية (' + embs[0] + ')');
     if (d.sponsorName && !(has('sponsorName') || {}).value && put('sponsorName', d.sponsorName)) done.push('اسم الجهة');
+    if (d.docNumber && put('docNumber', d.docNumber)) done.push('رقم مستند التأشيرة (' + d.docNumber + ')');
     const box = $('#visaDocBox');
     if (box) box.innerHTML = `<div class="card" style="background:var(--warn-bg);border-color:#ecd9a8;margin-top:8px"><b>من مستند التأشيرة${d.docNumber ? ' رقم ' + e(d.docNumber) : ''}${d.docDate ? ' (' + e(d.docDate) + ')' : ''}</b>
       <ul class="list">${done.length ? `<li>اتملّى في الملف: ${e(done.join('، '))}</li>` : '<li>مفيش حاجة اتملّت</li>'}${skipped.length ? `<li>كمّلها بإيدك: ${e(skipped.join('، '))}</li>` : ''}</ul></div>`;

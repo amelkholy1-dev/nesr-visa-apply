@@ -16,10 +16,15 @@ const admin = P.need('profiles.edit');
 const A = require('../accounts');
 const getSetting = async (k, def) => { const r = (await db.query('SELECT v FROM settings WHERE k = ?', [k]))[0]; if (!r) return def; try { return JSON.parse(r.v); } catch (e) { return def; } };
 const setSetting = (k, v) => db.query('INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)', [k, JSON.stringify(v)]);
+/* «التاريخ المتوقع للدخول» التلقائي: بيتحمّل من الإعدادات أول ما القاعدة تجهز */
+(async function loadEntrySetting() { for (let i = 0; i < 600; i++) { if (db.isReady()) { try { F.setAutoEntryDays((await getSetting('entry', { days: 17 })).days); } catch (e) { /* الافتراضي 17 */ } return; } await new Promise((r) => setTimeout(r, 1000)); } })();
+router.put('/settings/entry', P.need('users.manage'), async (req, res) => {
+  try { const days = Math.max(0, Math.min(365, parseInt(req.body && req.body.days, 10) || 0)); await setSetting('entry', { days }); F.setAutoEntryDays(days); require('../audit').log(req, 'settings', null, '', 'التاريخ المتوقع للدخول: ' + (days ? 'يوم الطلب + ' + days + ' يوم' : 'يدوي')); res.json({ ok: true, days }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
 router.get('/meta', async (req, res) => {
   let photo = { mode: 'off' }; try { photo = await getSetting('photo', photo); } catch (e) { /* مش مهم */ }
   let theme = 'slate'; try { theme = await getSetting('theme', theme); } catch (e) { /* مش مهم */ }
-  res.json({ ...F.meta(), ocr: !!config.geminiKey, stages: S.STAGES, brand: config.brand, brandTag: config.brandTag, perms: P.PERMS, payMethods: A.PAY_METHODS, photoProcess: photo.mode === 'clean' ? 'clean' : 'off', theme: ['slate', 'green', 'navy', 'warm'].includes(theme) ? theme : 'slate' });
+  res.json({ ...F.meta(), ocr: !!config.geminiKey, stages: S.STAGES, brand: config.brand, brandTag: config.brandTag, perms: P.PERMS, payMethods: A.PAY_METHODS, photoProcess: photo.mode === 'clean' ? 'clean' : 'off', autoEntryDays: F.getAutoEntryDays(), theme: ['slate', 'green', 'navy', 'warm'].includes(theme) ? theme : 'slate' });
 });
 router.put('/settings/theme', P.need('users.manage'), async (req, res) => {
   try { const t = ['slate', 'green', 'navy', 'warm'].includes(req.body && req.body.theme) ? req.body.theme : 'slate'; await setSetting('theme', t); require('../audit').log(req, 'settings', null, '', 'المظهر: ' + t); res.json({ ok: true, theme: t }); } catch (e) { res.status(500).json({ error: e.message }); }

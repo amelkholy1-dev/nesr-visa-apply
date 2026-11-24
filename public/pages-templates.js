@@ -31,6 +31,8 @@
     if (!can('users.manage')) { view.innerHTML = '<div class="card issues">الإعدادات للمدير بس.</div>'; return; }
     const mode = NA.meta.photoProcess === 'clean' ? 'clean' : 'off';
     view.innerHTML = `<div class="page-head"><div><h1>الإعدادات</h1><div class="sub">إعدادات عامة على كل المستخدمين.</div></div></div>
+      <div class="card"><h2>التاريخ المتوقع لدخول المملكة</h2><div class="muted small" style="margin-bottom:10px">بيتحسب لوحده وقت «عمل إنجاز»: تاريخ النهارده + عدد الأيام دي. اكتب 0 لو عايز تكتبه بإيدك في الدفعة/الشخص.</div>
+        <div class="row"><label class="f" style="width:200px">عدد الأيام بعد يوم الطلب<input type="number" id="entDays" min="0" max="365" value="${NA.meta.autoEntryDays === undefined ? 17 : NA.meta.autoEntryDays}"></label><button class="btn pri" id="entSave" type="button" style="align-self:end">حفظ</button></div></div>
       <div class="card"><h2>المظهر (الألوان)</h2><div class="muted small" style="margin-bottom:10px">دوس على أي مظهر يتجرّب فوراً، ودوس «حفظ المظهر» عشان يثبت لكل المستخدمين.</div>
         <div class="seg" id="themeBox">${[['slate', 'رمادي هادي', '#3a4f63', '#fff'], ['green', 'أخضر فاتح', '#2f6b4f', '#f3f7f4'], ['navy', 'كحلي (قايمة غامقة)', '#16233b', '#f2f4f8'], ['warm', 'دافئ (بيج)', '#8a5a2b', '#faf6ef']].map(([k, l, c1, c2]) => `<label data-t="${k}"><input type="radio" name="th" value="${k}"${(NA.meta.theme || 'slate') === k ? ' checked' : ''}> <b>${l}</b><span style="display:flex;gap:6px;margin-top:6px"><i style="width:34px;height:16px;border-radius:5px;background:${c1};display:block"></i><i style="width:34px;height:16px;border-radius:5px;background:${c2};border:1px solid #ccc;display:block"></i></span></label>`).join('')}</div>
         <div class="row" style="margin-top:12px"><button class="btn pri" id="thSave" type="button">حفظ المظهر</button></div></div>
@@ -74,6 +76,7 @@
     drawPrint();
     view.querySelectorAll('input[name=th]').forEach((r) => { r.onchange = () => { document.documentElement.dataset.theme = r.value; }; });
     $('#thSave').onclick = async () => { try { const v = view.querySelector('input[name=th]:checked').value; await api('PUT', '/settings/theme', { theme: v }); NA.meta.theme = v; toast('اتحفظ المظهر', 'ok'); } catch (er) { fail(er); } };
+    $('#entSave').onclick = async () => { try { const r = await api('PUT', '/settings/entry', { days: $('#entDays').value }); NA.meta.autoEntryDays = r.days; toast(r.days ? 'التاريخ المتوقع = يوم الطلب + ' + r.days + ' يوم' : 'التاريخ المتوقع بقى يدوي', 'ok'); } catch (er) { fail(er); } };
     $('#pmSave').onclick = async () => { try { const m = view.querySelector('input[name=pm]:checked').value; await api('PUT', '/settings/photo', { mode: m }); NA.meta.photoProcess = m; toast('اتحفظ', 'ok'); } catch (er) { fail(er); } };
     $('#pmFile').onchange = async () => {
       const f = $('#pmFile').files[0]; if (!f) return; const out = $('#pmOut'); out.textContent = 'بيعالج الصورة…';
