@@ -81,11 +81,12 @@
     const svcChips = (p) => SERVICES.map(([k, l]) => { const miss = (p.service || {})[k] || []; return miss.length ? `<span class="chip" title="${e(l + ' — ناقص: ' + miss.join('، '))}">${SHORT[k]} <b>${miss.length}</b></span>` : `<span class="chip ok" title="${e(l)}: جاهز">${SHORT[k]} ✓</span>`; }).join('');
     const stageCells = (p) => `<span class="stlist">${stages.map((x) => { const c = (p.stages || {})[x.k] || {}; return `<span class="sg" title="${e(x.label + ': ' + STATE_AR[c.state || ''] + (c.date ? ' ' + c.date : ''))}"><span class="dots"><i class="dot ${c.state || ''}"></i></span>${e(x.short || x.k)}</span>`; }).join('')}</span>`;
     /* قايمة إجراءات الصف: كل حاجة تتعمل من القايمة من غير ما تدخل على الشخص */
-    const closeMenu = () => { view.querySelectorAll('.amenu-list').forEach((m) => m.remove()); };
-    document.addEventListener('click', (ev) => { if (!ev.target.closest('.amenu')) closeMenu(); });
+    /* القايمة بتتحط فوق الصفحة كلها (مش جوه الجدول) عشان ما تتقصّش */
+    const closeMenu = () => { document.querySelectorAll('.amenu-list').forEach((m) => m.remove()); document.querySelectorAll('.act.on').forEach((b) => b.classList.remove('on')); };
+    if (!NA._menuWired) { NA._menuWired = true; document.addEventListener('click', (ev) => { if (!ev.target.closest('.amenu') && !ev.target.closest('.amenu-list')) document.querySelectorAll('.amenu-list').forEach((m) => m.remove()); }); const follow = (ev) => document.querySelectorAll('.amenu-list').forEach((m) => { if (ev && ev.target && ev.target.nodeType === 1 && m.contains(ev.target)) return; if (m._place) m._place(); }); window.addEventListener('scroll', follow, true); window.addEventListener('resize', follow); }
     const payGate = (p) => { const pay = p && p.pay; if (pay && (pay.state === 'unpaid' || pay.state === 'partial')) return confirm(`${p.name || 'الشخص'} لسه عليه ${Number(pay.remaining).toLocaleString('en-US')} ج (مدفوع ${Number(pay.paid).toLocaleString('en-US')} من ${Number(pay.fee).toLocaleString('en-US')}).\nتكمّل الحجز برضه؟`); return true; };
     const openMenu = (btn) => {
-      const wasOpen = btn.parentElement.querySelector('.amenu-list'); closeMenu(); if (wasOpen) return;
+      const wasOpen = btn.classList.contains('on'); closeMenu(); if (wasOpen) return; btn.classList.add('on');
       const id = btn.dataset.id; const p = all.find((x) => String(x.id) === String(id)) || {};
       const fill = can('people.fill'), mark = can('people.mark');
       const items = [
@@ -98,7 +99,9 @@
       ].filter(Boolean);
       const box = document.createElement('div'); box.className = 'amenu-list';
       box.innerHTML = items.map((it) => (it[0] === 'hr' ? '<hr>' : `<button type="button" data-a="${it[0]}">${e(it[1])}</button>`)).join('');
-      btn.parentElement.appendChild(box);
+      document.body.appendChild(box);
+      box._place = () => { if (!btn.isConnected) return box.remove(); const r = btn.getBoundingClientRect(); const w = box.offsetWidth, h = box.offsetHeight; const left = Math.min(Math.max(8, r.left), window.innerWidth - w - 8); let top = r.bottom + 4; if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 4); box.style.left = left + 'px'; box.style.top = top + 'px'; };
+      box._place();
       box.onclick = async (ev) => {
         const b = ev.target.closest('button'); if (!b) return; ev.stopPropagation(); const a = b.dataset.a; closeMenu();
         try {

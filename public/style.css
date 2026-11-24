@@ -252,3 +252,6 @@ td.pcell{min-width:150px}
 #rows td .chip{white-space:nowrap}
 body.app{grid-template-columns:232px minmax(0,1fr)}
 main{padding:20px 18px 80px}
+
+.amenu-list{position:fixed;inset-inline-end:auto;z-index:1000;max-height:calc(100vh - 16px);overflow:auto;min-width:230px}
+.act.on{background:var(--soft);border-color:var(--acc)}
