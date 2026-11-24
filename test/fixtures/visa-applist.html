@@ -1,0 +1,10 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>منصة التأشيرات (نسخة اختبار)</title></head><body>
+<!-- نسخة مبسّطة بأرقام وهمية من «قائمة طلبات التأشيرات» (visa.mofa.gov.sa/SmartForm) اللي المنصة بترجّعلها بعد «حفظ»: جدول jTable بيتحمّل متأخّر، ورقم الطلب من غير E. للاختبار بس. -->
+<div class="portlet-body form"><span class="caption-subject">قائمة طلبات التأشيرات</span><input id="AppNo"><input id="PassportNo">
+<div id="gridViewSearch"><div class="jtable-main-container"><table class="jtable"><thead><tr><th><span>رقم الطلب</span></th><th><span>الاسم</span></th><th><span>رقم الجواز</span></th><th><span>الجنسية الحالية</span></th><th><span>حالة الطلب</span></th><th><span>الاجراءات</span></th></tr></thead><tbody id="tb"><tr class="jtable-no-data-row"><td colspan="6">لا توجد بيانات!</td></tr></tbody></table></div></div></div>
+<script>
+setTimeout(function(){ document.getElementById('tb').innerHTML =
+ '<tr class="jtable-data-row"><td>830068985</td><td>BADR KHALIL</td><td>A42014007</td><td>مصر</td><td></td><td>تعديل</td></tr>' +
+ '<tr class="jtable-data-row"><td>829978980</td><td>OTHER PERSON</td><td>A43942163</td><td>مصر</td><td></td><td>تعديل</td></tr>' +
+ '<tr class="jtable-data-row"><td>829000001</td><td>BADR KHALIL</td><td>A42014007</td><td>مصر</td><td>تمت طباعة التأشيرة</td><td></td></tr>'; }, 700);
+</script></body></html>

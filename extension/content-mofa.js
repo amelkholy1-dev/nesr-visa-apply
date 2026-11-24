@@ -328,6 +328,37 @@
     bar('<span>✅ رقم الطلب <b dir="ltr">' + esc(app) + '</b> (جواز ' + esc(passport) + ') ' + (r && r.delivered ? 'اتبعت للنظام وبيتسجّل لوحده.' : 'اتحفظ وهيتسجّل أول ما تفتح النظام.') + '</span>', 'ok');
   }
 
+  /* بعد «حفظ» المنصة بترجّعك لـ «قائمة طلبات التأشيرات» (/SmartForm) والرقم في الجدول من غير E.
+     بندوّر على صف الشخص بالجواز (أحدث طلب) — من الجدول الظاهر، ولو مش ظاهر بنسأل نفس البحث اللي الصفحة بتعمله (/SmartForm/Search). */
+  async function onListPage(ctx) {
+    const filledHere = (() => { try { return sessionStorage.getItem('va_filled_' + ctx.personId + '_' + ctx.at) === '1'; } catch (e) { return false; } })();
+    if (!filledHere) return; /* الفورم ما اتملاش في التبويب ده: ممكن يكون طلب قديم، مش بنسجّل حاجة */
+    const pass = String((ctx.mofa && ctx.mofa.PASSPORTnumber) || '').toUpperCase().replace(/\s+/g, ''); if (!pass) return;
+    const kind = String((ctx.mofa && ctx.mofa.VisaKind) || '');
+    const sentKey = 'va_app_sent_' + ctx.personId + '_' + ctx.at; try { if (sessionStorage.getItem(sentKey)) return; } catch (e) { /* مش مهم */ }
+    bar('<span>🔎 بدوّر على رقم الطلب في «قائمة طلبات التأشيرات»…</span>', 'info');
+    const fromTable = () => {
+      const g = document.getElementById('gridViewSearch'); if (!g) return '';
+      const heads = [...g.querySelectorAll('thead th')].map((th) => norm(th.textContent)); const iId = heads.findIndex((h) => h.includes('رقم الطلب')), iP = heads.findIndex((h) => h.includes('رقم الجواز'));
+      if (iId < 0 || iP < 0) return '';
+      const ids = [...g.querySelectorAll('tr.jtable-data-row')].map((tr) => [...tr.children]).filter((td) => td[iP] && String(td[iP].textContent).toUpperCase().replace(/\s+/g, '') === pass).map((td) => String(td[iId].textContent).replace(/\D/g, '')).filter(Boolean);
+      return ids.sort((a, b) => Number(b) - Number(a))[0] || '';
+    };
+    let id = ''; for (let k = 0; k < 24 && !id; k++) { id = fromTable(); if (!id) await sleep(500); }
+    if (!id) {
+      try {
+        const r = await fetch('/SmartForm/Search?jtStartIndex=0&jtPageSize=20', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' }, body: 'AppNo=&PassportNo=' + encodeURIComponent(pass) });
+        const j = await r.json(); const recs = (j.Records || []).filter((x) => String(x.PASSPORT_NO || '').toUpperCase().replace(/\s+/g, '') === pass);
+        const sameKind = recs.filter((x) => !kind || String(x.Visakind) === kind); const pick = (sameKind.length ? sameKind : recs).map((x) => String(x.ID || '').replace(/\D/g, '')).filter(Boolean).sort((a, b) => Number(b) - Number(a));
+        id = pick[0] || '';
+      } catch (e) { /* هنقول تحت */ }
+    }
+    if (!id) return void bar('<span>⚠️ ملقتش طلب لجواز <b dir="ltr">' + esc(pass) + '</b> في القايمة. لو الطلب اتحفظ، سجّل رقمه في النظام بإيدك أو دوس «هات رقم إنجاز».</span>', 'warn');
+    const app = 'E' + id; try { sessionStorage.setItem(sentKey, app); } catch (e) { /* مش مهم */ }
+    const r = await send({ kind: 'result', data: { status: 'submitted', appNumber: app, passportNo: pass } });
+    wireNext(bar('<span>✅ رقم الطلب <b dir="ltr">' + esc(app) + '</b> ' + (r && r.delivered ? 'اتسجّل في النظام لوحده.' : 'اتحفظ وهيتسجّل أول ما تفتح النظام.') + '</span>' + queueHtml(ctx), 'ok'));
+  }
+
   /* صفحات الدخول/الرئيسية: الإضافة بتوجّهك لصفحة دخول الشركات وبعد ما تدخل بتفتح الفورم لوحدها */
   function onLoginFlow(ctx) {
     if (ctx.stage === 'login') bar('<div>🔐 <b>سجّل الدخول بحساب الشركة</b> (الإضافة مش بتكتب ولا بتخزّن كلمة السر).</div><div>أول ما تدخل هفتح فورم «طلب تأشيرة» وأملاه لـ <b>' + esc(ctx.name || '') + '</b>.</div>', 'info');
@@ -340,7 +371,8 @@
     const { ctx } = await send({ kind: 'get-ctx' });
     if (!ctx || !ctx.mofa) { if (/\/SmartForm\//i.test(location.pathname) && !/TraditionalApp/i.test(location.pathname)) await onAfterSaveSolo(); return; }
     if (document.getElementById('myform') && q('VisaKind')) return onForm(ctx);
-    if (/\/SmartForm\//i.test(location.pathname) && !/TraditionalApp/i.test(location.pathname)) return onAfterSave(ctx);
+    if (document.getElementById('gridViewSearch')) return onListPage(ctx);
+    if (/\/SmartForm(\/|$)/i.test(location.pathname) && !/TraditionalApp/i.test(location.pathname)) return onAfterSave(ctx);
     if (ctx.stage && ctx.stage !== 'form') return onLoginFlow(ctx);
   })();
 })();

@@ -50,6 +50,7 @@ const printEmptyFixture = visaPrintFixture.replace(/setTimeout\(function\(\)\{[\
 const visaResultFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-result.html'), 'utf8');
 const appnoSearchFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'appno-search.html'), 'utf8');
 const appnoResultFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'appno-result.html'), 'utf8');
+const appListFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-applist.html'), 'utf8');
 const labFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'lab-booking.html'), 'utf8');
 /* بيحاكي سلوك APEX في صفحة المعمل: الأقسام مخفية لحد اختيار نوع الجنسية، والرقم القومي بيحسب تاريخ الميلاد والجنس */
 const LMOCK = `<script>
@@ -105,6 +106,7 @@ const MOFA = {
       if (f.get('PassportNumber') === 'Z9999999') return page('لم يتم العثور على اي نتائج، يرجى التاكد من البيانات المدخلة');
       return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: appnoResultFixture.replace('PASSPORT_PLACEHOLDER', f.get('PassportNumber')) });
     }
+    if (/\/SmartForm\/?(\?.*)?$/i.test(rq.url()) && rq.method() === 'GET') return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: appListFixture });
     if (/\/SmartForm\/PrintApplication\//i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h2>تم تقديم الطلب</h2><div>رقم الطلب: 830068985</div><div>رقم الجواز : A12345678</div></body>' });
     if (/\/Home\/PrintVisa/i.test(rq.url())) { global.__printUrl = rq.url(); return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: global.__printEmpty ? printEmptyFixture : visaPrintFixture }); }
     if (global.__inquiry === 'broken' && /\/Home\/Index/i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h1>صفحة غريبة</h1></body>' });
@@ -151,6 +153,14 @@ const MOFA = {
   await app.waitForTimeout(1500);
   const got2 = await app.evaluate(() => window.got); const sub = got2.find((g) => g.status === 'submitted');
   assert.ok(sub && sub.appNumber === 'E123456789' && sub.personId === '7', 'رقم الطلب رجع للنظام: ' + JSON.stringify(got2));
+  /* بعد «حفظ» المنصة بترجّع لـ «قائمة طلبات التأشيرات» والرقم من غير E ← الإضافة بتلاقي صف الجواز (أحدث طلب) وتبعته بـ E */
+  const nGot = await app.evaluate(() => window.got.length);
+  await form.evaluate(() => { window.location.href = '/SmartForm'; });
+  await app.waitForFunction((n) => window.got.slice(n).some((g) => g.status === 'submitted'), nGot, { timeout: 20000 });
+  const lst = await app.evaluate((n) => window.got.slice(n).find((g) => g.status === 'submitted'), nGot);
+  assert.deepStrictEqual([lst.appNumber, lst.personId, lst.passportNo], ['E830068985', '7', 'A42014007'], 'رقم الطلب من قايمة الطلبات: ' + JSON.stringify(lst));
+  /* نفس الصفحة تاني (F5) مش بتبعت تاني */
+  await form.reload(); await form.waitForTimeout(2500); assert.strictEqual(await app.evaluate((n) => window.got.slice(n).filter((g) => g.status === 'submitted').length, nGot), 1, 'مبيتبعتش مرتين');
   /* سيناريو 2: مش مسجّل دخول ← المنصة بترجّع للرئيسية ← الإضافة بتوديك لصفحة دخول الشركات ← بعد الدخول بتفتح الفورم وتملاه */
   loggedIn = false;
   const [form2] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.fill(d), { personId: '8', name: 'شخص تاني', mofa: MOFA, issues: [], warns: [], photo: PHOTO })]).catch(() => [null]);
