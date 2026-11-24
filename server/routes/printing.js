@@ -30,13 +30,15 @@ function sanitize(x) {
   return t;
 }
 const getSettings = async () => { const r = (await db.query("SELECT v FROM settings WHERE k = 'labelPrint'"))[0]; return sanitize(r ? json(r.v, {}) : {}); };
-const agentOut = (r) => ({ agentId: r.agent_id, agentName: r.name, computerName: r.computer, printers: json(r.printers, []), defaultPrinter: r.default_printer, agentVersion: r.version, lastSeenAt: r.last_seen, isOnline: !!r.last_seen && Date.now() - new Date(r.last_seen).getTime() <= 90000 });
+/* «متصل» بيتحسب في SQL (ساعة القاعدة نفسها) مش في Node: لو منطقة الوقت مختلفة بينهم كان هيظهر «مش متصل» غلط */
+const AGENTS_SQL = 'SELECT *, (last_seen IS NOT NULL AND last_seen >= DATE_SUB(NOW(), INTERVAL 90 SECOND)) AS is_online, TIMESTAMPDIFF(SECOND, last_seen, NOW()) AS ago FROM print_agents ORDER BY last_seen DESC';
+const agentOut = (r) => ({ agentId: r.agent_id, agentName: r.name, computerName: r.computer, printers: json(r.printers, []), defaultPrinter: r.default_printer, agentVersion: r.version, lastSeenAt: r.last_seen, agoSec: r.ago === null || r.ago === undefined ? null : Number(r.ago), isOnline: !!r.is_online });
 
 router.get('/info', P.need('people.fill'), async (req, res) => {
   try {
-    const key = String(config.printAgentKey || ''); const agents = (await db.query('SELECT * FROM print_agents ORDER BY last_seen DESC')).map(agentOut);
+    const key = String(config.printAgentKey || ''); const agents = (await db.query(AGENTS_SQL)).map(agentOut);
     const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0]; const host = req.headers['x-forwarded-host'] || req.headers.host;
-    res.json({ configured: key.length >= 16, agentUrl: P.has(req, 'users.manage') && key.length >= 16 ? `${proto}://${host}/print-agent/${encodeURIComponent(key)}` : '', agents, settings: await getSettings(), canManage: P.has(req, 'users.manage') });
+    res.json({ configured: key.length >= 16, agentUrl: P.has(req, 'users.manage') && key.length >= 16 ? `${proto}://${host}/print-agent/${encodeURIComponent(key)}` : '', agents, settings: await getSettings(), canManage: P.has(req, 'users.manage'), agentLog: P.has(req, 'users.manage') ? require('../agentlog').list().map((x) => ({ ...x, ago: Math.round((Date.now() - x.t) / 1000) })) : [] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 router.put('/settings', P.need('users.manage'), async (req, res) => {
@@ -49,7 +51,7 @@ router.post('/jobs', P.need('people.fill'), async (req, res) => {
   try {
     const b = req.body || {}; const s = await getSettings();
     const payload = b.payload; if (!payload || typeof payload !== 'object' || Array.isArray(payload) || JSON.stringify(payload).length > 600000) return res.status(400).json({ error: 'بيانات الليبل غير صالحة' });
-    const agents = await db.query('SELECT * FROM print_agents ORDER BY last_seen DESC'); const online = agents.map(agentOut).filter((a) => a.isOnline);
+    const agents = await db.query(AGENTS_SQL); const online = agents.map(agentOut).filter((a) => a.isOnline);
     let agent = s.printAgentId ? agents.map(agentOut).find((a) => a.agentId === s.printAgentId) : (online.length === 1 ? online[0] : null);
     if (!agent) return res.status(400).json({ error: s.printAgentId ? 'جهاز الطباعة المختار مش مسجّل. افتح برنامج الطباعة واضغط «حفظ وتشغيل».' : online.length ? 'فيه أكتر من جهاز طباعة: اختار واحد من الإعدادات ← طباعة الباركود.' : 'مفيش جهاز طباعة متصل. شغّل برنامج طباعة الباركود على جهاز الطابعة (التفاصيل في الإعدادات).' });
     if (!agent.isOnline) return res.status(409).json({ error: `جهاز الطباعة «${agent.agentName || agent.agentId}» مش متصل دلوقتي. افتح برنامج الطباعة على جهازه واضغط «حفظ وتشغيل».` });

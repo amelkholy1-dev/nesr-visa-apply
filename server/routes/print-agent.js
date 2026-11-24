@@ -8,6 +8,7 @@ const db = require('../db');
 const config = require('../config');
 
 const router = express.Router();
+const agentlog = require('../agentlog');
 const json = (v, d) => { try { const x = JSON.parse(v); return x === null || x === undefined ? d : x; } catch (e) { return d; } };
 
 const keyOk = (req) => {
@@ -16,6 +17,7 @@ const keyOk = (req) => {
   return crypto.timingSafeEqual(crypto.createHash('sha256').update(got).digest(), crypto.createHash('sha256').update(want).digest());
 };
 router.use((req, res, next) => {
+  if (!req._agentLogged) { const method = req.method, p0 = (req.baseUrl + req.path); res.on('finish', () => agentlog.push({ method, path: p0, status: res.statusCode, ip: String(req.ip || '') })); }
   if (keyOk(req)) return next();
   res.status(403).json({ success: false, error: String(config.printAgentKey || '').length < 16 ? 'مفتاح برنامج الطباعة مش متظبط على السيرفر (PRINT_AGENT_KEY لازم 16 حرف على الأقل)' : 'مفتاح برنامج الطباعة غلط' });
 });
@@ -58,7 +60,7 @@ router.post('/agents/:agentId/jobs/:jobId/status', async (req, res) => {
 });
 
 router.get('/agents', async (req, res) => {
-  try { const rows = await db.query('SELECT * FROM print_agents ORDER BY last_seen DESC'); res.json({ success: true, agents: rows.map((r) => ({ agentId: r.agent_id, agentName: r.name, computerName: r.computer, printers: json(r.printers, []), defaultPrinter: r.default_printer, agentVersion: r.version, capabilities: json(r.capabilities, []), lastSeenAt: r.last_seen, isOnline: !!r.last_seen && Date.now() - new Date(r.last_seen).getTime() <= 90000 })) }); }
+  try { const rows = await db.query('SELECT *, (last_seen IS NOT NULL AND last_seen >= DATE_SUB(NOW(), INTERVAL 90 SECOND)) AS is_online FROM print_agents ORDER BY last_seen DESC'); res.json({ success: true, agents: rows.map((r) => ({ agentId: r.agent_id, agentName: r.name, computerName: r.computer, printers: json(r.printers, []), defaultPrinter: r.default_printer, agentVersion: r.version, capabilities: json(r.capabilities, []), lastSeenAt: r.last_seen, isOnline: !!r.is_online })) }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 const health = (req, res) => res.json({ success: true, message: 'Masar Print Agent API يعمل.' });

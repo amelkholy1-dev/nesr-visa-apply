@@ -19,7 +19,7 @@ app.use((req, res, next) => {
   next();
 });
 /* برنامج طباعة الباركود (Masar Print Agent) بيكلّم النظام على عنوان فيه المفتاح: /print-agent/<المفتاح>/api/... — بنحوّله لهيدر X-Agent-Key (زي نظام الجوازات بالظبط) */
-app.use((req, res, next) => { const m = /^\/print-agent\/([^/]+)(\/api\/.*)$/.exec(req.url); if (m) { try { req.headers['x-agent-key'] = decodeURIComponent(m[1]); } catch (e) { req.headers['x-agent-key'] = m[1]; } req.url = m[2]; } next(); });
+app.use((req, res, next) => { const m = /^\/print-agent\/([^/]+)(\/api\/.*)$/.exec(req.url); if (m) { req._agentLogged = true; const method = req.method, p0 = m[2].split('?')[0]; res.on('finish', () => require('./agentlog').push({ method, path: p0, status: res.statusCode, ip: String(req.ip || '') })); try { req.headers['x-agent-key'] = decodeURIComponent(m[1]); } catch (e) { req.headers['x-agent-key'] = m[1]; } req.url = m[2]; } next(); });
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/api/health', (req, res) => res.json({ ok: true, db: db.status() }));
