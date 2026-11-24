@@ -23,11 +23,17 @@ router.put('/settings/entry', P.need('users.manage'), async (req, res) => {
 });
 router.get('/meta', async (req, res) => {
   let photo = { mode: 'off' }; try { photo = await getSetting('photo', photo); } catch (e) { /* مش مهم */ }
-  let theme = 'slate'; try { theme = await getSetting('theme', theme); } catch (e) { /* مش مهم */ }
-  res.json({ ...F.meta(), ocr: !!config.geminiKey, stages: S.STAGES, brand: config.brand, brandTag: config.brandTag, perms: P.PERMS, payMethods: A.PAY_METHODS, photoProcess: photo.mode === 'clean' ? 'clean' : 'off', autoEntryDays: F.getAutoEntryDays(), theme: ['slate', 'green', 'navy', 'warm'].includes(theme) ? theme : 'slate' });
+  let look = { skin: 'petrol', dark: false }; try { look = await getSetting('look', look); } catch (e) { /* مش مهم */ }
+  res.json({ ...F.meta(), ocr: !!config.geminiKey, stages: S.STAGES, brand: config.brand, brandTag: config.brandTag, perms: P.PERMS, payMethods: A.PAY_METHODS, photoProcess: photo.mode === 'clean' ? 'clean' : 'off', autoEntryDays: F.getAutoEntryDays(), look: { skin: SKINS.includes(look && look.skin) ? look.skin : 'petrol', dark: !!(look && look.dark) } });
 });
-router.put('/settings/theme', P.need('users.manage'), async (req, res) => {
-  try { const t = ['slate', 'green', 'navy', 'warm'].includes(req.body && req.body.theme) ? req.body.theme : 'slate'; await setSetting('theme', t); require('../audit').log(req, 'settings', null, '', 'المظهر: ' + t); res.json({ ok: true, theme: t }); } catch (e) { res.status(500).json({ error: e.message }); }
+/* ألوان النظام: petrol (بترولي + برتقالي) · olive (زيتوني + بيج) + الوضع الليلي — لكل المستخدمين */
+const SKINS = ['petrol', 'olive'];
+router.put('/settings/look', P.need('users.manage'), async (req, res) => {
+  try {
+    const b = req.body || {}; const look = { skin: SKINS.includes(b.skin) ? b.skin : 'petrol', dark: !!b.dark };
+    await setSetting('look', look); require('../audit').log(req, 'settings', null, '', 'الألوان: ' + (look.skin === 'olive' ? 'زيتوني' : 'بترولي') + (look.dark ? ' (ليلي)' : ''));
+    res.json({ ok: true, look });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 /* معالجة الصورة الشخصية عند الرفع: off = زي ما هي (بتتصغّر بس) · clean = خلفية بيضاء + إزالة تشويش (بتتم في المتصفح) */
 router.put('/settings/photo', P.need('users.manage'), async (req, res) => {

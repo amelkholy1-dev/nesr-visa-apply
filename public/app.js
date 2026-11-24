@@ -32,6 +32,7 @@
     if (m.type === 'VA_ERROR') { toast(m.data && m.data.message || 'مشكلة في الإضافة', 'err'); bridge.pending.splice(0).forEach((f) => f(false)); }
     if (m.type === 'VA_RESULT' && m.data) onResult(m.data);
     if (m.type === 'VA_WAFIDRES_RESULT' && m.data) onWafidResult(m.data);
+    if (m.type === 'VA_WAFIDRES_MSG' && m.data) toast(m.data.message || 'وافد محتاج منك حاجة', m.data.kind === 'fail' ? 'err' : '');
     if (m.type === 'VA_VISAINFO_RESULT' && m.data) onVisaInfo(m.data);
     if (m.type === 'VA_VISAINFO_CAPTCHA' && m.data) onVisaCaptcha(m.data);
     if (m.type === 'VA_VISAINFO_DOC' && m.data) onVisaDoc(m.data);
@@ -193,27 +194,44 @@
     const digits = String(appNumber || '').replace(/\D/g, ''); if (!digits) return toast('الشخص ده لسه مالوش رقم طلب (إنجاز): سجّله أو دوس «هات رقم إنجاز» الأول', 'err');
     if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
     if (!extReady) return toast('إضافة Chrome مش متركّبة. من «إضافة Chrome» نزّلها وركّبها الأول.', 'err');
-    if (extVersion && verLess(extVersion, '1.17.0')) return toast(`الإضافة عندك قديمة (${extVersion}). طباعة ورقة النت محتاجة 1.17.0: من «إضافة Chrome» نزّل الجديدة، وفي chrome://extensions دوس Reload، وبعدين F5 هنا.`, 'err');
+    if (extVersion && verLess(extVersion, '1.18.0')) return toast(`الإضافة عندك قديمة (${extVersion}). طباعة ورقة النت محتاجة 1.18.0: من «إضافة Chrome» نزّل الجديدة، وفي chrome://extensions دوس Reload، وبعدين F5 هنا.`, 'err');
     const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_NETPRINT', data: { appNo: digits, name } }, location.origin); setTimeout(() => res(false), 4000); });
-    if (ok) toast('بيفتح «إنجاز» في المنصة، يكتب رقم الطلب E' + digits + ' ويطبع الصفحة الأولى…', 'ok'); else toast('الإضافة ما ردّتش: اعمل Reload للإضافة (لازم 1.17.0) وF5 للصفحة.', 'err');
+    if (ok) toast('بيفتح «إنجاز» في المنصة، يكتب رقم الطلب E' + digits + ' ويطبع الصفحة الأولى…', 'ok'); else toast('الإضافة ما ردّتش: اعمل Reload للإضافة (لازم 1.18.0) وF5 للصفحة.', 'err');
   }
   /* نتيجة الكشف الطبي (وافد): الإضافة بتفتح «Medical Examination Result» بالجواز، تنزّل الـ PDF وتطبعه، وترجّع النتيجة هنا */
   async function wafidResult(id) {
     if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
     if (!extReady) return toast('إضافة Chrome مش متركّبة. من «إضافة Chrome» نزّلها وركّبها الأول.', 'err');
-    if (extVersion && verLess(extVersion, '1.17.0')) return toast(`الإضافة عندك قديمة (${extVersion}). نتيجة وافد محتاجة 1.17.0: من «إضافة Chrome» نزّل الجديدة، وفي chrome://extensions دوس Reload، وبعدين F5 هنا.`, 'err');
+    if (extVersion && verLess(extVersion, '1.18.0')) return toast(`الإضافة عندك قديمة (${extVersion}). نتيجة وافد محتاجة 1.18.0: من «إضافة Chrome» نزّل الجديدة، وفي chrome://extensions دوس Reload، وبعدين F5 هنا.`, 'err');
     let d; try { d = await api('GET', `/people/${id}/appno-lookup`); } catch (er) { return fail(er); }
     if (!d.passportNo) return toast('رقم الجواز فاضي عند الشخص ده', 'err');
     const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_WAFIDRES', data: { personId: String(id), name: d.name, passportNo: d.passportNo, nationality: d.nationality || 'EGY' } }, location.origin); setTimeout(() => res(false), 4000); });
-    if (ok) toast('بيفتح نتيجة الكشف في وافد لجواز ' + d.passportNo + '…', 'ok'); else toast('الإضافة ما ردّتش: اعمل Reload للإضافة (لازم 1.17.0) وF5 للصفحة.', 'err');
+    if (ok) toast('بيجيب نتيجة الكشف من وافد لجواز ' + d.passportNo + ' (في الخلفية)…', 'ok'); else toast('الإضافة ما ردّتش: اعمل Reload للإضافة (لازم 1.18.0) وF5 للصفحة.', 'err');
+  }
+  /* النتيجة وصلت من وافد: بتتسجّل، والـ PDF بيتطبع من هنا على طول، وفيه زرار تنزيل */
+  function pdfPrint(url) {
+    const old = document.getElementById('naPdfFrame'); if (old) old.remove();
+    const fr = document.createElement('iframe'); fr.id = 'naPdfFrame'; fr.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;height:1000px;border:0';
+    fr.onload = () => setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { window.open(url, '_blank'); } }, 400);
+    fr.src = url; document.body.appendChild(fr);
   }
   async function onWafidResult(d) {
     if (!d.personId) return;
-    try {
-      const r = await api('POST', `/people/${d.personId}/wafid-result`, { status: d.status, statusText: d.statusText, examDate: d.examDate, center: d.center, passportNo: d.passportNo });
-      toast(r.status === 'fit' ? `نتيجة الكشف: Fit ✔ (اتعلّم «تم الفحص الطبي»${r.date ? ' بتاريخ ' + r.date : ''})` : r.status === 'unfit' ? 'نتيجة الكشف: Unfit (غير لائق) — اتسجّلت كملاحظة' : 'نتيجة الكشف اتسجّلت', r.status === 'unfit' ? 'err' : 'ok');
-      if (location.hash === '#/people/' + d.personId) pagePerson(d.personId);
-    } catch (er) { fail(er); }
+    let r = {}; try { r = await api('POST', `/people/${d.personId}/wafid-result`, { status: d.status, statusText: d.statusText, examDate: d.examDate, center: d.center, passportNo: d.passportNo }); } catch (er) { fail(er); }
+    let url = ''; if (d.pdf && /^data:application\/pdf;base64,/.test(d.pdf)) { try { const bin = atob(d.pdf.split(',')[1]); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); url = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' })); } catch (e) { url = ''; } }
+    if (location.hash === '#/people/' + d.personId) await pagePerson(d.personId);
+    const fname = 'wafid-' + (d.passportNo || d.personId) + '.pdf';
+    const st = d.status === 'fit' ? '<span class="chip ok">Fit — لائق</span>' : d.status === 'unfit' ? '<span class="chip bad">Unfit — غير لائق</span>' : `<span class="chip">${e(d.statusText || '—')}</span>`;
+    NA.modal(`<h2>نتيجة الكشف الطبي (وافد)</h2>
+      <div style="display:grid;gap:8px;font-size:14px"><div><b>${e(d.name || '')}</b> <span class="muted" dir="ltr">${e(d.passportNo || '')}</span></div><div>${st}</div>
+      <div class="muted">تاريخ الكشف: <b dir="ltr">${e(d.examDate || '—')}</b>${d.center ? ' · ' + e(d.center) : ''}</div>
+      ${r.status === 'fit' ? '<div class="small" style="color:var(--ok)">اتعلّم «تم الفحص الطبي» عند الشخص.</div>' : ''}
+      ${url ? '' : `<div class="issues small">الـ PDF ما اتجابش${d.pdfError ? ' (' + e(d.pdfError) + ')' : ''}.</div>`}</div>
+      <div class="foot"><button class="btn" id="wrX">قفل</button>${url ? `<a class="btn" id="wrDl" href="${url}" download="${e(fname)}">نزّل PDF</a><button class="btn pri" id="wrP">اطبع</button>` : ''}</div>`, (m, close) => {
+      m.querySelector('#wrX').onclick = close;
+      const p = m.querySelector('#wrP'); if (p) p.onclick = () => pdfPrint(url);
+    });
+    if (url) pdfPrint(url);
   }
   /* ===== أدوات ===== */
   const opt = (name) => (meta.options[name] || []);
@@ -263,10 +281,10 @@
   /* ===== الصفحات ===== */
   async function pageLogin() {
     $('#top').hidden = true; document.body.classList.remove('app');
-    const br = await fetch('/api/brand').then((r) => r.json()).catch(() => ({}));
+    const br = await fetch('/api/brand').then((r) => r.json()).catch(() => ({})); if (br.look) NA.applyLook(br.look);
     document.title = (br.brand || 'إنجاز') + ' — ' + (br.tag || 'نظام إدارة التأشيرات');
     view.innerHTML = `<div class="login-wrap"><div class="login-card">
-      <h1>${e(br.brand || 'إنجاز')}</h1><span class="tag">${e(br.tag || 'نظام إدارة التأشيرات')}</span>
+      <div class="login-logo">${NA.logoSvg(document.documentElement.getAttribute('data-skin'))}</div><h1>${e(br.brand || 'إنجاز')}</h1><span class="tag">${e(br.tag || 'نظام إدارة التأشيرات')}</span>
       <label class="f">اسم المستخدم<input id="u" autocomplete="username"></label><br>
       <label class="f">كلمة السر<input id="p" type="password" autocomplete="current-password"></label><br>
       <button id="go" class="btn pri" style="width:100%">دخول</button><p id="err" class="issues muted"></p></div></div>`;
@@ -422,7 +440,7 @@
           ${fieldsCard('بيانات حجز وافد', bothFields.filter((f) => tabOfK(f.k) === 'wafid'), 'بتتورّث من الدفعة. اكتب هنا بس لو الشخص ده مختلف.')}`,
         lab: () => `${svcHead('lab', 'المعامل (معامل الصحة العامة)', '<button class="btn pri" id="lab" title="يفتح موقع المعامل ويملا فورم الحجز">احجز المعمل</button>', 'رقم الموبايل والرقم القومي بتتكتب في تبويب «بيانات الشخص»، ورقم الطلب (إنجاز) في تبويب التأشيرة.')}
           ${fieldsCard('بيانات حجز المعمل', bothFields.filter((f) => tabOfK(f.k) === 'lab'), 'بتتورّث من الدفعة. اكتب هنا بس لو الشخص ده مختلف.')}`,
-        letters: () => `${svcHead('letters', 'الخطابات (خطاب الترشيح)', '<button class="btn pri" id="prep" title="باركود رقم الطلب + باركود التأشيرة (برنامج الطباعة) + خطاب الترشيح">تجهيز الطباعة</button><button class="btn" id="letSuezP" title="يفتح نافذة الطباعة على طول (صفحة واحدة)">اطبع خطاب السويس</button><button class="btn" id="letCairoP" title="يفتح نافذة الطباعة على طول (صفحة واحدة)">اطبع خطاب القاهرة</button><button class="btn" id="letSuez" title="يحمّل خطاب Word بنفس تنسيق نموذج المكتب">السويس (Word)</button><button class="btn" id="letCairo" title="يحمّل استمارة Word بنفس تنسيق نموذج المكتب">القاهرة (Word)</button>')}
+        letters: () => `${svcHead('letters', 'الخطابات (خطاب الترشيح)', '<button class="btn pri" id="prep" title="باركود رقم الطلب + باركود التأشيرة (برنامج الطباعة) + خطاب الترشيح">تجهيز الطباعة</button><button class="btn" id="letSuez" title="يحمّل خطاب Word بنفس تنسيق نموذج المكتب">خطاب السويس (Word)</button><button class="btn" id="letCairo" title="يحمّل استمارة Word بنفس تنسيق نموذج المكتب">خطاب القاهرة (Word)</button><button class="btn" id="letSuezP" title="تجريبي: بيفتح نافذة الطباعة على طول، والتنسيق ممكن يختلف عن Word">اطبع السويس (تجريبي)</button><button class="btn" id="letCairoP" title="تجريبي: بيفتح نافذة الطباعة على طول، والتنسيق ممكن يختلف عن Word">اطبع القاهرة (تجريبي)</button>')}
           ${summaryCard('بيانات الخطابات (من الدفعة)', ['visaNumber', 'unifiedNumber', 'sponsorName', 'jobText', 'visaDate', 'boxNumber', 'agencyNumber'])}`,
         accounts: () => `${fieldsCard('تكلفة الفرد', bothFields.filter((f) => tabOfK(f.k) === 'accounts'), 'لو سيبتها فاضية بتاخد تكلفة الدفعة.')}<div id="payBox"><div class="card muted">بيحمّل الحسابات…</div></div>`
       };
@@ -794,6 +812,7 @@
     if (!me) { try { me = (await api('GET', '/me')).user; } catch (er) { /* مش داخل */ } }
     if (!me) return pageLogin();
     if (!meta) meta = await api('GET', '/meta');
+    NA.applyLook(meta.look);
     document.body.classList.add('app'); { const rl = { admin: 'مدير', manager: 'مشرف', staff: 'موظف', viewer: 'مشاهد', custom: 'صلاحيات مخصّصة' }; const wr = $('#whoRole'); if (wr) wr.textContent = rl[me.role] || ''; } $('#top').hidden = false; $('#whoName').textContent = me.name; $('#whoAv').textContent = String(me.name || '?').trim().charAt(0);
     $('#brandName').textContent = meta.brand || 'إنجاز'; $('#brandTag').textContent = 'نظام إدارة التأشيرات'; document.title = (meta.brand || 'إنجاز') + ' — نظام إدارة التأشيرات';
     drawNav(h); setExt(); ping();
@@ -821,7 +840,7 @@
   Object.assign(NA, { api, e, $, view, toast, fail, STATUS, can, ping, fillRequest, wafidRequest, labRequest, letterDownload, netPrint, wafidResult, stageDots, fmtDate });
   Object.defineProperties(NA, { me: { get: () => me, configurable: true }, meta: { get: () => meta, configurable: true }, extReady: { get: () => extReady, configurable: true }, extVersion: { get: () => extVersion, configurable: true } });
   /* أزرار القايمة: رجوع/عودة، بحث عن شاشة، تصغير القايمة */
-  { const lg = document.querySelector('.sidebar .brand .logo'); if (lg) lg.innerHTML = NA.icon('template', 22); }
+  NA.applyLook((() => { try { return JSON.parse(localStorage.getItem('look') || '{}'); } catch (e) { return {}; } })());
   $('#navBack').innerHTML = NA.icon('back', 16) + ' رجوع'; $('#navFwd').innerHTML = 'عودة ' + NA.icon('fwd', 16); $('#sbCol').innerHTML = NA.icon('collapse', 16);
   $('#navBack').onclick = () => history.back(); $('#navFwd').onclick = () => history.forward();
   $('#navQ').oninput = () => drawNav(location.hash || '#/');

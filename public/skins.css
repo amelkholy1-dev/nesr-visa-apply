@@ -1,0 +1,89 @@
+/* ===== ألوان النظام (بتتغيّر من «الإعدادات»): بترولي + برتقالي (الافتراضي) · زيتوني + بيج · والوضع الليلي فوق أي واحد فيهم =====
+   بيتحمّل بعد theme.css وبيغيّر بس الألوان (مش الأماكن ولا المقاسات). */
+:root,:root[data-skin=petrol]{
+  --sb1:#0b4f5c;--sb2:#0f6f80;--pill:#f59e0b;--pill-fg:#1b1b1b;--hl:#fcd38a;--sb-fg:#e3f1f3;--sb-sub:#b5d6db;
+  --acc:#0f6f80;--acc-d:#0b5563;--acc-bg:#e2f1f3;--navy:#0b4f5c;--th-fg:#0b4f5c;--lab:#2f5560;
+  --bg:#f2f7f8;--th-bg:#e2eff1;--soft:#edf5f6;--stripe:#fafcfc;--hover-row:#eef6f7;--ring:rgba(15,111,128,.16);--tag-bg:#e8f2f3;--tag-fg:#46666c;--line:#dde8ea;--line2:#ebf1f2;--inp:#d3e1e4;
+  --k1:#0f6f80;--k2:#2f9e6b;--k3:#e0474f;--k4:#f08a24;--k5:#6a5aa8;--k6:#1597a6;--k7:#c99a1d;
+  --orange:#f08a24;--orange-d:#d9761a;--blue:#0f6f80;--blue-d:#0b5563
+}
+:root[data-skin=olive]{
+  --sb1:#3d5a35;--sb2:#557a49;--pill:#e9d8a6;--pill-fg:#2d2d2d;--hl:#e9d8a6;--sb-fg:#eef2e8;--sb-sub:#cdd8c3;
+  --acc:#4d6f42;--acc-d:#3d5a35;--acc-bg:#eaf0e4;--navy:#34502d;--th-fg:#3d5a35;--lab:#4a5a40;
+  --bg:#f6f5ef;--th-bg:#ecefe3;--soft:#f1f2ea;--stripe:#fbfbf7;--hover-row:#f1f3ea;--ring:rgba(77,111,66,.16);--tag-bg:#eef1e6;--tag-fg:#5c6851;--line:#e3e4d8;--line2:#efefe6;--inp:#d8dacb;
+  --k1:#557a49;--k2:#8a6d3b;--k3:#b5473f;--k4:#c9902a;--k5:#6f6a9a;--k6:#3f8a7a;--k7:#a8913a;
+  --orange:#c9902a;--orange-d:#ab7a20;--blue:#4d6f42;--blue-d:#3d5a35
+}
+/* الوضع الليلي */
+:root[data-mode=dark]{
+  --bg:#0f1417;--card:#171e22;--line:#283238;--line2:#20292e;--text:#e5ebee;--sub:#9aa8b0;--soft:#1d262b;--th-bg:#1d282d;--stripe:#151b1f;--hover-row:#1c262b;
+  --acc-bg:color-mix(in srgb,var(--acc) 22%,transparent);--tag-bg:#1f292e;--tag-fg:#a9b7bf;--inp:#33404a;--lab:#b6c4cc;--navy:#e5ebee;--th-fg:#cfe0e4;
+  --ok-bg:rgba(34,160,90,.16);--warn-bg:rgba(220,150,40,.16);--bad-bg:rgba(220,60,60,.16);--shadow:0 1px 3px rgba(0,0,0,.35);
+  color-scheme:dark
+}
+:root[data-mode=dark][data-skin=olive]{--bg:#121410;--card:#1b1e18;--line:#2d3228;--line2:#252920;--soft:#20241c;--th-bg:#22271d;--stripe:#181b15;--hover-row:#22271d;--th-fg:#dfe6d2}
+:root[data-mode=dark][data-skin=petrol] .sidebar,:root[data-mode=dark]:not([data-skin]) .sidebar{--sb1:#082f37;--sb2:#0b4652}
+:root[data-mode=dark][data-skin=olive] .sidebar{--sb1:#263820;--sb2:#344b2d}
+
+/* القايمة الجانبية */
+.sidebar{background:linear-gradient(180deg,var(--sb1) 0%,var(--sb2) 100%);color:var(--sb-fg)}
+.sidebar .brand small{color:var(--hl)}
+.sidebar .brand .logo{background:transparent;box-shadow:none;width:44px;height:44px;border-radius:12px}
+.sidebar .brand .logo svg{width:44px;height:44px;display:block}
+.sb-search input::placeholder{color:var(--sb-sub)}
+.sb-col{color:var(--sb-sub)}
+nav .nv{color:var(--sb-fg)}
+nav a.nv.on{box-shadow:inset -3px 0 0 var(--pill)}
+nav .ng.act>.nh{color:var(--hl);box-shadow:inset -3px 0 0 var(--pill)}
+nav .nk a{color:var(--sb-fg);opacity:.92}nav .nk a:hover{opacity:1}
+nav .nk a.on{background:var(--pill);color:var(--pill-fg);opacity:1;box-shadow:0 2px 8px color-mix(in srgb,var(--pill) 40%,transparent)}
+.who .me small{color:var(--sb-sub)}
+.who .av{background:var(--pill);color:var(--pill-fg)}
+.who .pill.warn{color:var(--hl)}
+
+/* المحتوى */
+h1,h2{color:var(--navy)}
+label.f{color:var(--lab)}
+label.f input,label.f select,label.f textarea,.stg select,.stg input,.filters input,.filters select,.f2 input{border-color:var(--inp);background:var(--card);color:var(--text)}
+th{color:var(--th-fg)}
+.btn{background:var(--card);color:var(--text)}
+.btn.pri,.btn.blue{box-shadow:0 2px 6px color-mix(in srgb,var(--acc) 28%,transparent)}
+.btn.orange{box-shadow:0 2px 6px color-mix(in srgb,var(--orange) 28%,transparent)}
+.btn.danger{background:var(--card)}
+.fchip{background:var(--card)}
+.act{border-color:color-mix(in srgb,var(--acc) 30%,var(--line))}
+.banner{background:linear-gradient(135deg,var(--sb2),var(--sb1));box-shadow:0 8px 20px color-mix(in srgb,var(--sb1) 30%,transparent)}
+.banner .bs{color:var(--sb-sub)}
+.kc.blue{background:linear-gradient(135deg,var(--sb2),var(--sb1))}
+.money>div,.wcard{background:var(--card)}
+.wic.k-bank{background:var(--acc-bg);color:var(--acc)}
+.bulkbar{background:linear-gradient(135deg,var(--sb1),var(--sb2))}
+.bulkbar .btn.pri{background:var(--pill);border-color:var(--pill);color:var(--pill-fg)}
+.login-wrap{background:linear-gradient(160deg,var(--sb1) 0%,var(--sb2) 70%)}
+.login-logo{display:flex;justify-content:center;margin-bottom:6px}.login-logo svg{width:72px;height:72px;filter:drop-shadow(0 6px 14px rgba(0,0,0,.18))}
+
+/* الوضع الليلي: الحاجات اللي لونها أبيض ثابت */
+:root[data-mode=dark] body{background:var(--bg);color:var(--text)}
+:root[data-mode=dark] .card,:root[data-mode=dark] .page-head,:root[data-mode=dark] .modal,:root[data-mode=dark] .amenu-list,:root[data-mode=dark] .login-card,:root[data-mode=dark] .alert-box,:root[data-mode=dark] .vcard{background:var(--card);color:var(--text);border-color:var(--line)}
+:root[data-mode=dark] input,:root[data-mode=dark] select,:root[data-mode=dark] textarea{background:var(--card);color:var(--text);border-color:var(--inp)}
+:root[data-mode=dark] td{border-color:var(--line2)}
+:root[data-mode=dark] .chip,:root[data-mode=dark] .pill{background:#232d33;color:#b9c6cd}
+:root[data-mode=dark] .chip.ok,:root[data-mode=dark] .pill.ok,:root[data-mode=dark] .tbadge.ok{color:#6fd39b}
+:root[data-mode=dark] .chip.bad,:root[data-mode=dark] .pill.bad{color:#ff8a8a}
+:root[data-mode=dark] .chip.warn,:root[data-mode=dark] .pill.warn,:root[data-mode=dark] .tbadge.bad{color:#f2c36b}
+:root[data-mode=dark] .chip.acc,:root[data-mode=dark] .pill.acc,:root[data-mode=dark] a,:root[data-mode=dark] .lnk,:root[data-mode=dark] .ibtn,:root[data-mode=dark] .tabb.on{color:color-mix(in srgb,var(--acc) 55%,#fff)}
+:root[data-mode=dark] .muted,:root[data-mode=dark] .small.muted{color:var(--sub)}
+:root[data-mode=dark] .modal-bg,:root[data-mode=dark] .overlay{background:rgba(0,0,0,.6)}
+:root[data-mode=dark] .money b,:root[data-mode=dark] .wcard .wn b,:root[data-mode=dark] .vcard .vt b{color:var(--text)}
+:root[data-mode=dark] .wcard .wm b{color:var(--text)}
+:root[data-mode=dark] .actions{background:linear-gradient(to top,var(--bg) 70%,transparent)}
+:root[data-mode=dark] hr{border-color:var(--line)}
+:root[data-mode=dark] ::placeholder{color:#6f7d85}
+/* اختيار الألوان في الإعدادات */
+.lookpick{display:flex;gap:12px;flex-wrap:wrap}
+.lookopt{display:flex;align-items:center;gap:10px;border:2px solid var(--line);border-radius:12px;padding:10px 14px;cursor:pointer;background:var(--card)}
+.lookopt:has(input:checked){border-color:var(--acc);box-shadow:0 0 0 3px var(--ring)}
+.lookopt .sw{width:46px;height:30px;border-radius:8px;position:relative;display:block}.lookopt .sw i{position:absolute;left:6px;bottom:6px;width:14px;height:14px;border-radius:50%}
+:root[data-mode=dark] .pv-empty,:root[data-mode=dark] .drop,:root[data-mode=dark] .dz{background:var(--soft)!important;color:var(--sub);border-color:var(--inp)!important}
+:root[data-mode=dark] .wic.k-cash{background:rgba(34,160,90,.18);color:#6fd39b}:root[data-mode=dark] .wic.k-wallet{background:rgba(220,60,60,.18);color:#ff8a8a}
+:root[data-mode=dark] .issues{color:#ff9a9a}

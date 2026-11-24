@@ -133,8 +133,10 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       const p = msg.payload || {};
       const ctx = { personId: String(p.personId || '').slice(0, 12), name: String(p.name || '').slice(0, 120), passportNo: String(p.passportNo || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20), nationality: String(p.nationality || 'EGY').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3), print: p.print !== false, originTabId: sender.tab && sender.tab.id, stage: '', at: Date.now() };
       if (!ctx.passportNo) { reply({ ok: false }); return; }
-      const tab = await chrome.tabs.create({ url: WAFID_RESULT_URL, active: true });
-      await store.set({ ['rctx_' + tab.id]: ctx });
+      /* في الخلفية: بيظهر بس لو وافد محتاج منك حاجة */
+      const old = await store.get('wresTab'); if (old.wresTab) { try { await chrome.tabs.remove(old.wresTab); } catch (e) { /* اتقفل */ } }
+      const tab = await chrome.tabs.create({ url: WAFID_RESULT_URL, active: false });
+      await store.set({ ['rctx_' + tab.id]: ctx, wresTab: tab.id });
       reply({ ok: true });
     } else if (msg.kind === 'get-wafidres-ctx') {
       const key = 'rctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); reply({ ctx: o[key] || null });
@@ -144,7 +146,16 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       const key = 'rctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
       const t = await findAppTab(ctx.originTabId);
       if (!t) { reply({ ok: false }); return; }
-      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-wafidres', data: { ...(msg.data || {}), personId: ctx.personId } }); reply({ ok: true }); } catch (e) { reply({ ok: false }); }
+      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-wafidres', data: { ...(msg.data || {}), personId: ctx.personId } }); reply({ ok: true }); } catch (e) { reply({ ok: false }); return; }
+      try { await chrome.tabs.remove(sender.tab.id); await store.remove('wresTab'); } catch (e) { /* اتقفل */ }
+    } else if (msg.kind === 'wafidres-msg') {
+      /* manual ← التبويب بيظهرلك · fail ← مفيش نتيجة: التبويب بيتقفل */
+      const key = 'rctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
+      const d = msg.data || {}; const t = await findAppTab(ctx.originTabId);
+      if (t) { try { await chrome.tabs.sendMessage(t.id, { kind: 'va-wafidres-msg', data: { kind: d.kind === 'fail' ? 'fail' : 'manual', message: String(d.message || '').slice(0, 300), personId: ctx.personId } }); } catch (e) { /* مش مهم */ } }
+      if (d.kind === 'fail') { try { await chrome.tabs.remove(sender.tab.id); await store.remove('wresTab'); } catch (e) { /* اتقفل */ } }
+      else { try { await chrome.tabs.update(sender.tab.id, { active: true }); const tb = await chrome.tabs.get(sender.tab.id); if (tb.windowId) await chrome.windows.update(tb.windowId, { focused: true }); } catch (e) { /* مش مهم */ } }
+      reply({ ok: true });
     } else if (msg.kind === 'open-appno') {
       /* رقم الطلب (إنجاز): تبويب مخفي بيفتح «البحث عن طلب مقدم»، والكابتشا بتتكتب في صفحة النظام */
       const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now(), stage: '' };

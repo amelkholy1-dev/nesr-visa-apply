@@ -27,7 +27,12 @@ router.post('/login', async (req, res) => {
 
 router.post('/logout', (req, res) => { auth.clearCookie(res); res.json({ ok: true }); });
 /* اسم النظام (للشاشة قبل الدخول) */
-router.get('/brand', (req, res) => res.json({ brand: config.brand, tag: config.brandTag }));
+router.get('/brand', async (req, res) => {
+  /* الألوان (للصفحة الدخول كمان) */
+  let look = { skin: 'petrol', dark: false };
+  try { const r = (await db.query("SELECT v FROM settings WHERE k = 'look'"))[0]; if (r) look = JSON.parse(r.v) || look; } catch (e) { /* القاعدة لسه مش جاهزة */ }
+  res.json({ brand: config.brand, tag: config.brandTag, look: { skin: look.skin === 'olive' ? 'olive' : 'petrol', dark: !!look.dark } });
+});
 
 /* من هنا لتحت: لازم دخول */
 router.use(async (req, res, next) => {

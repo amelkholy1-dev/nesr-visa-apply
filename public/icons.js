@@ -42,4 +42,23 @@
     building: '<rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3"/>'
   };
   NA.icon = (n, size) => `<svg class="ic" viewBox="0 0 24 24" width="${size || 18}" height="${size || 18}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || P.file}</svg>`;
+  /* لوجو «إنجاز»: ورقة (طلب) عليها علامة صح، بألوان الشكل المختار. tile = لون الخلفية، doc = الورقة، acc = علامة الصح */
+  const SKIN = { petrol: { p: '#0f6f80', d: '#0b4f5c', a: '#f59e0b' }, olive: { p: '#557a49', d: '#3d5a35', a: '#d9b45a' } };
+  NA.logoSvg = (skin, opts) => {
+    const c = SKIN[skin] || SKIN.petrol; const o = opts || {}; const tile = o.tile || c.p, doc = o.doc || '#fff', line = o.line || c.p, acc = c.a;
+    return `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="إنجاز"><rect width="64" height="64" rx="16" fill="${tile}"/>`
+      + `<path d="M19 10h19l11 11v29a4 4 0 0 1-4 4H19a4 4 0 0 1-4-4V14a4 4 0 0 1 4-4z" fill="${doc}"/>`
+      + `<path d="M38 10v8a3 3 0 0 0 3 3h8z" fill="${line}" opacity=".28"/>`
+      + `<rect x="21" y="24" width="15" height="3.4" rx="1.7" fill="${line}" opacity=".55"/><rect x="21" y="31" width="21" height="3.4" rx="1.7" fill="${line}" opacity=".35"/><rect x="21" y="38" width="11" height="3.4" rx="1.7" fill="${line}" opacity=".35"/>`
+      + `<circle cx="44" cy="45" r="12" fill="${acc}" stroke="${tile}" stroke-width="3.5"/><path d="M38.6 45.2l3.9 3.9 7.2-7.6" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  };
+  /* الألوان + الوضع الليلي + أيقونة التاب */
+  NA.applyLook = (look) => {
+    const l = look || {}; const skin = l.skin === 'olive' ? 'olive' : 'petrol';
+    document.documentElement.setAttribute('data-skin', skin); if (l.dark) document.documentElement.setAttribute('data-mode', 'dark'); else document.documentElement.removeAttribute('data-mode');
+    try { localStorage.setItem('look', JSON.stringify({ skin, dark: !!l.dark })); } catch (e) { /* مش مهم */ }
+    let fav = document.querySelector('link[rel="icon"]'); if (!fav) { fav = document.createElement('link'); fav.rel = 'icon'; document.head.appendChild(fav); }
+    fav.type = 'image/svg+xml'; fav.href = 'data:image/svg+xml,' + encodeURIComponent(NA.logoSvg(skin));
+    const lg = document.querySelector('.sidebar .brand .logo'); if (lg) lg.innerHTML = NA.logoSvg(skin, { tile: '#ffffff', doc: SKIN[skin].p, line: '#fff' });
+  };
 })();

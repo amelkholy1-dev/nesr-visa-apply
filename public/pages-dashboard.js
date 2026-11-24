@@ -30,14 +30,14 @@
     view.innerHTML = `<div class="page-head"><div><h1>لوحة التحكم</h1><div class="sub">${e(NA.meta.brandTag || '')}</div></div>
       <div class="sp">${can('people.edit') ? '<a href="#/people/new" class="btn pri" style="text-decoration:none">+ شخص جديد</a><a href="#/bulk" class="btn" style="text-decoration:none">رفع جماعي</a>' : ''}<a href="#/people" class="btn" style="text-decoration:none">كل الأشخاص</a></div></div>
       <div class="kpis">
-        ${kpi(T, 'إجمالي الأشخاص', d.visas.filter((v) => v.id).length + ' دفعة/تأشيرة', '#2559b8', {})}
-        ${kpi(sd('sent').done, 'اتبعتوا للمنصة', pct(sd('sent').done, T) + '% من الكل', '#22b35e', { sf: 'd:sent' })}
-        ${kpi(d.byStatus.waiting || 0, 'مستني تأمين الجواز', '', '#e53945', { st: 'waiting' })}
-        ${kpi(sd('medical').done + sd('medical').booked, 'فحص طبي (وافد)', sd('medical').done + ' تم · ' + sd('medical').booked + ' محجوز', '#f08c1a', { sf: 'd:medical' })}
-        ${kpi(sd('lab').done + sd('lab').booked, 'معمل', sd('lab').done + ' تم · ' + sd('lab').booked + ' محجوز', '#7c4dcc', { sf: 'd:lab' })}
-        ${kpi(sd('letter').done, 'خطابات ترشيح اتطبعت', pct(sd('letter').done, T) + '%', '#0f9d8a', { sf: 'd:letter' })}
-        ${kpi(a.expiringCount + a.expiredCount, 'جوازات محتاجة انتباه', a.expiredCount + ' منتهي · ' + a.expiringCount + ' قريب الانتهاء', '#d4a017', { ex: true })}
-        ${d.accounts ? kpi(Number(d.accounts.remaining).toLocaleString('en-US') + ' ج', 'متبقي على الأشخاص', 'مدفوع ' + Number(d.accounts.paid).toLocaleString('en-US') + ' من ' + Number(d.accounts.due).toLocaleString('en-US') + ' · لسه ما دفعوش: ' + d.accounts.unpaid, '#c92a36', null, '#/treasury/dues') : ''}
+        ${kpi(T, 'إجمالي الأشخاص', d.visas.filter((v) => v.id).length + ' دفعة/تأشيرة', 'var(--k1)', {})}
+        ${kpi(sd('sent').done, 'اتبعتوا للمنصة', pct(sd('sent').done, T) + '% من الكل', 'var(--k2)', { sf: 'd:sent' })}
+        ${kpi(d.byStatus.waiting || 0, 'مستني تأمين الجواز', '', 'var(--k3)', { st: 'waiting' })}
+        ${kpi(sd('medical').done + sd('medical').booked, 'فحص طبي (وافد)', sd('medical').done + ' تم · ' + sd('medical').booked + ' محجوز', 'var(--k4)', { sf: 'd:medical' })}
+        ${kpi(sd('lab').done + sd('lab').booked, 'معمل', sd('lab').done + ' تم · ' + sd('lab').booked + ' محجوز', 'var(--k5)', { sf: 'd:lab' })}
+        ${kpi(sd('letter').done, 'خطابات ترشيح اتطبعت', pct(sd('letter').done, T) + '%', 'var(--k6)', { sf: 'd:letter' })}
+        ${kpi(a.expiringCount + a.expiredCount, 'جوازات محتاجة انتباه', a.expiredCount + ' منتهي · ' + a.expiringCount + ' قريب الانتهاء', 'var(--k7)', { ex: true })}
+        ${d.accounts ? kpi(Number(d.accounts.remaining).toLocaleString('en-US') + ' ج', 'متبقي على الأشخاص', 'مدفوع ' + Number(d.accounts.paid).toLocaleString('en-US') + ' من ' + Number(d.accounts.due).toLocaleString('en-US') + ' · لسه ما دفعوش: ' + d.accounts.unpaid, 'var(--k3)', null, '#/treasury/dues') : ''}
       </div>
       <div class="two"><div class="card"><h2>مسار الإنجاز</h2><div class="legend"><span style="--c:var(--ok)">تم</span><span style="--c:#e0a92b">محجوز</span><span style="--c:#cfd8d8">لسه</span></div>${['sent', 'medical', 'lab', 'letter'].map(stageBar).join('')}</div>
         <div class="card"><h2>الجاهزية لكل خدمة (بيانات كاملة)</h2>${['mofa', 'wafid', 'lab', 'suez', 'cairo'].map(svcBar).join('')}<div class="muted small" style="margin-top:6px">«جاهز» يعني كل البيانات المطلوبة للخدمة دي موجودة. افتح الشخص تشوف الناقص.</div></div></div>

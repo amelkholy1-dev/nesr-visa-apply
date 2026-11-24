@@ -3,6 +3,7 @@
    وفي صفحة الورقة بيطبع الصفحة الأولى بس (بنفس مقاسها، من غير أزرار المنصة ولا الهيدر والفوتر). */
 (function () {
   const MAIN_URL = 'https://visa.mofa.gov.sa/Enjaz/Main';
+  const LOGIN_URL = 'https://visa.mofa.gov.sa/Account/Login/enjazcompany';
   const send = (msg) => new Promise((res) => { try { chrome.runtime.sendMessage(msg, (r) => res(r || {})); } catch (e) { res({}); } });
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -81,9 +82,13 @@
     if (kind === 'print') return onPrintPage(ctx, want, ctx.stage !== 'printed'); /* لو اتطبعت قبل كده في التبويب ده: بنجهّزها بس من غير ما نفتح الطباعة تاني */
     if (kind === 'main') return onMain(ctx, want);
     if (/\/Account\/Login/i.test(location.pathname)) { await send({ kind: 'net-stage', stage: 'login' }); bar('🔐 سجّل دخولك في المنصة بحساب الشركة، وأنا هكمّل لوحدي وأفتح «إنجاز» وأطبع ورقة الطلب <b dir="ltr">' + esc(want) + '</b>.'); return; }
-    /* أي صفحة تانية (الرئيسية بعد الدخول مثلاً): نروح لـ «إنجاز» مرة واحدة */
+    /* مش داخل المنصة (الصفحة الرئيسية فيها زرار «الدخول» ومفيش اسم المستخدم): نوديك لصفحة دخول الشركات، وبعد الدخول نرجع لـ «إنجاز» */
+    const loggedIn = !!document.querySelector('.logged-name-user, .header-logged');
+    if (!loggedIn && ctx.stage !== 'login') { await send({ kind: 'net-stage', stage: 'login' }); bar('🔐 إنت مش داخل المنصة: بفتحلك صفحة دخول الشركات…'); location.href = LOGIN_URL; return; }
+    if (!loggedIn) { const b = bar('🔐 سجّل دخولك في المنصة بحساب الشركة وأنا هكمّل لوحدي. <button id="nesr-net-go" style="' + BTN + '">صفحة الدخول</button>', true); b.querySelector('#nesr-net-go').onclick = () => { location.href = LOGIN_URL; }; return; }
+    /* داخل المنصة وفي صفحة تانية (الرئيسية بعد الدخول مثلاً): نروح لـ «إنجاز» */
     if (ctx.stage === '' || ctx.stage === 'login') { await send({ kind: 'net-stage', stage: 'main' }); location.href = MAIN_URL; return; }
-    const b = bar('⚠️ مقدرتش أوصل لصفحة «إنجاز». افتحها من القايمة (الرئيسية) وأنا هكتب الرقم وأطبع. <button id="nesr-net-go" style="' + BTN + '">افتح إنجاز</button>', true);
+    const b = bar('⚠️ مقدرتش أوصل لصفحة «إنجاز». <button id="nesr-net-go" style="' + BTN + '">افتح إنجاز</button>', true);
     b.querySelector('#nesr-net-go').onclick = async () => { await send({ kind: 'net-stage', stage: 'main' }); location.href = MAIN_URL; };
   })();
 })();

@@ -61,6 +61,11 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     assert.strictEqual(await page.evaluate((pid) => NA.letterPrint([{ id: pid, kind: 'suez' }, { id: pid, kind: 'cairo' }], { noConfirm: true, noPrint: true }), id), 2);
     const lp = await page.evaluate(() => { const f = document.getElementById('naLetterFrame'); const d = f.contentDocument; return { ready: f.dataset.ready, imgs: d.images.length, text: d.body.innerText.length }; });
     assert.ok(lp.ready === '2' && lp.text > 200, 'الخطابات اتعرضت للطباعة صفحة لكل خطاب: ' + JSON.stringify(lp));
+    /* نتيجة وافد وصلت من الإضافة: النظام بيعرضها وبيسجّل Fit وفيه زرار تنزيل الـ PDF */
+    await page.evaluate((pid) => window.postMessage({ source: 'nesr-visaapply-ext', type: 'VA_WAFIDRES_RESULT', data: { personId: pid, status: 'fit', statusText: 'Fit', examDate: '2026-08-23', center: 'Test Clinic', passportNo: 'A42014007', name: 'TEST', pdf: 'data:application/pdf;base64,' + btoa('%PDF-1.4\n%%EOF') } }, location.origin), id);
+    await page.waitForSelector('#wrDl'); assert.ok((await page.textContent('.modal')).includes('Fit'), 'نتيجة وافد ظاهرة');
+    const med = await page.evaluate(async (pid) => (await (await fetch('/api/people/' + pid)).json()).person.stages.medical, id); assert.deepStrictEqual([med.state, med.date], ['done', '2026-08-23'], 'Fit اتسجّل: ' + JSON.stringify(med));
+    await page.click('#wrX');
     await tab('personal');
     assert.ok((await page.textContent('body')).includes('الصورة الشخصية ناقصة'), 'الناقص ظاهر');
     // رفع صورة كبيرة ← بتتصغّر تحت 1 ميجا
@@ -181,16 +186,16 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     const agentTimer = global.__agentTimer = setInterval(async () => { try { const r = await agentFetch('GET', '/api/passports/barcode/agents/UIPC/jobs/next'); if (r.job) { gotJobs.push(r.job); await agentFetch('POST', `/api/passports/barcode/agents/UIPC/jobs/${r.job.jobId}/status`, { status: 'printed' }); } } catch (x) { /* مش مهم */ } }, 400);
     await page.goto(base + '#/people'); await page.waitForSelector('#rows .act'); await page.click('#rows tr.click:first-child .act'); await page.click('.amenu-list button[data-a="prep"]'); await page.waitForSelector('#pkGo');
     assert.ok((await page.textContent('.modal')).includes('E100000009') && (await page.textContent('.modal')).includes('1306311796'), 'رقم الطلب ورقم التأشيرة ظاهرين'); assert.strictEqual(await page.inputValue('.pkKind'), 'suez', 'الخطاب حسب الممثلية (السويس)');
-    await page.click('#pkGo');
+    await page.selectOption('#pkLetMode', 'print'); await page.click('#pkGo');
     await page.waitForFunction(() => document.querySelectorAll('#pkLog .chip.ok').length >= 3, null, { timeout: 40000 });
-    assert.strictEqual(await page.evaluate(() => (document.getElementById('naLetterFrame') || { dataset: {} }).dataset.ready), '1', 'الخطاب اتجهّز للطباعة على طول (من غير تنزيل)');
+    assert.strictEqual(await page.evaluate(() => (document.getElementById('naLetterFrame') || { dataset: {} }).dataset.ready), '1', 'اختيار «اطبعه على طول»: الخطاب اتجهّز للطباعة');
     assert.ok((await page.textContent('#pkLog')).includes('نافذة الطباعة اتفتحت'));
     assert.strictEqual(gotJobs.length, 2, 'ليبلين: رقم الطلب + التأشيرة'); assert.deepStrictEqual(gotJobs.map((j) => j.payload.code), ['E100000009', '1306311796']);
     const nj = JSON.parse(gotJobs[0].payload.nativeLabelJson); const fn = Object.values(nj.functions).map((f) => Object.keys(f)[0]); assert.ok(fn.includes('draw1DBarcode') && fn.includes('drawBitmap') && fn[fn.length - 1] === 'printBuffer', 'أوامر BIXOLON: ' + fn.join(','));
     assert.deepStrictEqual(Object.values(nj.functions).find((f) => f.draw1DBarcode).draw1DBarcode.slice(0, 7), ['E100000009', 32, 24, 1, 2, 5, 152], 'مكان وحجم الباركود زي نظام الجوازات (52×31 مم، 203 dpi)');
     assert.deepStrictEqual([gotJobs[0].payload.label.widthMm, gotJobs[0].payload.label.heightMm, gotJobs[0].payload.version, gotJobs[0].printerName], [52, 31, 4, 'BIXOLON XD5']);
-    /* «نزّله Word بدل الطباعة» لسه شغّال */
-    await page.uncheck('#pkApp'); await page.uncheck('#pkVisa'); await page.check('#pkWord');
+    /* «نزّله Word» (الافتراضي) */
+    await page.uncheck('#pkApp'); await page.uncheck('#pkVisa'); await page.selectOption('#pkLetMode', 'word');
     const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('#pkGo')]); assert.ok(/nomination-suez/.test(dl.suggestedFilename()), 'خطاب السويس نزل Word: ' + dl.suggestedFilename());
     await page.click('#pkX'); clearInterval(agentTimer);
     /* فلاتر الأشخاص */

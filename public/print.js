@@ -71,12 +71,12 @@
     const many = packs.length > 1; const kindName = { suez: 'السويس', cairo: 'القاهرة' };
     const agentOk = inf.agents.some((a) => a.isOnline);
     NA.modal(`<h2>تجهيز الطباعة${many ? ' (' + packs.length + ' شخص)' : ''}</h2>
-      <div class="muted small" style="margin-bottom:10px">بيطبع باركود رقم الطلب وباركود التأشيرة على الليبل (برنامج الطباعة)، وبيفتح نافذة طباعة خطاب الترشيح على طول (كل خطاب صفحة واحدة): دوس «طباعة».</div>
+      <div class="muted small" style="margin-bottom:10px">بيطبع باركود رقم الطلب وباركود التأشيرة على الليبل (برنامج الطباعة)، وبينزّل خطاب الترشيح Word (أو يطبعه على طول لو اخترت كده).</div>
       ${agentOk ? '' : `<div class="card issues" style="margin-bottom:10px">${inf.configured ? 'مفيش جهاز طباعة متصل دلوقتي: شغّل برنامج طباعة الباركود على جهاز الطابعة. (الخطاب هيتطبع عادي.)' : 'برنامج الطباعة لسه مش متظبط على السيرفر (المدير: الإعدادات ← طباعة الباركود). الخطاب هيتطبع عادي.'}</div>`}
       <div class="tbl-wrap" style="max-height:34vh;border:1px solid var(--line);border-radius:10px"><table><thead><tr><th>الشخص</th><th>رقم الطلب</th><th>رقم التأشيرة</th><th>الخطاب</th></tr></thead><tbody>${packs.map((p, i) => `<tr data-i="${i}"><td class="pcell"><b>${e(p.name)}</b><small>${e(p.passportNo)}</small>${p.missing.length ? `<div class="small" style="color:var(--bad)">${e(p.missing.join(' · '))}</div>` : ''}</td>
         <td dir="ltr">${p.appNumber ? e(p.appNumber) : '<span class="muted">—</span>'}</td><td dir="ltr">${p.visaNumber ? e(p.visaNumber) : '<span class="muted">—</span>'}</td>
         <td><select class="pkKind"><option value="">من غير خطاب</option><option value="suez"${p.letterKind === 'suez' ? ' selected' : ''}>السويس</option><option value="cairo"${p.letterKind === 'cairo' ? ' selected' : ''}>القاهرة</option></select></td></tr>`).join('')}</tbody></table></div>
-      <div class="row" style="margin-top:12px"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pkApp" checked> باركود رقم الطلب</label><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pkVisa" checked> باركود التأشيرة</label><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pkLet" checked> خطاب الترشيح (طباعة)</label><label style="display:flex;gap:6px;align-items:center" title="بدل الطباعة: ينزّل ملف Word"><input type="checkbox" id="pkWord"> نزّله Word بدل الطباعة</label>
+      <div class="row" style="margin-top:12px"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pkApp" checked> باركود رقم الطلب</label><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pkVisa" checked> باركود التأشيرة</label><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pkLet" checked> خطاب الترشيح:</label><select id="pkLetMode" style="padding:6px 8px;border-radius:9px"><option value="word">نزّله Word (التنسيق مظبوط)</option><option value="print">اطبعه على طول (تجريبي — التنسيق ممكن يختلف)</option></select>
         <label class="f" style="margin-inline-start:auto;width:120px">عدد النسخ<input type="number" id="pkCopies" min="1" max="20" value="${inf.settings.printCopies || 1}"></label></div>
       <div id="pkLog" class="small" style="margin-top:10px"></div>
       <div class="foot"><button class="btn" id="pkX">قفل</button><button class="btn pri" id="pkGo">ابدأ التجهيز</button></div>`, (m, close) => {
@@ -84,7 +84,7 @@
       m.querySelector('#pkX').onclick = close;
       m.querySelector('#pkGo').onclick = async () => {
         const go = m.querySelector('#pkGo'); go.disabled = true; const copies = Math.min(20, Math.max(1, Number(m.querySelector('#pkCopies').value) || 1));
-        const wantApp = m.querySelector('#pkApp').checked, wantVisa = m.querySelector('#pkVisa').checked, wantLet = m.querySelector('#pkLet').checked, asWord = m.querySelector('#pkWord').checked;
+        const wantApp = m.querySelector('#pkApp').checked, wantVisa = m.querySelector('#pkVisa').checked, wantLet = m.querySelector('#pkLet').checked, asWord = m.querySelector('#pkLetMode').value !== 'print';
         const kinds = [...m.querySelectorAll('.pkKind')].map((s2) => s2.value); const out = []; const jobs = [];
         try {
           if ((wantApp || wantVisa) && agentOk) {

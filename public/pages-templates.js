@@ -31,6 +31,11 @@
     if (!can('users.manage')) { view.innerHTML = '<div class="card issues">الإعدادات للمدير بس.</div>'; return; }
     const mode = NA.meta.photoProcess === 'clean' ? 'clean' : 'off';
     view.innerHTML = `<div class="page-head"><div><h1>الإعدادات</h1><div class="sub">إعدادات عامة على كل المستخدمين.</div></div></div>
+      <div class="card"><h2>الألوان والشكل</h2><div class="muted small" style="margin-bottom:10px">بتتغيّر لكل اللي بيستخدموا النظام.</div>
+        <div class="lookpick">${[['petrol', 'بترولي + برتقالي', '#0b4f5c', '#0f6f80', '#f59e0b'], ['olive', 'زيتوني + بيج', '#3d5a35', '#557a49', '#e9d8a6']].map(([k, t, a, b, c]) => `<label class="lookopt"><input type="radio" name="lkSkin" value="${k}"${(NA.meta.look || {}).skin === k || (!(NA.meta.look || {}).skin && k === 'petrol') ? ' checked' : ''}><span class="sw" style="background:linear-gradient(135deg,${a},${b})"><i style="background:${c}"></i></span><b>${t}</b></label>`).join('')}</div>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-weight:700"><input type="checkbox" id="lkDark"${(NA.meta.look || {}).dark ? ' checked' : ''}> الوضع الليلي (Dark)</label>
+        <div class="muted small" style="margin-top:6px">بتشوف التغيير على طول. دوس «حفظ» عشان يتثبّت.</div>
+        <button class="btn pri" id="lkSave" type="button" style="margin-top:10px">حفظ</button></div>
       <div class="card"><h2>التاريخ المتوقع لدخول المملكة</h2><div class="muted small" style="margin-bottom:10px">بيتحسب لوحده وقت «عمل إنجاز»: تاريخ النهارده + عدد الأيام دي. اكتب 0 لو عايز تكتبه بإيدك في الدفعة/الشخص.</div>
         <div class="row"><label class="f" style="width:200px">عدد الأيام بعد يوم الطلب<input type="number" id="entDays" min="0" max="365" value="${NA.meta.autoEntryDays === undefined ? 17 : NA.meta.autoEntryDays}"></label><button class="btn pri" id="entSave" type="button" style="align-self:end">حفظ</button></div></div>
       <div class="card"><h2>معالجة الصورة الشخصية</h2><div class="muted small" style="margin-bottom:10px">بتتطبّق على أي صورة شخصية بتترفع أو بتتقص من الجواز. المعالجة بتتم في المتصفح (مفيش صور بتتبعت لأي حد).</div>
@@ -71,6 +76,9 @@
       box.querySelector('#psTest').onclick = async () => { const m = box.querySelector('#psMsg'); try { const cs = collectPs(); await api('PUT', '/print/settings', cs); m.textContent = 'بيبعت ليبل تجربة…'; const r = await NA.print.sendLabel('E817519542', cs, { copies: 1, label: 'ليبل تجربة' }); const j = await NA.print.waitJob(r.jobId, 60000); m.textContent = j.status === 'printed' ? 'اتطبع ✔' : j.status === 'failed' ? 'فشلت: ' + (j.error || '') : 'لسه في الطابور (البرنامج مش بيسحب؟)'; } catch (er) { m.textContent = ''; fail(er); } };
     };
     drawPrint();
+    const lkNow = () => ({ skin: (view.querySelector('input[name=lkSkin]:checked') || {}).value || 'petrol', dark: $('#lkDark').checked });
+    view.querySelectorAll('input[name=lkSkin]').forEach((x) => { x.onchange = () => NA.applyLook(lkNow()); }); $('#lkDark').onchange = () => NA.applyLook(lkNow());
+    $('#lkSave').onclick = async () => { try { const r = await api('PUT', '/settings/look', lkNow()); NA.meta.look = r.look; NA.applyLook(r.look); toast('الألوان اتحفظت', 'ok'); } catch (er) { fail(er); } };
     $('#entSave').onclick = async () => { try { const r = await api('PUT', '/settings/entry', { days: $('#entDays').value }); NA.meta.autoEntryDays = r.days; toast(r.days ? 'التاريخ المتوقع = يوم الطلب + ' + r.days + ' يوم' : 'التاريخ المتوقع بقى يدوي', 'ok'); } catch (er) { fail(er); } };
     $('#pmSave').onclick = async () => { try { const m = view.querySelector('input[name=pm]:checked').value; await api('PUT', '/settings/photo', { mode: m }); NA.meta.photoProcess = m; toast('اتحفظ', 'ok'); } catch (er) { fail(er); } };
     $('#pmFile').onchange = async () => {

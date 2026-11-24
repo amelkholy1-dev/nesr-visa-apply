@@ -44,7 +44,7 @@
       return `<div class="bulkbar"><span class="cnt">${n} محدّد</span><button class="btn small" id="clearSel">إلغاء التحديد</button><span class="sep"></span>
         ${can('people.fill') ? `<div class="grp"><span class="gl">ابدأ طابور:</span><button class="btn pri" id="queueBtn">عمل إنجاز (${n})</button><button class="btn" id="wafQueueBtn">احجز وافد (${n})</button><button class="btn" id="labQueueBtn">احجز المعمل (${n})</button><button class="btn" id="prepBtn" title="باركود رقم الطلب + باركود التأشيرة + خطاب الترشيح لكل المحدّدين">تجهيز الطباعة (${n})</button><button class="btn" id="appnoBtn" title="يجيب رقم الطلب (إنجاز) من المنصة لكل المحدّدين اللي لسه معندهمش رقم">هات أرقام إنجاز (${n})</button></div><span class="sep"></span>` : ''}
         ${can('people.mark') ? `<div class="grp"><span class="gl">اعلّم:</span>${sel('bkStage', stages.map((x) => `<option value="${x.k}" data-b="${x.booking ? 1 : 0}">${e(x.label)}</option>`).join(''))}
-          ${sel('bkState', '<option value="done">تم ✔</option><option value="booked">محجوز</option><option value="">لسه (إلغاء)</option>')}<input type="date" id="bkDate" title="تاريخ (اختياري)" style="padding:5px 8px;border-radius:9px;border:0"><button class="btn pri" id="bkApply">علّم</button></div>
+          ${sel('bkState', '<option value="done">تم ✔</option><option value="booked">محجوز</option><option value="">لسه (إلغاء)</option>')}<input type="date" id="bkDate" title="تاريخ (اختياري)" style="padding:5px 8px;border-radius:9px;border:0"><button class="btn pri" id="bkApply">علّم</button><button class="btn" id="bkIns" title="يعلّم «التأمين الطبي» تم للمحدّدين بتاريخ النهارده">تم التأمين الطبي ✔</button></div>
           <span class="sep"></span><div class="grp"><span class="gl">الحالة:</span>${sel('bkStatus', Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${e(v[0])}</option>`).join(''), '— اختار —')}<button class="btn" id="bkStatusGo">غيّر</button></div>` : ''}
         ${can('people.edit') ? `<span class="sep"></span><div class="grp"><span class="gl">انقل لدفعة:</span>${sel('bkProf', profs.map((p) => `<option value="${p.id}">${e(p.name)}</option>`).join(''), '— اختار —')}<button class="btn" id="bkProfGo">انقل</button></div>` : ''}
         ${can('people.delete') ? '<span class="sep"></span><button class="btn danger" id="bkDel">حذف</button>' : ''}</div>`;
@@ -64,6 +64,7 @@
       const pb = $('#prepBtn'); if (pb) pb.onclick = () => NA.print.prepare(ids());
       const ab = $('#appnoBtn'); if (ab) ab.onclick = () => NA.appno.start(ids(), { skipHave: true, onDone: () => load().catch(() => {}) });
       const lq = $('#labQueueBtn'); if (lq) lq.onclick = async () => { const items = itemsOf(ids()); if (!(await ensureExt())) return; toast(`بدأ طابور المعمل: ${items.length} شخص. بعد ما تخلّص كل واحد دوس «الشخص التالي» في صفحة المعمل.`, 'ok'); NA.labRequest(items[0].id, items.slice(1).map((x) => ({ id: x.id, name: x.name })), items.length, true); };
+      const bi = $('#bkIns'); if (bi) bi.onclick = () => run(async () => { if (!confirm(`تعلّم ${ids().length} شخص: «التأمين الطبي» ← تم؟`)) throw new Error('اتلغت'); const r = await api('POST', '/people/bulk/stage', { ids: ids(), key: 'insurance', state: 'done' }); toast(`اتعلّم التأمين الطبي لـ ${r.updated} شخص`, 'ok'); }).catch(() => {});
       const ba = $('#bkApply'); if (ba) {
         const syncState = () => { const booking = $('#bkStage').selectedOptions[0].dataset.b === '1'; [...$('#bkState').options].forEach((o) => { o.disabled = o.value === 'booked' && !booking; }); if ($('#bkState').selectedOptions[0].disabled) $('#bkState').value = 'done'; };
         $('#bkStage').onchange = syncState; syncState();
@@ -92,8 +93,8 @@
       const items = [
         fill ? ['go', 'عمل إنجاز (ملء الطلب في المنصة)'] : null, fill ? ['appno', 'هات رقم إنجاز من المنصة'] : null, fill ? ['net', 'طباعة ورقة النت'] : null,
         fill ? ['wafid', 'احجز الفحص الطبي (وافد)'] : null, fill ? ['wres', 'نتيجة الكشف الطبي (وافد) — طباعة + PDF'] : null, fill ? ['lab', 'احجز المعمل'] : null,
-        fill ? ['hr'] : null, fill ? ['prep', 'تجهيز الطباعة (باركودات + خطاب)'] : null, fill ? ['bcApp', 'اطبع باركود رقم الطلب بس'] : null, fill ? ['bcVisa', 'اطبع باركود التأشيرة بس'] : null, fill ? ['suez', 'اطبع خطاب الترشيح — السويس'] : null, fill ? ['cairo', 'اطبع خطاب الترشيح — القاهرة'] : null,
-        mark ? ['hr'] : null, mark ? ['m:sent', 'علّم: اتبعت للمنصة'] : null, mark ? ['m:medical', 'علّم: تم الفحص الطبي'] : null, mark ? ['m:lab', 'علّم: تم المعمل'] : null, mark ? ['m:letter', 'علّم: اتطبع الخطاب'] : null,
+        fill ? ['hr'] : null, fill ? ['prep', 'تجهيز الطباعة (باركودات + خطاب)'] : null, fill ? ['bcApp', 'اطبع باركود رقم الطلب بس'] : null, fill ? ['bcVisa', 'اطبع باركود التأشيرة بس'] : null, fill ? ['suez', 'خطاب الترشيح — السويس (Word)'] : null, fill ? ['cairo', 'خطاب الترشيح — القاهرة (Word)'] : null, fill ? ['p:suez', 'اطبع خطاب السويس على طول (تجريبي)'] : null, fill ? ['p:cairo', 'اطبع خطاب القاهرة على طول (تجريبي)'] : null,
+        mark ? ['hr'] : null, mark ? ['m:sent', 'علّم: اتبعت للمنصة'] : null, mark ? ['m:insurance', 'علّم: تم التأمين الطبي'] : null, mark ? ['m:medical', 'علّم: تم الفحص الطبي'] : null, mark ? ['m:lab', 'علّم: تم المعمل'] : null, mark ? ['m:letter', 'علّم: اتطبع الخطاب'] : null,
         can('payments.view') ? ['hr'] : null, can('payments.view') ? ['pay', 'الحسابات والدفع'] : null,
         ['hr'], ['open', 'فتح الشخص']
       ].filter(Boolean);
@@ -109,7 +110,8 @@
           if (a === 'appno') return NA.appno.start([String(id)], { onDone: (n) => { if (n) load().catch(fail); } });
           if (a === 'wafid') { if (!payGate(p)) return; return NA.wafidRequest(id); }
           if (a === 'lab') { if (!payGate(p)) return; return NA.labRequest(id); }
-          if (a === 'suez' || a === 'cairo') return NA.letterPrint([{ id, kind: a, name: p.name }]);
+          if (a === 'suez' || a === 'cairo') return NA.letterDownload(id, a);
+          if (a === 'p:suez' || a === 'p:cairo') return NA.letterPrint([{ id, kind: a.slice(2), name: p.name }]);
           if (a === 'wres') return NA.wafidResult(id);
           if (a === 'prep') return NA.print.prepare([id]);
           if (a === 'net') return NA.netPrint(p.appNumber, p.name);
