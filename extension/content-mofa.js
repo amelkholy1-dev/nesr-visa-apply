@@ -292,6 +292,7 @@
       const again = b.querySelector('#nesr-va-again'); if (again) again.addEventListener('click', () => { try { sessionStorage.removeItem(flagKey); } catch (e) { /* مش مهم */ } run(); });
       const hide = b.querySelector('#nesr-va-hide'); if (hide) hide.addEventListener('click', () => b.remove());
       send({ kind: 'result', data: { status: 'filled', filled: report.ok.length, failed: report.failed.length } });
+      send({ kind: 'tab-ready', data: { service: 'mofa', filled: report.ok.length, failed: report.failed.slice(0, 12), manual: [...report.manual, ...pageEmpty].slice(0, 12), issues: (ctx.issues || []).slice(0, 8), steps: ['راجع الخانات اللي حواليها إطار برتقالي', ctx.declared ? 'الإقرارات اتعلّمت. اكتب الكابتشا' : 'علّم على الإقرارات واكتب الكابتشا', 'دوس «حفظ»'] } });
       if (cap) { try { cap.scrollIntoView({ block: 'center' }); } catch (e) { /* مش مهم */ } }
     };
     let done = false; try { done = sessionStorage.getItem(flagKey) === '1'; } catch (e) { /* مش مهم */ }

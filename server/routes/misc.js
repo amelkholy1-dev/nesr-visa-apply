@@ -24,7 +24,12 @@ router.put('/settings/entry', P.need('users.manage'), async (req, res) => {
 router.get('/meta', async (req, res) => {
   let photo = { mode: 'off' }; try { photo = await getSetting('photo', photo); } catch (e) { /* مش مهم */ }
   let look = { skin: 'petrol', dark: false }; try { look = await getSetting('look', look); } catch (e) { /* مش مهم */ }
-  res.json({ ...F.meta(), ocr: await require('../gemini').available(), stages: S.STAGES, brand: config.brand, brandTag: config.brandTag, perms: P.PERMS, payMethods: A.PAY_METHODS, photoProcess: photo.mode === 'clean' ? 'clean' : 'off', autoEntryDays: F.getAutoEntryDays(), look: { skin: SKINS.includes(look && look.skin) ? look.skin : 'petrol', dark: !!(look && look.dark) } });
+  let tabs = {}; try { tabs = await getSetting('tabs', {}) || {}; } catch (e) { /* مش مهم */ }
+  res.json({ ...F.meta(), ocr: await require('../gemini').available(), stages: S.STAGES, brand: config.brand, brandTag: config.brandTag, perms: P.PERMS, payMethods: A.PAY_METHODS, photoProcess: photo.mode === 'clean' ? 'clean' : 'off', autoEntryDays: F.getAutoEntryDays(), look: { skin: SKINS.includes(look && look.skin) ? look.skin : 'petrol', dark: !!(look && look.dark) }, bgTabs: { mofa: !!tabs.mofa, wafid: !!tabs.wafid, lab: !!tabs.lab } });
+});
+/* «املاه في الخلفية»: المنصة/وافد/المعمل بيتملوا في تبويب مخفي والنظام بيقولك لما يخلصوا (الكابتشا والحفظ لسه بإيدك على الصفحة) */
+router.put('/settings/tabs', P.need('users.manage'), async (req, res) => {
+  try { const b = req.body || {}; const tabs = { mofa: !!b.mofa, wafid: !!b.wafid, lab: !!b.lab }; await setSetting('tabs', tabs); require('../audit').log(req, 'settings', null, '', 'الملء في الخلفية: ' + (Object.entries(tabs).filter(([, v]) => v).map(([k]) => k).join('، ') || 'مقفول')); res.json({ ok: true, tabs }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 /* ألوان النظام: petrol (بترولي + برتقالي) · olive (زيتوني + بيج) + الوضع الليلي — لكل المستخدمين */
 const SKINS = ['petrol', 'olive'];

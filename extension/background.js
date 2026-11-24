@@ -25,8 +25,9 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       let tab = null;
       const o = await store.get('formTab');
       if (o.formTab) { try { const t = await chrome.tabs.get(o.formTab); if (t && /^https:\/\/visa\.mofa\.gov\.sa\//.test(t.url || '')) tab = t; } catch (e) { /* اتقفل */ } }
-      if (tab) { await store.set({ ['ctx_' + tab.id]: ctx }); await chrome.tabs.update(tab.id, { url: FORM_URL, active: true }); }
-      else { tab = await chrome.tabs.create({ url: FORM_URL, active: true }); await store.set({ ['ctx_' + tab.id]: ctx, formTab: tab.id }); }
+      /* bg = «املاه في الخلفية» (من الإعدادات): التبويب مش بيظهر، والنظام بيقولك لما يخلص */
+      if (tab) { await store.set({ ['ctx_' + tab.id]: ctx }); await chrome.tabs.update(tab.id, { url: FORM_URL, active: !ctx.bg }); }
+      else { tab = await chrome.tabs.create({ url: FORM_URL, active: !ctx.bg }); await store.set({ ['ctx_' + tab.id]: ctx, formTab: tab.id }); }
       reply({ ok: true });
     } else if (msg.kind === 'get-ctx') {
       const key = 'ctx_' + (sender.tab && sender.tab.id);
@@ -43,7 +44,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     } else if (msg.kind === 'open-wafid') {
       /* حجز الفحص الطبي في وافد: تبويب جديد بنفس أسلوب فورم المنصة */
       const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now() };
-      const tab = await chrome.tabs.create({ url: WAFID_URL, active: true });
+      const tab = await chrome.tabs.create({ url: WAFID_URL, active: !ctx.bg });
       await store.set({ ['wctx_' + tab.id]: ctx });
       reply({ ok: true });
     } else if (msg.kind === 'get-wafid-ctx') {
@@ -168,6 +169,19 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
         } else { reply({ ok: false, error: 'أمر مش معروف' }); return; }
         reply({ ok: true });
       } catch (e) { await store.remove('netTab'); reply({ ok: false, error: 'تبويب المنصة اتقفل: دوس «طباعة ورقة النت» تاني' }); }
+    } else if (msg.kind === 'tab-ready') {
+      /* الفورم اتملى في تبويب مخفي (منصة/وافد/معمل): بنبلّغ النظام عشان يوريك اللي فاضل وزرار «افتح الصفحة» */
+      const tid = sender.tab && sender.tab.id; const o = await store.get(['ctx_' + tid, 'wctx_' + tid, 'lctx_' + tid]); const ctx = o['ctx_' + tid] || o['wctx_' + tid] || o['lctx_' + tid];
+      if (!ctx || !ctx.bg) { reply({ ok: true, bg: false }); return; }
+      let active = false; try { active = (await chrome.tabs.get(tid)).active; } catch (e) { /* اتقفل */ }
+      if (active) { reply({ ok: true, bg: false }); return; }
+      const t = await findAppTab(ctx.originTabId);
+      if (t) { try { await chrome.tabs.sendMessage(t.id, { kind: 'va-tab-ready', data: { ...(msg.data || {}), tabId: tid, personId: ctx.personId, name: ctx.name } }); } catch (e) { /* مش مهم */ } }
+      reply({ ok: true, bg: true });
+    } else if (msg.kind === 'show-tab') {
+      const tid = parseInt(msg.tabId, 10);
+      try { await chrome.tabs.update(tid, { active: true }); const tb = await chrome.tabs.get(tid); if (tb.windowId) await chrome.windows.update(tb.windowId, { focused: true }); reply({ ok: true }); }
+      catch (e) { reply({ ok: false, error: 'الصفحة اتقفلت: دوس الزرار تاني' }); }
     } else if (msg.kind === 'open-wafidres') {
       /* نتيجة الكشف الطبي في وافد: تبويب ظاهر على «Medical Examination Result» بالجواز والجنسية */
       const p = msg.payload || {};
@@ -235,7 +249,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     } else if (msg.kind === 'open-lab') {
       /* حجز المعمل (معامل الصحة العامة): تبويب جديد بنفس أسلوب وافد */
       const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now() };
-      const tab = await chrome.tabs.create({ url: LAB_URL, active: true });
+      const tab = await chrome.tabs.create({ url: LAB_URL, active: !ctx.bg });
       await store.set({ ['lctx_' + tab.id]: ctx });
       reply({ ok: true });
     } else if (msg.kind === 'get-lab-ctx') {
@@ -311,7 +325,12 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
     let next = ctx.stage;
     if (/\/SmartForm\/TraditionalApp/i.test(url)) next = 'form';
     else if (/\/Account\/Login/i.test(url)) next = 'login';
-    else if (ctx.stage === 'opening') { next = 'login'; await store.set({ [key]: { ...ctx, stage: next } }); await chrome.tabs.update(tabId, { url: LOGIN_URL }); return; }
+    else if (ctx.stage === 'opening') {
+      next = 'login'; await store.set({ [key]: { ...ctx, stage: next } });
+      /* في الخلفية: صفحة الدخول محتاجاك ← النظام بيقولك تفتح الصفحة */
+      if (ctx.bg && !tab.active) { const t = await findAppTab(ctx.originTabId); if (t) { try { await chrome.tabs.sendMessage(t.id, { kind: 'va-tab-ready', data: { service: 'mofa', login: true, tabId, personId: ctx.personId, name: ctx.name } }); } catch (e) { /* مش مهم */ } } }
+      await chrome.tabs.update(tabId, { url: LOGIN_URL }); return;
+    }
     else if (ctx.stage === 'login') { next = 'retry'; await store.set({ [key]: { ...ctx, stage: next } }); await chrome.tabs.update(tabId, { url: FORM_URL }); return; }
     else if (ctx.stage === 'retry') next = 'failed';
     if (next !== ctx.stage) await store.set({ [key]: { ...ctx, stage: next } });

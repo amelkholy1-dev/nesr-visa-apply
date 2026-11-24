@@ -102,6 +102,7 @@
     try { await fillAll(ctx.wafid, status); } catch (e) { report.failed.push('حصل خطأ غير متوقع: ' + String(e && e.message || e)); }
     try { sessionStorage.setItem(flag, '1'); } catch (e) { /* مش مهم */ }
     const bad = report.failed.length || ctx.issues.length;
+    send({ kind: 'tab-ready', data: { service: 'wafid', filled: report.ok.length, failed: report.failed.slice(0, 12), manual: report.manual.slice(0, 12), issues: (ctx.issues || []).slice(0, 8), steps: ['راجع الخانات اللي حواليها إطار برتقالي', 'اختار تاريخ الموعد (من الموقع)', ctx.wafid.autoDeclare ? 'الإقرار اتعلّم، ولو طلب كود تحقق/OTP اكتبه' : 'علّم على الإقرار، ولو طلب كود تحقق/OTP اكتبه', 'دوس «حفظ ومتابعة»'] } });
     const b = bar('<div><b>' + (bad ? '⚠️' : '✅') + ' اتملى ' + report.ok.length + ' خانة' + (report.failed.length ? ' · ' + report.failed.length + ' محتاجة راجعة' : '') + '</b> — دلوقتي:</div>' +
       '<ol style="margin:4px 18px;padding:0"><li>راجع الخانات اللي حواليها إطار برتقالي</li><li>اختار <b>تاريخ الموعد</b> (من الموقع)</li><li>' + (ctx.wafid.autoDeclare ? 'الإقرار اتعلّم' : 'علّم على الإقرار') + '، ولو طلب كود تحقق/OTP اكتبه</li><li>دوس «حفظ ومتابعة»</li></ol>' +
       (ctx.issues.length ? '<div>⛔ في النظام:</div>' + list(ctx.issues) : '') + (report.failed.length ? '<div>❌ مش اتملى:</div>' + list(report.failed) : '') + (report.manual.length ? '<div>✋ فاضي في النظام:</div>' + list(report.manual) : '') + ((ctx.warns || []).length ? '<div>ℹ️</div>' + list(ctx.warns) : '') +

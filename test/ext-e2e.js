@@ -73,9 +73,9 @@ const LMOCK = `<script>
 </script>`;
 
 const appHtml = `<!doctype html><meta charset=utf-8><body><script>
-window.apcaps=[];window.apres=[];window.wres=[];window.wmsg=[];window.netlogin=[];window.netpdf=[];window.netmsg=[];window.got=[];window.visa=[];window.docs=[];window.caps=[];window.nexts=[];window.ready=false;window.acks=0;
+window.apcaps=[];window.apres=[];window.wres=[];window.wmsg=[];window.netlogin=[];window.netpdf=[];window.netmsg=[];window.tabready=[];window.got=[];window.visa=[];window.docs=[];window.caps=[];window.nexts=[];window.ready=false;window.acks=0;
 window.addEventListener('message',function(e){ if(e.source!==window)return; var m=e.data; if(!m||m.source!=='nesr-visaapply-ext')return;
- if(m.type==='VA_READY')window.ready=true; if(m.type==='VA_ACK')window.acks++; if(m.type==='VA_RESULT')window.got.push(m.data); if(m.type==='VA_ERROR')window.got.push({error:m.data.message}); if(m.type==='VA_NEXT')window.nexts.push(m.data); if(m.type==='VA_VISAINFO_RESULT')window.visa.push(m.data); if(m.type==='VA_VISAINFO_CAPTCHA')window.caps.push(m.data); if(m.type==='VA_VISAINFO_DOC')window.docs.push(m.data); if(m.type==='VA_APPNO_CAPTCHA')window.apcaps.push(m.data); if(m.type==='VA_APPNO_RESULT')window.apres.push(m.data); if(m.type==='VA_WAFIDRES_RESULT')window.wres.push(m.data); if(m.type==='VA_WAFIDRES_MSG')window.wmsg.push(m.data); if(m.type==='VA_NET_LOGIN')window.netlogin.push(m.data); if(m.type==='VA_NET_PDF')window.netpdf.push(m.data); if(m.type==='VA_NET_MSG')window.netmsg.push(m.data); });
+ if(m.type==='VA_READY')window.ready=true; if(m.type==='VA_ACK')window.acks++; if(m.type==='VA_RESULT')window.got.push(m.data); if(m.type==='VA_ERROR')window.got.push({error:m.data.message}); if(m.type==='VA_NEXT')window.nexts.push(m.data); if(m.type==='VA_VISAINFO_RESULT')window.visa.push(m.data); if(m.type==='VA_VISAINFO_CAPTCHA')window.caps.push(m.data); if(m.type==='VA_VISAINFO_DOC')window.docs.push(m.data); if(m.type==='VA_APPNO_CAPTCHA')window.apcaps.push(m.data); if(m.type==='VA_APPNO_RESULT')window.apres.push(m.data); if(m.type==='VA_WAFIDRES_RESULT')window.wres.push(m.data); if(m.type==='VA_WAFIDRES_MSG')window.wmsg.push(m.data); if(m.type==='VA_NET_LOGIN')window.netlogin.push(m.data); if(m.type==='VA_NET_PDF')window.netpdf.push(m.data); if(m.type==='VA_NET_MSG')window.netmsg.push(m.data); if(m.type==='VA_TAB_READY')window.tabready.push(m.data); });
 window.fill=function(d){ window.postMessage({source:'nesr-visaapply',type:'VA_FILL',data:d},location.origin); };
 window.postMessage({source:'nesr-visaapply',type:'VA_PING'},location.origin);
 </script></body>`;
@@ -294,6 +294,14 @@ const MOFA = {
   assert.deepStrictEqual([w7.pass, w7.pass2, w7.place, w7.email, w7.phone, w7.nid, w7.pos, w7.visa], ['A45449365', 'A45449365', 'Egypt', 'a@b.com', '+201000000000', '29001010100011', '65', 'hu']);
   assert.deepStrictEqual([w7.dob, w7.iss, w7.exp], ['01/11/1989', '24/06/2026', '23/06/2033'], 'التواريخ اتحطت بتقويم الصفحة');
   assert.strictEqual(w7.confirm, true, 'الإقرار اتعلّم لأن الإعداد مفعّل'); assert.ok(w7.apptType, 'نوع الموعد اتسجّل'); assert.strictEqual(w7.apptDate, '', 'تاريخ الموعد مش بيتلمس'); assert.strictEqual(w7.captcha, '', 'الكابتشا مش بتتلمس');
+  /* سيناريو 7ب: «املاه في الخلفية» — التبويب مخفي، والنظام بيتبلّغ لما يخلص (اللي اتملى + اللي فاضل)، و«افتح الصفحة» بيظهّره */
+  const [wbg] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_WAFID', data: d }, location.origin), { personId: '24', name: 'وافد في الخلفية', bg: true, wafid: WF, issues: [], warns: [] })]);
+  await wbg.waitForLoadState().catch(() => {}); if (/^chrome-error:/.test(wbg.url())) await wbg.goto('https://wafid.com/ar/book-appointment/').catch(() => {});
+  await app.waitForFunction(() => window.tabready.length > 0, null, { timeout: 90000 });
+  const tr = await app.evaluate(() => window.tabready[0]); assert.ok(tr.service === 'wafid' && tr.filled > 10 && tr.personId === '24' && (tr.steps || []).some((x) => /تاريخ الموعد/.test(x)), 'النظام اتبلّغ (ودي بتتبعت بس لو التبويب مش ظاهر): ' + JSON.stringify(tr).slice(0, 300));
+  await app.evaluate((id) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_SHOW_TAB', data: { tabId: id } }, location.origin), tr.tabId);
+  const errsBefore = await app.evaluate(() => window.got.filter((g) => g.error).length); await app.waitForTimeout(1500);
+  assert.strictEqual(await app.evaluate(() => window.got.filter((g) => g.error).length), errsBefore, '«افتح الصفحة» اشتغل من غير خطأ'); await wbg.close(); await app.bringToFront();
   /* سيناريو 8: طابور وافد — زرار «الشخص التالي» بيبعت للنظام target=wafid */
   const nBefore = await app.evaluate(() => window.nexts.length);
   const [wpage2] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_WAFID', data: d }, location.origin), { personId: '22', name: 'أول وافد', wafid: WF, issues: [], warns: [], queue: [{ id: '23', name: 'تاني وافد' }], queueTotal: 2 })]);

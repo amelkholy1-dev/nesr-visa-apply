@@ -32,6 +32,7 @@
     if (m.type === 'VA_ERROR') { toast(m.data && m.data.message || 'مشكلة في الإضافة', 'err'); bridge.pending.splice(0).forEach((f) => f(false)); }
     if (m.type === 'VA_RESULT' && m.data) onResult(m.data);
     if (m.type === 'VA_WAFIDRES_RESULT' && m.data) onWafidResult(m.data);
+    if (m.type === 'VA_TAB_READY' && m.data) onTabReady(m.data);
     if (m.type === 'VA_NET_LOGIN' && m.data && NA.net) NA.net.onLogin(m.data);
     if (m.type === 'VA_NET_MSG' && m.data && NA.net) NA.net.onMsg(m.data);
     if (m.type === 'VA_NET_STATUS' && m.data && NA.net) NA.net.onStatus(m.data);
@@ -156,8 +157,8 @@
       let photo = '';
       if (pl.hasPhoto) { const blob = await (await fetch(`/api/people/${id}/file/photo`, { credentials: 'same-origin' })).blob(); photo = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(blob); }); }
       if (!quiet && pl.issues.length && !confirm('فيه نواقص:\n- ' + pl.issues.join('\n- ') + '\n\nتفتح الفورم وتملا اللي موجود؟')) return;
-      const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_FILL', data: { personId: id, name: pl.name, mofa: pl.mofa, issues: pl.issues, warns: pl.warns, photo, queue: queue || [], queueTotal: total || 0 } }, location.origin); setTimeout(() => res(false), 4000); });
-      if (!ok) toast('الإضافة ما ردّتش. اعمل F5 للصفحة وجرّب تاني (أو Reload للإضافة).', 'err'); else toast('اتفتح فورم المنصة وبيتملي…', 'ok');
+      const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_FILL', data: { personId: id, name: pl.name, bg: !quiet && !!(meta.bgTabs || {}).mofa, mofa: pl.mofa, issues: pl.issues, warns: pl.warns, photo, queue: queue || [], queueTotal: total || 0 } }, location.origin); setTimeout(() => res(false), 4000); });
+      if (!ok) toast('الإضافة ما ردّتش. اعمل F5 للصفحة وجرّب تاني (أو Reload للإضافة).', 'err'); else toast(!quiet && (meta.bgTabs || {}).mofa ? 'بيملا فورم المنصة في الخلفية… هقولك لما يخلص' : 'اتفتح فورم المنصة وبيتملي…', 'ok');
     } catch (er) { fail(er); }
   }
 
@@ -167,8 +168,8 @@
       if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
       if (!extReady) return toast('إضافة Chrome مش متركّبة. من «الإضافة» نزّلها وركّبها الأول.', 'err');
       if (!quiet && pl.issues.length && !confirm('فيه نواقص للفحص الطبي:\n- ' + pl.issues.join('\n- ') + '\n\nتفتح وافد وتملا اللي موجود؟')) return;
-      const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_WAFID', data: { personId: id, name: pl.name, wafid: pl.wafid, issues: pl.issues, warns: pl.warns, queue: queue || [], queueTotal: total || 0 } }, location.origin); setTimeout(() => res(false), 4000); });
-      if (!ok) toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.4.0 أو أحدث).', 'err'); else toast('اتفتح موقع وافد وبيتملي…', 'ok');
+      const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_WAFID', data: { personId: id, name: pl.name, bg: !quiet && !!(meta.bgTabs || {}).wafid, wafid: pl.wafid, issues: pl.issues, warns: pl.warns, queue: queue || [], queueTotal: total || 0 } }, location.origin); setTimeout(() => res(false), 4000); });
+      if (!ok) toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.4.0 أو أحدث).', 'err'); else toast(!quiet && (meta.bgTabs || {}).wafid ? 'بيملا فورم وافد في الخلفية… هقولك لما يخلص' : 'اتفتح موقع وافد وبيتملي…', 'ok');
     } catch (er) { fail(er); }
   }
 
@@ -178,8 +179,8 @@
       if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
       if (!extReady) return toast('إضافة Chrome مش متركّبة. من «الإضافة» نزّلها وركّبها الأول.', 'err');
       if (!quiet && pl.issues.length && !confirm('فيه نواقص لحجز المعمل:\n- ' + pl.issues.join('\n- ') + '\n\nتفتح موقع المعمل وتملا اللي موجود؟')) return;
-      const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_LAB', data: { personId: id, name: pl.name, lab: pl.lab, issues: pl.issues, warns: pl.warns, queue: queue || [], queueTotal: total || 0 } }, location.origin); setTimeout(() => res(false), 4000); });
-      if (!ok) toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.6.0 أو أحدث).', 'err'); else toast('اتفتح موقع المعمل وبيتملي…', 'ok');
+      const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_LAB', data: { personId: id, name: pl.name, bg: !quiet && !!(meta.bgTabs || {}).lab, lab: pl.lab, issues: pl.issues, warns: pl.warns, queue: queue || [], queueTotal: total || 0 } }, location.origin); setTimeout(() => res(false), 4000); });
+      if (!ok) toast('الإضافة ما ردّتش. اعمل F5 للصفحة (ولازم الإضافة تبقى 1.6.0 أو أحدث).', 'err'); else toast(!quiet && (meta.bgTabs || {}).lab ? 'بيملا فورم المعمل في الخلفية… هقولك لما يخلص' : 'اتفتح موقع المعمل وبيتملي…', 'ok');
     } catch (er) { fail(er); }
   }
 
@@ -228,6 +229,20 @@
       const p = m.querySelector('#wrP'); if (p) p.onclick = () => pdfPrint(url);
     });
     if (url) pdfPrint(url);
+  }
+  /* الفورم اتملى في الخلفية (منصة/وافد/معمل): اللي اتملى واللي فاضل عليك، وزرار يفتحلك الصفحة */
+  function onTabReady(d) {
+    const svc = { mofa: 'فورم المنصة (عمل إنجاز)', wafid: 'حجز الفحص الطبي (وافد)', lab: 'حجز المعمل' }[d.service] || 'الفورم';
+    const li = (arr) => (arr && arr.length ? `<ul style="margin:4px 18px;padding:0">${arr.map((x) => `<li>${e(x)}</li>`).join('')}</ul>` : '');
+    const body = d.login ? `<div class="card" style="background:var(--warn-bg)"><b>🔐 المنصة طالبة تسجيل الدخول</b><div class="small" style="margin-top:4px">افتح الصفحة وادخل بحساب الشركة، وبعدها الإضافة هتملى الفورم لوحدها.</div></div>`
+      : `<div class="card" style="background:${(d.failed || []).length || (d.issues || []).length ? 'var(--warn-bg)' : 'var(--ok-bg)'}"><b>${(d.failed || []).length ? '⚠️' : '✅'} اتملى ${Number(d.filled) || 0} خانة</b>${(d.failed || []).length ? ` · ${d.failed.length} محتاجة مراجعة` : ''}</div>
+        <div style="margin-top:10px"><b>فاضل عليك على الصفحة:</b><ol style="margin:4px 18px;padding:0">${(d.steps || []).map((x) => `<li>${e(x)}</li>`).join('')}</ol></div>
+        ${(d.issues || []).length ? `<div class="small"><b>⛔ ناقص في النظام:</b>${li(d.issues)}</div>` : ''}${(d.failed || []).length ? `<div class="small"><b>❌ ما اتملاش:</b>${li(d.failed)}</div>` : ''}${(d.manual || []).length ? `<div class="small"><b>✋ اكتبه بإيدك:</b>${li(d.manual)}</div>` : ''}`;
+    NA.modal(`<h2>${e(svc)}</h2><div class="muted small" style="margin-bottom:10px">${e(d.name || '')} — اتملى في الخلفية.</div>${body}
+      <div class="foot"><button class="btn" id="trX">بعدين</button><button class="btn pri" id="trGo">افتح الصفحة وكمّل</button></div>`, (m, close) => {
+      m.querySelector('#trX').onclick = close;
+      m.querySelector('#trGo').onclick = () => { window.postMessage({ source: 'nesr-visaapply', type: 'VA_SHOW_TAB', data: { tabId: d.tabId } }, location.origin); close(); };
+    });
   }
   /* ===== أدوات ===== */
   const opt = (name) => (meta.options[name] || []);

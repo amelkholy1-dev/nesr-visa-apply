@@ -102,6 +102,7 @@
     try { await fillAll(ctx.lab, status); } catch (e) { report.failed.push('حصل خطأ غير متوقع: ' + String(e && e.message || e)); }
     try { sessionStorage.setItem(flag, '1'); } catch (e) { /* مش مهم */ }
     const bad = report.failed.length || ctx.issues.length;
+    send({ kind: 'tab-ready', data: { service: 'lab', filled: report.ok.length, failed: report.failed.slice(0, 12), manual: report.manual.slice(0, 12), issues: (ctx.issues || []).slice(0, 8), steps: ['راجع الخانات اللي حواليها إطار برتقالي', 'اختار يوم الحجز وساعة الحجز (من الموقع)', 'اختار التحاليل المطلوبة', 'كمّل الحجز من الموقع'] } });
     const b = bar('<div><b>' + (bad ? '⚠️' : '✅') + ' اتملى ' + report.ok.length + ' خانة' + (report.failed.length ? ' · ' + report.failed.length + ' محتاجة راجعة' : '') + '</b> — دلوقتي:</div>' +
       '<ol style="margin:4px 18px;padding:0"><li>راجع الخانات اللي حواليها إطار برتقالي</li><li>اختار <b>يوم الحجز</b> و<b>ساعة الحجز</b> (من الموقع)</li><li>اختار التحاليل المطلوبة (والإضافية لو فيه)</li><li>دوس «تأكيد» واختار طريقة الدفع بنفسك</li></ol>' +
       (ctx.issues.length ? '<div>⛔ في النظام:</div>' + list(ctx.issues) : '') + (report.failed.length ? '<div>❌ مش اتملى:</div>' + list(report.failed) : '') + (report.manual.length ? '<div>✋ فاضي في النظام:</div>' + list(report.manual) : '') + ((ctx.warns || []).length ? '<div>ℹ️</div>' + list(ctx.warns) : '') +

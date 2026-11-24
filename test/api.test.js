@@ -264,6 +264,10 @@ const api = async (method, url, body, extra = {}) => {
 
   /* رقم الطلب من غير E بيتخزّن بـ E، وبيتطابق بالجواز */
   const nb = await api('POST', '/api/people', { data: { nameAr: 'شخص رقم بدون E', passportNo: 'NE0000001' } }); const nid = nb.json.id;
+  /* «املاه في الخلفية» من الإعدادات */
+  assert.deepStrictEqual((await api('GET', '/api/meta')).json.bgTabs, { mofa: false, wafid: false, lab: false });
+  assert.strictEqual((await api('PUT', '/api/settings/tabs', { wafid: true, lab: 1 })).status, 200); assert.deepStrictEqual((await api('GET', '/api/meta')).json.bgTabs, { mofa: false, wafid: true, lab: true });
+  await api('PUT', '/api/settings/tabs', {});
   /* نتيجة الكشف الطبي من وافد: Fit ← «تم الفحص الطبي» بتاريخ الفحص؛ Unfit ← ملاحظة بس؛ جواز تاني ← مرفوض */
   const wr1 = await api('POST', `/api/people/${nid}/wafid-result`, { status: 'unfit', examDate: '2026-08-20', center: 'Test Clinic', passportNo: 'NE0000001' });
   assert.strictEqual(wr1.status, 200); let stg = (await api('GET', `/api/people/${nid}`)).json.person.stages.medical; assert.ok(stg.state !== 'done' && /Unfit/.test(stg.note), 'Unfit ملاحظة بس: ' + JSON.stringify(stg));

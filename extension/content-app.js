@@ -11,7 +11,7 @@
     if (m.type === 'VA_PING') { post('VA_READY'); return; }
     if (m.type === 'VA_WAFID' && m.data && m.data.wafid) {
       try {
-        chrome.runtime.sendMessage({ kind: 'open-wafid', payload: { personId: String(m.data.personId || ''), name: String(m.data.name || '').slice(0, 120), wafid: m.data.wafid, issues: m.data.issues || [], warns: m.data.warns || [], queue: Array.isArray(m.data.queue) ? m.data.queue.slice(0, 200).map((x) => ({ id: String(x.id), name: String(x.name || '').slice(0, 80) })) : [], queueTotal: Number(m.data.queueTotal) || 0 } }, (r) => {
+        chrome.runtime.sendMessage({ kind: 'open-wafid', payload: { personId: String(m.data.personId || ''), name: String(m.data.name || '').slice(0, 120), bg: m.data.bg === true, wafid: m.data.wafid, issues: m.data.issues || [], warns: m.data.warns || [], queue: Array.isArray(m.data.queue) ? m.data.queue.slice(0, 200).map((x) => ({ id: String(x.id), name: String(x.name || '').slice(0, 80) })) : [], queueTotal: Number(m.data.queueTotal) || 0 } }, (r) => {
           if (chrome.runtime.lastError || !r || !r.ok) post('VA_ERROR', { message: 'الإضافة اتحدّثت أو اتقفلت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); else post('VA_ACK', {});
         });
       } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
@@ -19,7 +19,7 @@
     }
     if (m.type === 'VA_LAB' && m.data && m.data.lab) {
       try {
-        chrome.runtime.sendMessage({ kind: 'open-lab', payload: { personId: String(m.data.personId || ''), name: String(m.data.name || '').slice(0, 120), lab: m.data.lab, issues: m.data.issues || [], warns: m.data.warns || [], queue: Array.isArray(m.data.queue) ? m.data.queue.slice(0, 200).map((x) => ({ id: String(x.id), name: String(x.name || '').slice(0, 80) })) : [], queueTotal: Number(m.data.queueTotal) || 0 } }, (r) => {
+        chrome.runtime.sendMessage({ kind: 'open-lab', payload: { personId: String(m.data.personId || ''), name: String(m.data.name || '').slice(0, 120), bg: m.data.bg === true, lab: m.data.lab, issues: m.data.issues || [], warns: m.data.warns || [], queue: Array.isArray(m.data.queue) ? m.data.queue.slice(0, 200).map((x) => ({ id: String(x.id), name: String(x.name || '').slice(0, 80) })) : [], queueTotal: Number(m.data.queueTotal) || 0 } }, (r) => {
           if (chrome.runtime.lastError || !r || !r.ok) post('VA_ERROR', { message: 'الإضافة اتحدّثت أو اتقفلت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); else post('VA_ACK', {});
         });
       } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
@@ -46,6 +46,10 @@
       } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
       return;
     }
+    if (m.type === 'VA_SHOW_TAB' && m.data) {
+      try { chrome.runtime.sendMessage({ kind: 'show-tab', tabId: parseInt(m.data.tabId, 10) || 0 }, (r) => { if (chrome.runtime.lastError || !r || !r.ok) post('VA_ERROR', { message: (r && r.error) || 'الصفحة اتقفلت: دوس الزرار تاني' }); }); } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
+      return;
+    }
     if (m.type === 'VA_NET_CTL' && m.data) {
       try { chrome.runtime.sendMessage({ kind: 'net-ctl', op: String(m.data.op || ''), user: String(m.data.user || '').slice(0, 80), pass: String(m.data.pass || '').slice(0, 120), captcha: String(m.data.captcha || '').slice(0, 12) }, (r) => { if (chrome.runtime.lastError || !r || !r.ok) post('VA_NET_MSG', { kind: 'manual', message: (r && r.error) || 'الإضافة ما ردّتش. اعمل F5 للصفحة وجرّب تاني.' }); }); } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
       return;
@@ -64,14 +68,14 @@
     }
     if (m.type === 'VA_FILL' && m.data && m.data.mofa) {
       try {
-        chrome.runtime.sendMessage({ kind: 'open-fill', payload: { personId: String(m.data.personId || ''), name: String(m.data.name || '').slice(0, 120), mofa: m.data.mofa, issues: m.data.issues || [], warns: m.data.warns || [], photo: typeof m.data.photo === 'string' && m.data.photo.startsWith('data:image/') ? m.data.photo : '', queue: Array.isArray(m.data.queue) ? m.data.queue.slice(0, 200).map((x) => ({ id: String(x.id), name: String(x.name || '').slice(0, 80) })) : [], queueTotal: Number(m.data.queueTotal) || 0 } }, (r) => {
+        chrome.runtime.sendMessage({ kind: 'open-fill', payload: { personId: String(m.data.personId || ''), name: String(m.data.name || '').slice(0, 120), bg: m.data.bg === true, mofa: m.data.mofa, issues: m.data.issues || [], warns: m.data.warns || [], photo: typeof m.data.photo === 'string' && m.data.photo.startsWith('data:image/') ? m.data.photo : '', queue: Array.isArray(m.data.queue) ? m.data.queue.slice(0, 200).map((x) => ({ id: String(x.id), name: String(x.name || '').slice(0, 80) })) : [], queueTotal: Number(m.data.queueTotal) || 0 } }, (r) => {
           if (chrome.runtime.lastError || !r || !r.ok) post('VA_ERROR', { message: 'الإضافة اتحدّثت أو اتقفلت. اعمل تحديث للصفحة (F5) وجرّب تاني.' });
           else post('VA_ACK', {});
         });
       } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
     }
   });
-  chrome.runtime.onMessage.addListener((msg) => { if (msg && msg.kind === 'va-result') post('VA_RESULT', msg.data); if (msg && msg.kind === 'va-next') post('VA_NEXT', msg.data); if (msg && msg.kind === 'va-visainfo') post('VA_VISAINFO_RESULT', msg.data); if (msg && msg.kind === 'va-visainfo-captcha') post('VA_VISAINFO_CAPTCHA', msg.data); if (msg && msg.kind === 'va-visainfo-doc') post('VA_VISAINFO_DOC', msg.data); if (msg && msg.kind === 'va-visainfo-status') post('VA_VISAINFO_STATUS', msg.data); if (msg && msg.kind === 'va-appno-captcha') post('VA_APPNO_CAPTCHA', msg.data); if (msg && msg.kind === 'va-appno-result') post('VA_APPNO_RESULT', msg.data); if (msg && msg.kind === 'va-appno-status') post('VA_APPNO_STATUS', msg.data); if (msg && msg.kind === 'va-wafidres') post('VA_WAFIDRES_RESULT', msg.data); if (msg && msg.kind === 'va-wafidres-msg') post('VA_WAFIDRES_MSG', msg.data); if (msg && msg.kind === 'va-net-login') post('VA_NET_LOGIN', msg.data); if (msg && msg.kind === 'va-net-msg') post('VA_NET_MSG', msg.data); if (msg && msg.kind === 'va-net-status') post('VA_NET_STATUS', msg.data); if (msg && msg.kind === 'va-net-pdf') post('VA_NET_PDF', msg.data); });
+  chrome.runtime.onMessage.addListener((msg) => { if (msg && msg.kind === 'va-result') post('VA_RESULT', msg.data); if (msg && msg.kind === 'va-next') post('VA_NEXT', msg.data); if (msg && msg.kind === 'va-visainfo') post('VA_VISAINFO_RESULT', msg.data); if (msg && msg.kind === 'va-visainfo-captcha') post('VA_VISAINFO_CAPTCHA', msg.data); if (msg && msg.kind === 'va-visainfo-doc') post('VA_VISAINFO_DOC', msg.data); if (msg && msg.kind === 'va-visainfo-status') post('VA_VISAINFO_STATUS', msg.data); if (msg && msg.kind === 'va-appno-captcha') post('VA_APPNO_CAPTCHA', msg.data); if (msg && msg.kind === 'va-appno-result') post('VA_APPNO_RESULT', msg.data); if (msg && msg.kind === 'va-appno-status') post('VA_APPNO_STATUS', msg.data); if (msg && msg.kind === 'va-wafidres') post('VA_WAFIDRES_RESULT', msg.data); if (msg && msg.kind === 'va-wafidres-msg') post('VA_WAFIDRES_MSG', msg.data); if (msg && msg.kind === 'va-net-login') post('VA_NET_LOGIN', msg.data); if (msg && msg.kind === 'va-net-msg') post('VA_NET_MSG', msg.data); if (msg && msg.kind === 'va-net-status') post('VA_NET_STATUS', msg.data); if (msg && msg.kind === 'va-net-pdf') post('VA_NET_PDF', msg.data); if (msg && msg.kind === 'va-tab-ready') post('VA_TAB_READY', msg.data); });
   const ready = () => { post('VA_READY'); chrome.runtime.sendMessage({ kind: 'app-ready' }, (r) => { if (r && r.pending) setTimeout(() => post('VA_RESULT', r.pending), 800); }); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready); else ready();
   setTimeout(() => post('VA_READY'), 1500); setTimeout(() => post('VA_READY'), 4000);

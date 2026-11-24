@@ -36,6 +36,10 @@
         <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-weight:700"><input type="checkbox" id="lkDark"${(NA.meta.look || {}).dark ? ' checked' : ''}> الوضع الليلي (Dark)</label>
         <div class="muted small" style="margin-top:6px">بتشوف التغيير على طول. دوس «حفظ» عشان يتثبّت.</div>
         <button class="btn pri" id="lkSave" type="button" style="margin-top:10px">حفظ</button></div>
+      <div class="card"><h2>المنصة ووافد والمعمل: تبويب ظاهر ولا في الخلفية؟</h2>
+        <div class="muted small" style="margin-bottom:10px">لو علّمت على واحدة: لما تدوس الزرار بتاعها، الإضافة بتملا الفورم في تبويب <b>مخفي</b> وإنت فاضل في النظام، ولما تخلص بتظهرلك نافذة هنا فيها اللي اتملى واللي فاضل عليك، وزرار «افتح الصفحة وكمّل». لو مش متعلّم: التبويب بيفتح قدامك على طول زي الأول.<br>الكابتشا ومراجعة الخانات و«حفظ» (وتاريخ الموعد في وافد والمعمل) لازم يتعملوا بإيدك على الصفحة نفسها، فالصفحة لازم تتفتح في الآخر.</div>
+        ${[['mofa', 'عمل إنجاز (ملء الطلب في المنصة)'], ['wafid', 'احجز الفحص الطبي (وافد)'], ['lab', 'احجز المعمل']].map(([k, t]) => `<label style="display:flex;gap:8px;align-items:center;margin:6px 0;font-weight:700"><input type="checkbox" data-bgt="${k}"${(NA.meta.bgTabs || {})[k] ? ' checked' : ''}> ${t}: املاه في الخلفية</label>`).join('')}
+        <button class="btn pri" id="bgtSave" type="button" style="margin-top:8px">حفظ</button></div>
       <div class="card"><h2>التاريخ المتوقع لدخول المملكة</h2><div class="muted small" style="margin-bottom:10px">بيتحسب لوحده وقت «عمل إنجاز»: تاريخ النهارده + عدد الأيام دي. اكتب 0 لو عايز تكتبه بإيدك في الدفعة/الشخص.</div>
         <div class="row"><label class="f" style="width:200px">عدد الأيام بعد يوم الطلب<input type="number" id="entDays" min="0" max="365" value="${NA.meta.autoEntryDays === undefined ? 17 : NA.meta.autoEntryDays}"></label><button class="btn pri" id="entSave" type="button" style="align-self:end">حفظ</button></div></div>
       <div class="card"><h2>معالجة الصورة الشخصية</h2><div class="muted small" style="margin-bottom:10px">بتتطبّق على أي صورة شخصية بتترفع أو بتتقص من الجواز. المعالجة بتتم في المتصفح (مفيش صور بتتبعت لأي حد).</div>
@@ -81,6 +85,7 @@
     const lkNow = () => ({ skin: (view.querySelector('input[name=lkSkin]:checked') || {}).value || 'petrol', dark: $('#lkDark').checked });
     view.querySelectorAll('input[name=lkSkin]').forEach((x) => { x.onchange = () => NA.applyLook(lkNow()); }); $('#lkDark').onchange = () => NA.applyLook(lkNow());
     $('#lkSave').onclick = async () => { try { const r = await api('PUT', '/settings/look', lkNow()); NA.meta.look = r.look; NA.applyLook(r.look); toast('الألوان اتحفظت', 'ok'); } catch (er) { fail(er); } };
+    $('#bgtSave').onclick = async () => { try { const b = {}; view.querySelectorAll('[data-bgt]').forEach((x) => { b[x.dataset.bgt] = x.checked; }); const r = await api('PUT', '/settings/tabs', b); NA.meta.bgTabs = r.tabs; toast('اتحفظ', 'ok'); } catch (er) { fail(er); } };
     $('#entSave').onclick = async () => { try { const r = await api('PUT', '/settings/entry', { days: $('#entDays').value }); NA.meta.autoEntryDays = r.days; toast(r.days ? 'التاريخ المتوقع = يوم الطلب + ' + r.days + ' يوم' : 'التاريخ المتوقع بقى يدوي', 'ok'); } catch (er) { fail(er); } };
     $('#pmSave').onclick = async () => { try { const m = view.querySelector('input[name=pm]:checked').value; await api('PUT', '/settings/photo', { mode: m }); NA.meta.photoProcess = m; toast('اتحفظ', 'ok'); } catch (er) { fail(er); } };
     $('#pmFile').onchange = async () => {
