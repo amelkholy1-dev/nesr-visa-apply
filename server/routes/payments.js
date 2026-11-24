@@ -9,7 +9,7 @@ const audit = require('../audit');
 const router = express.Router();
 const json = (v) => { try { return JSON.parse(v || '{}') || {}; } catch (e) { return {}; } };
 const isoDay = (d) => new Date(d).toISOString().slice(0, 10);
-const rowOut = (r) => ({ id: r.id, amount: Number(r.amount), method: r.method, note: r.note, date: r.paid_at ? (typeof r.paid_at === 'string' ? r.paid_at.slice(0, 10) : isoDay(r.paid_at.getTime() - r.paid_at.getTimezoneOffset() * 60000)) : '', by: r.user_name || '', at: r.created_at });
+const rowOut = (r) => ({ id: r.id, walletId: r.wallet_id, amount: Number(r.amount), method: r.method, note: r.note, date: r.paid_at ? (typeof r.paid_at === 'string' ? r.paid_at.slice(0, 10) : isoDay(r.paid_at.getTime() - r.paid_at.getTimezoneOffset() * 60000)) : '', by: r.user_name || '', at: r.created_at });
 
 async function personBalance(id) {
   const row = (await db.query('SELECT id, name_ar, data, profile_id FROM people WHERE id = ?', [id]))[0]; if (!row) return null;
@@ -23,7 +23,8 @@ router.get('/people/:id(\\d+)/payments', P.need('payments.view'), async (req, re
   try {
     const b = await personBalance(parseInt(req.params.id, 10)); if (!b) return res.status(404).json({ error: 'الشخص مش موجود' });
     const rows = await db.query('SELECT p.*, u.display_name AS user_name FROM payments p LEFT JOIN users u ON u.id = p.created_by WHERE p.person_id = ? ORDER BY p.paid_at DESC, p.id DESC', [b.row.id]);
-    res.json({ name: b.row.name_ar, fee: b.fee, feeSource: b.feeSource, paid: b.paid, remaining: b.remaining, state: b.state, methods: A.PAY_METHODS, payments: rows.map(rowOut), canEdit: P.has(req, 'payments.edit') });
+    const wallets = (await db.query('SELECT id, name FROM wallets WHERE archived = 0 ORDER BY id')).map((w) => ({ id: w.id, name: w.name }));
+    res.json({ name: b.row.name_ar, fee: b.fee, feeSource: b.feeSource, paid: b.paid, remaining: b.remaining, state: b.state, methods: A.PAY_METHODS, wallets, payments: rows.map(rowOut), canEdit: P.has(req, 'payments.edit') });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -32,10 +33,13 @@ router.post('/people/:id(\\d+)/payments', P.need('payments.edit'), async (req, r
     const id = parseInt(req.params.id, 10); const b = req.body || {};
     const amount = A.num(b.amount); if (amount === null || amount === 0 || Math.abs(amount) > 10000000) return res.status(400).json({ error: 'اكتب مبلغ صحيح (الاسترجاع بيتكتب بالسالب)' });
     const cur = await personBalance(id); if (!cur) return res.status(404).json({ error: 'الشخص مش موجود' });
-    const method = A.PAY_METHODS.includes(b.method) ? b.method : 'كاش';
+    /* الدفعة بتنزل في محفظة من الخزينة (والطريقة = اسم المحفظة) */
+    const wal = b.walletId ? (await db.query('SELECT id, name FROM wallets WHERE id = ? AND archived = 0', [parseInt(b.walletId, 10)]))[0] : (await db.query('SELECT id, name FROM wallets WHERE archived = 0 ORDER BY id LIMIT 1'))[0];
+    if (!wal) return res.status(400).json({ error: b.walletId ? 'المحفظة مش موجودة أو مقفولة: اختار محفظة تانية' : 'اعمل محفظة الأول من «الخزينة»' });
+    const method = wal.name;
     const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || '')) ? b.date : isoDay(Date.now());
     const note = String(b.note || '').trim().slice(0, 200);
-    const r = await db.query('INSERT INTO payments (person_id, amount, method, note, paid_at, created_by) VALUES (?, ?, ?, ?, ?, ?)', [id, A.round2(amount), method, note, date, req.user.id]);
+    const r = await db.query('INSERT INTO payments (person_id, amount, method, note, paid_at, created_by, wallet_id) VALUES (?, ?, ?, ?, ?, ?, ?)', [id, A.round2(amount), method, note, date, req.user.id, wal.id]);
     audit.log(req, 'payment', id, cur.row.name_ar, (amount < 0 ? 'استرجاع ' : 'دفع ') + Math.abs(amount) + ' (' + method + ')');
     res.json({ ok: true, id: r.insertId, ...A.balance(cur.fee, cur.paid + amount) });
   } catch (e) { res.status(500).json({ error: e.message }); }

@@ -126,7 +126,7 @@
         <td class="bcell" title="${e(p.profileName || '')}">${e(p.profileName || '—')}</td><td><span class="pill ${STATUS[p.status] ? STATUS[p.status][1] : ''}">${e((STATUS[p.status] || [p.status])[0])}</span></td>
         <td><span class="svc">${svcChips(p)}</span></td><td>${stageCells(p)}</td>
         ${can('payments.view') ? `<td>${p.pay ? NA.payState(p.pay) : ''}</td>` : ''}
-        <td><div class="amenu"><button class="btn small act" data-id="${p.id}" type="button">الإجراءات</button></div></td></tr>`).join('')
+        <td><div class="amenu"><a class="ibtn" href="#/people/${p.id}" title="فتح الشخص">${NA.icon('eye')}</a><button class="btn small act" data-id="${p.id}" type="button" title="الإجراءات: إنجاز، رقم إنجاز، وافد، معمل، خطابات، طباعة، دفع…">${NA.icon('more', 16)}</button></div></td></tr>`).join('')
         || `<tr><td colspan="9"><div class="empty">${all.length ? 'مفيش أشخاص بالفلاتر دي.' : 'لسه مفيش أشخاص. ابدأ بإضافة أول شخص أو ارفع صور جوازات.'}</div></td></tr>`;
       $('#cnt').textContent = `${shown.length} من ${all.length} شخص`;
       $('#selAll').checked = false; wireBulk();

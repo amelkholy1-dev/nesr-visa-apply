@@ -737,16 +737,32 @@
 
   /* ===== التوجيه ===== */
   const can = (perm) => !!(me && me.perms && me.perms.includes(perm));
-  /* القايمة الجانبية: مجموعات، وكل عنصر بصلاحيته */
+  /* القايمة الجانبية (زي نظام الجوازات): أقسام بتتفتح وتتقفل، وكل عنصر بصلاحيته، وبحث عن شاشة */
   const NAV = [
-    ['', [['#/', '', 'لوحة التحكم']]],
-    ['الشغل اليومي', [['#/people', '', 'الأشخاص', 'people.view'], ['#/bulk', '', 'رفع جماعي', 'people.edit'], ['#/profiles', '', 'دفعات التأشيرات', 'people.view']]],
-    ['المتابعة', [['#/accounts', '', 'الحسابات', 'payments.view'], ['#/reports', '', 'التقارير', 'stats.view'], ['#/activity', '', 'سجل النشاط', 'activity.view']]],
-    ['الإدارة', [['#/users', '', 'المستخدمين والصلاحيات', 'users.manage'], ['#/settings', '', 'الإعدادات', 'users.manage'], ['#/extension', '', 'إضافة Chrome']]]
+    ['home', 'الرئيسية', '#/', null, []],
+    ['users', 'الأشخاص', null, null, [['#/people', 'كل الأشخاص', 'people.view'], ['#/bulk', 'رفع جماعي (صور جوازات)', 'people.edit']]],
+    ['layers', 'التأشيرات', null, null, [['#/profiles', 'دفعات التأشيرات', 'people.view'], ['#/templates', 'ضبط النموذج', 'profiles.edit']]],
+    ['wallet', 'الخزينة', null, null, [['#/treasury', 'المحافظ', 'payments.view'], ['#/treasury/log', 'سجل المعاملات', 'payments.view'], ['#/treasury/dues', 'مستحقات العملاء', 'payments.view']]],
+    ['chart', 'المتابعة', null, null, [['#/reports', 'التقارير', 'stats.view'], ['#/activity', 'سجل النشاط', 'activity.view']]],
+    ['shield', 'الإدارة', null, null, [['#/users', 'المستخدمين والصلاحيات', 'users.manage'], ['#/settings', 'الإعدادات', 'users.manage'], ['#/extension', 'إضافة Chrome', null]]]
   ];
+  const navOpen = (() => { try { return JSON.parse(localStorage.getItem('navOpen') || '{}'); } catch (x) { return {}; } })();
+  const isOn = (href, h) => (href === '#/' ? (h === '#/' || h === '') : href === '#/treasury' ? (h === '#/treasury') : h === href || h.startsWith(href + '/') || h.startsWith(href + '?'));
   const drawNav = (h) => {
-    const on = (href) => (href === '#/' ? (h === '#/' || h === '') : h.startsWith(href));
-    $('#nav').innerHTML = NAV.map(([g, items]) => { const vis = items.filter((n) => !n[3] || can(n[3])); return vis.length ? (g ? `<div class="grp">${g}</div>` : '') + vis.map((n) => `<a href="${n[0]}" class="${on(n[0]) ? 'on' : ''}"><span class="ic">${n[1]}</span>${n[2]}</a>`).join('') : ''; }).join('');
+    const I = NA.icon; const q = (($('#navQ') || {}).value || '').trim();
+    $('#nav').innerHTML = NAV.map(([ic, label, href, perm, kids], gi) => {
+      if (href) return (!perm || can(perm)) && (!q || label.includes(q)) ? `<a href="${href}" class="nv${isOn(href, h) ? ' on' : ''}">${I(ic)}<span>${e(label)}</span></a>` : '';
+      const vis = kids.filter((k) => !k[2] || can(k[2])).filter((k) => !q || k[1].includes(q) || label.includes(q)); if (!vis.length) return '';
+      const active = vis.some((k) => isOn(k[0], h)); const open = q || active || navOpen[gi];
+      return `<div class="ng${open ? ' open' : ''}${active ? ' act' : ''}" data-g="${gi}"><button type="button" class="nv nh">${I(ic)}<span>${e(label)}</span><i class="chev">${I('chevron', 14)}</i></button><div class="nk">${vis.map((k) => `<a href="${k[0]}" class="${isOn(k[0], h) ? 'on' : ''}">${e(k[1])}</a>`).join('')}</div></div>`;
+    }).join('');
+    $('#nav').querySelectorAll('.nh').forEach((b) => { b.onclick = () => { const g = b.closest('.ng'); g.classList.toggle('open'); navOpen[g.dataset.g] = g.classList.contains('open'); try { localStorage.setItem('navOpen', JSON.stringify(navOpen)); } catch (x) { /* مش مهم */ } }; });
+  };
+  /* أيقونة لكل صفحة في عنوانها (زي نظام الجوازات) */
+  const HEAD_IC = [['#/people/', 'user'], ['#/people', 'users'], ['#/bulk', 'upload'], ['#/profiles', 'layers'], ['#/templates', 'template'], ['#/treasury', 'wallet'], ['#/accounts', 'wallet'], ['#/reports', 'chart'], ['#/activity', 'activity'], ['#/users', 'shield'], ['#/settings', 'settings'], ['#/extension', 'puzzle']];
+  const decorateHead = (h) => {
+    const ph = view.querySelector('.page-head'); if (ph && !ph.querySelector('.ph-ic')) { const ic = (HEAD_IC.find(([p]) => h.startsWith(p)) || [0, 'home'])[1]; const h1 = ph.querySelector('h1'); if (h1) { const wrap = h1.parentElement; const sp = document.createElement('span'); sp.className = 'ph-ic'; sp.innerHTML = NA.icon(ic, 22); wrap.parentElement === ph ? ph.insertBefore(sp, wrap) : wrap.insertBefore(sp, h1); } ph.classList.add('card-head'); }
+    if (!ph) { const h1 = view.querySelector(':scope > h1'); if (h1) { const d2 = document.createElement('div'); d2.className = 'page-head card-head'; d2.innerHTML = `<span class="ph-ic">${NA.icon((HEAD_IC.find(([p]) => h.startsWith(p)) || [0, 'home'])[1], 22)}</span><div></div>`; h1.replaceWith(d2); d2.lastChild.appendChild(h1); } }
   };
   async function render() {
     document.querySelectorAll(".modal-bg").forEach((x) => x.remove());
@@ -754,7 +770,7 @@
     if (!me) { try { me = (await api('GET', '/me')).user; } catch (er) { /* مش داخل */ } }
     if (!me) return pageLogin();
     if (!meta) meta = await api('GET', '/meta');
-    document.documentElement.dataset.theme = meta.theme || 'slate'; document.body.classList.add('app'); $('#top').hidden = false; $('#whoName').textContent = me.name; $('#whoAv').textContent = String(me.name || '?').trim().charAt(0);
+    document.body.classList.add('app'); { const rl = { admin: 'مدير', manager: 'مشرف', staff: 'موظف', viewer: 'مشاهد', custom: 'صلاحيات مخصّصة' }; const wr = $('#whoRole'); if (wr) wr.textContent = rl[me.role] || ''; } $('#top').hidden = false; $('#whoName').textContent = me.name; $('#whoAv').textContent = String(me.name || '?').trim().charAt(0);
     $('#brandName').textContent = meta.brand || 'إنجاز'; $('#brandTag').textContent = 'نظام إدارة التأشيرات'; document.title = (meta.brand || 'إنجاز') + ' — نظام إدارة التأشيرات';
     drawNav(h); setExt(); ping();
     try {
@@ -767,18 +783,27 @@
       else if ((m = h.match(/^#\/profiles\/(new|\d+)$/))) await pageProfileEdit(m[1]);
       else if (h.startsWith('#/profiles')) await pageProfiles();
       else if (h.startsWith('#/templates')) await NA.pages.templates();
-      else if (h.startsWith('#/accounts')) await NA.pages.accounts();
+      else if (h.startsWith('#/treasury')) await NA.pages.treasury((h.split('/')[2] || 'wallets').split('?')[0]);
+      else if (h.startsWith('#/accounts')) { location.hash = '#/treasury/dues'; return; }
       else if (h.startsWith('#/settings')) await NA.pages.settings();
       else if (h.startsWith('#/users')) await NA.pages.users();
       else if (h.startsWith('#/extension')) await pageExtension();
       else if (h === '#/login') { location.hash = '#/'; }
       else await NA.pages.dashboard();
+      decorateHead(h);
     } catch (er) { if (er.status !== 401) view.innerHTML = `<div class="card issues">${e(er.message)}</div>`; }
   }
   /* بنشارك الأدوات مع ملفات الصفحات (pages-*.js) */
   Object.assign(NA, { api, e, $, view, toast, fail, STATUS, can, ping, fillRequest, wafidRequest, labRequest, letterDownload, netPrint, stageDots, fmtDate });
   Object.defineProperties(NA, { me: { get: () => me, configurable: true }, meta: { get: () => meta, configurable: true }, extReady: { get: () => extReady, configurable: true }, extVersion: { get: () => extVersion, configurable: true } });
-  $('#logoutBtn').onclick = async () => { await api('POST', '/logout').catch(() => {}); me = null; location.hash = '#/login'; render(); };
+  /* أزرار القايمة: رجوع/عودة، بحث عن شاشة، تصغير القايمة */
+  { const lg = document.querySelector('.sidebar .brand .logo'); if (lg) lg.innerHTML = NA.icon('template', 22); }
+  $('#navBack').innerHTML = NA.icon('back', 16) + ' رجوع'; $('#navFwd').innerHTML = 'عودة ' + NA.icon('fwd', 16); $('#sbCol').innerHTML = NA.icon('collapse', 16);
+  $('#navBack').onclick = () => history.back(); $('#navFwd').onclick = () => history.forward();
+  $('#navQ').oninput = () => drawNav(location.hash || '#/');
+  try { if (localStorage.getItem('sbMini') === '1') document.body.classList.add('sb-mini'); } catch (x) { /* مش مهم */ }
+  $('#sbCol').onclick = () => { document.body.classList.toggle('sb-mini'); try { localStorage.setItem('sbMini', document.body.classList.contains('sb-mini') ? '1' : '0'); } catch (x) { /* مش مهم */ } };
+  $('#logoutBtn').innerHTML = NA.icon('logout', 16); $('#logoutBtn').onclick = async () => { await api('POST', '/logout').catch(() => {}); me = null; location.hash = '#/login'; render(); };
   window.addEventListener('hashchange', render);
   render();
 })();

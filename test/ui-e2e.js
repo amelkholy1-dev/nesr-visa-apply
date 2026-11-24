@@ -190,15 +190,25 @@ const env = { ...process.env, PORT: String(PORT), DB_HOST: '127.0.0.1', DB_NAME:
     await page.goto(base + '#/people'); await page.waitForSelector('#rows .act'); await page.click('#rows tr.click:first-child .act'); await page.waitForSelector('.amenu-list');
     const mt = await page.textContent('.amenu-list'); for (const t of ['عمل إنجاز', 'هات رقم إنجاز', 'احجز الفحص الطبي', 'احجز المعمل', 'خطاب الترشيح — السويس', 'خطاب الترشيح — القاهرة', 'علّم: تم الفحص الطبي', 'الحسابات والدفع']) assert.ok(mt.includes(t), 'في القايمة: ' + t);
     assert.ok(!mt.includes('املى الطلب'), 'مفيش «املى الطلب»');
-    await page.click('.amenu-list button[data-a="m:lab"]'); await page.waitForFunction(() => document.querySelectorAll('#rows .dot.done').length >= 1); /* علّم المعمل تم من غير ما تفتح الشخص */
+    await page.click('.amenu-list button[data-a="m:lab"]'); await page.waitForFunction(async (pid) => (await (await fetch('/api/people/' + pid)).json()).person.stages.lab.state === 'done', id, { timeout: 15000 }); /* علّم المعمل تم من غير ما تفتح الشخص */
     assert.strictEqual(await page.evaluate(async (pid) => (await (await fetch('/api/people/' + pid)).json()).person.stages.lab.state, id), 'done', 'التعليم السريع اتحفظ');
-    /* الحسابات: تكلفة من الدفعة، دفع بمحفظة، متبقي */
+    /* الحسابات: تكلفة من الدفعة، دفع في محفظة من الخزينة، متبقي */
+    await page.evaluate(() => fetch('/api/treasury/wallets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'فودافون كاش', kind: 'wallet' }) }));
     await page.click('#rows tr.click:first-child .act'); await page.click('.amenu-list button[data-a="pay"]'); await page.waitForSelector('#payF');
-    assert.ok((await page.textContent('.modal .money')).includes('4,500'), 'تكلفة الدفعة ظاهرة'); await page.fill('#pAmt', '2000'); await page.selectOption('#pMeth', 'فودافون كاش'); await page.fill('#pNote', 'عربون'); await page.click('#pGo');
+    assert.ok((await page.textContent('.modal .money')).includes('4,500'), 'تكلفة الدفعة ظاهرة'); await page.fill('#pAmt', '2000'); await page.selectOption('#pWal', { label: 'فودافون كاش' }); await page.fill('#pNote', 'عربون'); await page.click('#pGo');
     await page.waitForFunction(() => /2,500/.test(document.querySelector('.modal .money .rem').textContent)); assert.ok((await page.textContent('.modal')).includes('فودافون كاش'), 'المحفظة اتسجّلت');
     await page.click('#payX'); await page.waitForFunction(() => /دفع جزء/.test(document.querySelector('#rows').textContent), null, { timeout: 8000 });
     await page.goto(base + '#/people/' + id); await page.waitForSelector('#ptabs'); await tab('accounts'); await page.waitForSelector('#payF'); await page.click('#pRest'); await page.click('#pGo'); await page.waitForFunction(() => document.querySelector('.money .rem.zero'));
-    await page.goto(base + '#/accounts'); await page.waitForSelector('.money'); assert.ok((await page.textContent('#view, main')).includes('4,500') && (await page.textContent('main')).includes('فودافون كاش'), 'صفحة الحسابات');
+    await page.goto(base + '#/accounts'); await page.waitForURL(/#\/treasury\/dues/); await page.waitForSelector('#trBody .money'); assert.ok((await page.textContent('main')).includes('4,500') && (await page.textContent('main')).includes('فودافون كاش'), 'مستحقات العملاء جوه الخزينة');
+    /* الخزينة: محفظة جديدة + مصروف + سجل المعاملات */
+    await page.goto(base + '#/treasury'); await page.waitForSelector('.wcard'); assert.ok((await page.textContent('.wgrid')).includes('فودافون كاش') && (await page.textContent('.banner')).includes('ج.م'), 'المحافظ والرصيد الإجمالي');
+    await page.click('#tAddW'); await page.fill('#wN', 'بنك تجربة'); await page.selectOption('#wK', 'bank'); await page.fill('#wO', '1000'); await page.click('#wS'); await page.waitForFunction(() => document.querySelector('.wgrid').textContent.includes('بنك تجربة'));
+    await page.click('#tOut'); await page.waitForSelector('#xA'); await page.selectOption('#xW', { label: 'بنك تجربة' }); await page.fill('#xA', '150'); await page.fill('#xC', 'رسوم منصة'); await page.click('#xS'); await page.waitForTimeout(700);
+    assert.ok((await page.textContent('.wgrid')).includes('850'), 'رصيد البنك بعد المصروف');
+    await page.goto(base + '#/treasury/log'); await page.waitForSelector('#lRows tr'); await page.waitForFunction(() => document.querySelector('#lRows').textContent.includes('رسوم منصة'));
+    assert.ok((await page.textContent('#lRows')).includes('دفعة عميل') && (await page.textContent('#lSum')).includes('خارج'), 'سجل المعاملات فيه الدفعات والمصروف');
+    await page.selectOption('#lK', 'expense'); await page.waitForFunction(() => !document.querySelector('#lRows').textContent.includes('دفعة عميل'));
+    assert.ok((await page.textContent('#top')).includes('الخزينة') && await page.isVisible('nav .nk a.on'), 'القايمة الجانبية: قسم الخزينة مفتوح والصفحة متعلّمة');
     await page.goto(base + '#/'); await page.waitForSelector('.kpis'); assert.ok((await page.textContent('.kpis')).includes('متبقي على الأشخاص'), 'الحسابات في لوحة التحكم');
     /* أرشفة دفعة */
     await page.goto(base + '#/profiles'); await page.waitForSelector('.vcard .arch'); const archBtn = page.locator('.vcard', { hasText: 'دفعة اختبار' }).locator('.arch'); await archBtn.click(); await page.waitForSelector('details.fold');

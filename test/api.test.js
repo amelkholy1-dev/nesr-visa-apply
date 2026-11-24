@@ -221,12 +221,17 @@ const api = async (method, url, body, extra = {}) => {
   let pb = (await api('GET', `/api/people/${ap1}/payments`)).json; assert.deepStrictEqual([pb.fee, pb.feeSource, pb.paid, pb.remaining, pb.state], [4500, 'batch', 0, 4500, 'unpaid']);
   pb = (await api('GET', `/api/people/${ap2}/payments`)).json; assert.deepStrictEqual([pb.fee, pb.feeSource], [3000, 'person'], 'تكلفة الشخص بتغلب تكلفة الدفعة');
   assert.strictEqual((await api('POST', `/api/people/${ap1}/payments`, { amount: 'abc' })).status, 400); assert.strictEqual((await api('POST', `/api/people/${ap1}/payments`, { amount: 0 })).status, 400);
-  const pay1 = await api('POST', `/api/people/${ap1}/payments`, { amount: 2000, method: 'فودافون كاش', note: 'عربون', date: '2026-11-20' }); assert.strictEqual(pay1.status, 200); assert.deepStrictEqual([pay1.json.paid, pay1.json.remaining, pay1.json.state], [2000, 2500, 'partial']);
-  assert.strictEqual((await api('POST', `/api/people/${ap1}/payments`, { amount: 2500, method: 'غريبة' })).json.state, 'paid'); /* طريقة مش معروفة بتترجّع «كاش» */
-  pb = (await api('GET', `/api/people/${ap1}/payments`)).json; assert.deepStrictEqual([pb.paid, pb.remaining, pb.state, pb.payments.length], [4500, 0, 'paid', 2]); assert.ok(pb.payments.some((x) => x.method === 'فودافون كاش' && x.date === '2026-11-20' && x.note === 'عربون') && pb.payments.some((x) => x.method === 'كاش'));
+  /* الخزينة: أول تشغيل بيعمل «الخزينة - نقدي»، ونضيف محفظة فودافون كاش */
+  let tr = (await api('GET', '/api/treasury')).json; assert.ok(tr.wallets.some((w) => w.name === 'الخزينة - نقدي'), 'محفظة نقدي افتراضية'); const cashW = tr.wallets.find((w) => w.name === 'الخزينة - نقدي').id;
+  assert.strictEqual((await api('POST', '/api/treasury/wallets', { name: '' })).status, 400); assert.strictEqual((await api('POST', `/api/people/${ap1}/payments`, { amount: 5, walletId: 99999 })).status, 400, 'محفظة مش موجودة');
+  const vfW = (await api('POST', '/api/treasury/wallets', { name: 'فودافون كاش', kind: 'wallet', number: '01000000000', opening: 100 })).json.id;
+  assert.ok((await api('GET', `/api/people/${ap1}/payments`)).json.wallets.some((w) => w.id === vfW), 'المحافظ ظاهرة في الدفع');
+  const pay1 = await api('POST', `/api/people/${ap1}/payments`, { amount: 2000, walletId: vfW, note: 'عربون', date: '2026-11-20' }); assert.strictEqual(pay1.status, 200); assert.deepStrictEqual([pay1.json.paid, pay1.json.remaining, pay1.json.state], [2000, 2500, 'partial']);
+  assert.strictEqual((await api('POST', `/api/people/${ap1}/payments`, { amount: 2500 })).json.state, 'paid'); /* طريقة مش معروفة بتترجّع «كاش» */
+  pb = (await api('GET', `/api/people/${ap1}/payments`)).json; assert.deepStrictEqual([pb.paid, pb.remaining, pb.state, pb.payments.length], [4500, 0, 'paid', 2]); assert.ok(pb.payments.some((x) => x.method === 'فودافون كاش' && x.date === '2026-11-20' && x.note === 'عربون') && pb.payments.some((x) => x.method === 'الخزينة - نقدي'));
   const lst2 = (await api("GET", "/api/people")).json.people; assert.strictEqual(lst2.find((x) => x.id === ap1).pay.state, "paid"); assert.strictEqual(lst2.find((x) => x.id === ap2).pay.remaining, 3000);
   let acc = (await api('GET', '/api/accounts/summary')).json; assert.ok(acc.totals.paid >= 4500 && acc.totals.remaining >= 3000 && acc.batches.some((x) => x.id === bp.json.id && x.paid === 4500 && x.due === 7500) && acc.debtors.some((x) => x.id === ap2) && acc.byMethod.some((x) => x.method === 'فودافون كاش') && acc.recent.length >= 2, 'ملخص الحسابات');
-  const refund = await api('POST', `/api/people/${ap1}/payments`, { amount: -500, method: 'كاش', note: 'استرجاع' }); assert.strictEqual(refund.json.remaining, 500);
+  const refund = await api('POST', `/api/people/${ap1}/payments`, { amount: -500, walletId: cashW, note: 'استرجاع' }); assert.strictEqual(refund.json.remaining, 500);
   assert.strictEqual((await api('DELETE', `/api/payments/${pb.payments[0].id}`)).status, 200); assert.strictEqual((await api('GET', `/api/people/${ap1}/payments`)).json.payments.length, 2);
   const so = (await api('GET', '/api/stats/overview')).json; assert.ok(so.accounts && so.accounts.paid >= 0 && so.visas.find((v) => v.id === bp.json.id).due === 7500, 'الحسابات في لوحة التحكم');
   /* الصلاحيات: المشاهد مبيشوفش الفلوس، والموظف بيسجّل */
@@ -292,6 +297,28 @@ const api = async (method, url, body, extra = {}) => {
   await api('POST', `/api/people/${pk1}/result`, { status: 'submitted', appNumber: '830068985' }); pk = (await api('GET', `/api/print/pack/${pk1}`)).json; assert.strictEqual(pk.appNumber, 'E830068985'); assert.ok(!pk.missing.some((x) => /رقم الطلب/.test(x)));
   const bz = await fetch(base + `/api/people/letters-bundle?ids=${pk1}&kind=auto`, { headers: { Cookie: cookie } }); const bzb = Buffer.from(await bz.arrayBuffer()); assert.deepStrictEqual([bz.status, bz.headers.get('content-type'), bzb.slice(0, 2).toString()], [200, 'application/zip', 'PK'], 'خطابات مجمّعة zip');
   who = await loginAs('viewer1'); assert.strictEqual((await api('POST', '/api/print/jobs', { payload: lblPayload })).status, 403); assert.strictEqual((await api('GET', `/api/print/pack/${pk1}`)).status, 403); assert.strictEqual((await api('GET', `/api/people/letters-bundle?ids=${pk1}`)).status, 403); cookie = adminCookie2;
+  /* ===== الخزينة: أرصدة، إيراد/مصروف/تحويل، سجل المعاملات ===== */
+  tr = (await api('GET', '/api/treasury')).json; const bal = (id) => tr.wallets.find((w) => w.id === id).balance;
+  assert.strictEqual(bal(vfW), 2100, 'فودافون: 100 أول المدة + 2000 دفعة');
+  const cashBal0 = bal(cashW);
+  assert.strictEqual((await api('POST', '/api/treasury/tx', { kind: 'expense', walletId: cashW, amount: 0 })).status, 400); assert.strictEqual((await api('POST', '/api/treasury/tx', { kind: 'weird', walletId: cashW, amount: 5 })).status, 400);
+  assert.strictEqual((await api('POST', '/api/treasury/tx', { kind: 'expense', walletId: cashW, amount: 300, category: 'انتقالات', note: 'مواصلات', date: '2026-11-20' })).status, 200);
+  assert.strictEqual((await api('POST', '/api/treasury/tx', { kind: 'income', walletId: cashW, amount: 50, category: 'إيداع' })).status, 200);
+  assert.strictEqual((await api('POST', '/api/treasury/tx', { kind: 'transfer', walletId: vfW, toWalletId: vfW, amount: 10 })).status, 400, 'تحويل لنفس المحفظة');
+  const trf = await api('POST', '/api/treasury/tx', { kind: 'transfer', walletId: vfW, toWalletId: cashW, amount: 1000, note: 'سحب' }); assert.strictEqual(trf.status, 200);
+  tr = (await api('GET', '/api/treasury')).json; assert.strictEqual(bal(vfW), 1100); assert.strictEqual(bal(cashW), cashBal0 - 300 + 50 + 1000);
+  assert.strictEqual(tr.total, tr.wallets.filter((w) => !w.archived).reduce((a, w) => a + w.balance, 0));
+  let tlg = (await api('GET', `/api/treasury/tx?wallet=${cashW}`)).json; assert.ok(tlg.rows.some((x) => x.kind === 'expense' && x.amount === -300 && x.desc.includes('انتقالات')) && tlg.rows.some((x) => x.kind === 'transfer' && x.amount === 1000 && /تحويل من فودافون/.test(x.kindLabel)) && tlg.rows.some((x) => x.kind === 'client'), 'سجل المحفظة فيه كل الأنواع');
+  tlg = (await api('GET', '/api/treasury/tx?kind=client')).json; assert.ok(tlg.rows.length >= 3 && tlg.rows.every((x) => x.kind === 'client') && tlg.rows.some((x) => x.personId === ap1));
+  tlg = (await api('GET', '/api/treasury/tx?kind=expense&from=2026-11-20&to=2026-11-20')).json; assert.deepStrictEqual([tlg.count, tlg.out], [1, 300]);
+  tlg = (await api('GET', '/api/treasury/tx?q=' + encodeURIComponent('مواصلات'))).json; assert.strictEqual(tlg.count, 1);
+  assert.strictEqual((await api('DELETE', `/api/treasury/wallets/${vfW}`)).status, 409, 'محفظة فيها معاملات ما تتمسحش');
+  const tid = (await api('GET', `/api/treasury/tx?wallet=${vfW}&kind=transfer`)).json.rows[0].txId; assert.strictEqual((await api('DELETE', `/api/treasury/tx/${tid}`)).status, 200);
+  tr = (await api('GET', '/api/treasury')).json; assert.strictEqual(bal(vfW), 2100, 'مسح التحويل بيرجّع المحفظتين');
+  assert.strictEqual((await api('PUT', `/api/treasury/wallets/${vfW}`, { archived: true })).status, 200); assert.ok(!(await api('GET', `/api/people/${ap1}/payments`)).json.wallets.some((w) => w.id === vfW), 'المقفولة مش بتظهر في الدفع');
+  assert.strictEqual((await api('POST', '/api/treasury/tx', { kind: 'income', walletId: vfW, amount: 5 })).status, 400); await api('PUT', `/api/treasury/wallets/${vfW}`, { archived: false });
+  const emptyW = (await api('POST', '/api/treasury/wallets', { name: 'مؤقتة' })).json.id; assert.strictEqual((await api('DELETE', `/api/treasury/wallets/${emptyW}`)).status, 200);
+  who = await loginAs('viewer1'); assert.strictEqual((await api('GET', '/api/treasury')).status, 403); assert.strictEqual((await api('POST', '/api/treasury/tx', { kind: 'income', walletId: cashW, amount: 5 })).status, 403); cookie = adminCookie2;
   // حماية: طلب من مصدر تاني
   const csrf = await fetch(base + '/api/people', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'https://evil.example' }, body: '{}' });
   assert.strictEqual(csrf.status, 403);

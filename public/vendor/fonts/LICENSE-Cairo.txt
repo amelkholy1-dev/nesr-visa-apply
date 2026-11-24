@@ -1,0 +1,1 @@
+Cairo font (Copyright 2009 The Cairo Project Authors) — SIL Open Font License 1.1 — https://github.com/Gue3bara/Cairo

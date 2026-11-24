@@ -71,6 +71,28 @@ const TABLES = [
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY ix_pay_person (person_id), KEY ix_pay_date (paid_at)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS wallets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(120) NOT NULL,
+    kind VARCHAR(20) NOT NULL DEFAULT 'cash',
+    number VARCHAR(60) NOT NULL DEFAULT '',
+    opening DECIMAL(12,2) NOT NULL DEFAULT 0,
+    archived TINYINT(1) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS treasury_tx (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    wallet_id INT NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    kind VARCHAR(20) NOT NULL DEFAULT 'income',
+    category VARCHAR(80) NOT NULL DEFAULT '',
+    note VARCHAR(255) NOT NULL DEFAULT '',
+    tx_date DATE NOT NULL,
+    pair_id INT NULL,
+    created_by INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY ix_tx_wallet (wallet_id), KEY ix_tx_date (tx_date)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
   `CREATE TABLE IF NOT EXISTS print_agents (
     agent_id VARCHAR(120) PRIMARY KEY,
     name VARCHAR(160) NOT NULL DEFAULT '',
@@ -123,6 +145,18 @@ async function init() {
   if (!hasPerms) await pool.query('ALTER TABLE users ADD COLUMN perms TEXT NULL');
   const hasArch = (await query("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'profiles' AND column_name = 'archived'"))[0].n;
   if (!hasArch) await pool.query('ALTER TABLE profiles ADD COLUMN archived TINYINT(1) NOT NULL DEFAULT 0');
+  const hasWal = (await query("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'payments' AND column_name = 'wallet_id'"))[0].n;
+  if (!hasWal) await pool.query('ALTER TABLE payments ADD COLUMN wallet_id INT NULL');
+  /* الخزينة: أول مرة بنعمل محفظة لكل طريقة دفع اتستخدمت قبل كده (أو «الخزينة - نقدي») ونربط الدفعات القديمة بيها */
+  if (!(await query('SELECT COUNT(*) AS n FROM wallets'))[0].n) {
+    const methods = (await query("SELECT DISTINCT method FROM payments WHERE method <> ''")).map((r) => r.method);
+    const list = methods.length ? methods : ['كاش'];
+    for (const m of list) {
+      const name = m === 'كاش' ? 'الخزينة - نقدي' : m; const kind = m === 'كاش' ? 'cash' : /بنك|تحويل/.test(m) ? 'bank' : 'wallet';
+      const r = await pool.query('INSERT INTO wallets (name, kind) VALUES (?, ?)', [name, kind]);
+      await pool.query('UPDATE payments SET wallet_id = ? WHERE method = ? AND wallet_id IS NULL', [r[0].insertId, m]);
+    }
+  }
   await pool.query('ALTER TABLE users MODIFY role VARCHAR(20) NOT NULL DEFAULT \'staff\'');
   const n = (await query('SELECT COUNT(*) AS n FROM users'))[0].n;
   if (!n) {
