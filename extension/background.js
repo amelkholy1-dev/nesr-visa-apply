@@ -122,6 +122,11 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       const key = 'actx_' + (sender.tab && sender.tab.id); const o = await store.get(key); reply({ ctx: o[key] || null });
     } else if (msg.kind === 'appno-stage') {
       const key = 'actx_' + (sender.tab && sender.tab.id); const o = await store.get(key); if (o[key]) await store.set({ [key]: { ...o[key], stage: String(msg.stage || '') } }); reply({ ok: true });
+    } else if (msg.kind === 'appno-status') {
+      const key = 'actx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
+      const t = await findAppTab(ctx.originTabId);
+      if (t) { try { await chrome.tabs.sendMessage(t.id, { kind: 'va-appno-status', data: { text: String((msg.data && msg.data.text) || '').slice(0, 240) } }); } catch (e) { /* مش مهم */ } }
+      reply({ ok: true });
     } else if (msg.kind === 'appno-captcha' || msg.kind === 'appno-result') {
       const key = 'actx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
       const t = await findAppTab(ctx.originTabId);

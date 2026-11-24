@@ -5,7 +5,7 @@
   const $ = (s, r = document) => r.querySelector(s);
   const view = $('#view');
   const e = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  let me = null, meta = null, extReady = false;
+  let me = null, meta = null, extReady = false, extVersion = '';
   const STATUS = { draft: ['مسودة', ''], ready: ['جاهز', 'acc'], waiting: ['مستني تأمين الجواز', 'bad'], filled: ['اتملى في المنصة', 'warn'], submitted: ['اتبعت', 'ok'] };
 
   /* ===== شبكة وتنبيهات ===== */
@@ -27,7 +27,7 @@
   window.addEventListener('message', (ev) => {
     if (ev.source !== window || ev.origin !== location.origin) return;
     const m = ev.data; if (!m || m.source !== 'nesr-visaapply-ext') return;
-    if (m.type === 'VA_READY') { extReady = true; setExt(); }
+    if (m.type === 'VA_READY') { extReady = true; extVersion = String(m.version || extVersion || ''); setExt(); }
     if (m.type === 'VA_ACK') { bridge.pending.splice(0).forEach((f) => f(true)); }
     if (m.type === 'VA_ERROR') { toast(m.data && m.data.message || 'مشكلة في الإضافة', 'err'); bridge.pending.splice(0).forEach((f) => f(false)); }
     if (m.type === 'VA_RESULT' && m.data) onResult(m.data);
@@ -766,7 +766,7 @@
   }
   /* بنشارك الأدوات مع ملفات الصفحات (pages-*.js) */
   Object.assign(NA, { api, e, $, view, toast, fail, STATUS, can, ping, fillRequest, wafidRequest, labRequest, letterDownload, stageDots, fmtDate });
-  Object.defineProperties(NA, { me: { get: () => me, configurable: true }, meta: { get: () => meta, configurable: true }, extReady: { get: () => extReady, configurable: true } });
+  Object.defineProperties(NA, { me: { get: () => me, configurable: true }, meta: { get: () => meta, configurable: true }, extReady: { get: () => extReady, configurable: true }, extVersion: { get: () => extVersion, configurable: true } });
   $('#logoutBtn').onclick = async () => { await api('POST', '/logout').catch(() => {}); me = null; location.hash = '#/login'; render(); };
   window.addEventListener('hashchange', render);
   render();

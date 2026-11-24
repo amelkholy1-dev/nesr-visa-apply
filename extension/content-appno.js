@@ -93,21 +93,36 @@
   }
 
   (async function run() {
-    const { ctx } = await send({ kind: 'get-appno-ctx' }); if (!ctx) return;
+    /* السياق بيتسجّل بعد ما التبويب يتفتح بلحظة: بنحاول كذا مرة قبل ما نعتبر الصفحة مش بتاعتنا */
+    let ctx = null; for (let k = 0; k < 8 && !ctx; k++) { ({ ctx } = await send({ kind: 'get-appno-ctx' })); if (!ctx) await sleep(600); }
+    if (!ctx) return;
+    const status = (text) => send({ kind: 'appno-status', data: { text: String(text).slice(0, 220) } });
+    const snippet = () => cut((document.title || '') + ' — ' + ((document.body && document.body.innerText) || ''), 160);
     const tell = (message, extra) => send({ kind: 'appno-captcha', data: { image: '', error: true, message, ...(extra || {}) } });
     try {
-      if (!(await waitFor(() => isSearch() || isResult(), 12000))) {
+      await status('اتفتحت صفحة المنصة: ' + location.pathname + (ctx.stage === 'submitted' ? ' (بعد البحث)' : ''));
+      if (/\/Account\/Login/i.test(location.pathname)) { await tell('المنصة طلبت تسجيل الدخول. دوس «افتح تبويب المنصة»، سجّل دخولك، وبعدين ارجع هنا ودوس «جرّب تاني».'); return; }
+      const ok = await waitFor(() => isSearch() || isResult() || (ctx.stage === 'submitted' && /رقم\s*الطلب\s*[:：]?\s*[A-Za-z]?\d{6,12}/.test((document.body && document.body.innerText) || '')), 15000);
+      if (!ok) {
         const msg = shownError();
-        if (/GetPersonVisa/i.test(location.pathname) && ctx.stage === 'submitted') { await send({ kind: 'appno-result', data: { notFound: true, message: msg || 'مفيش طلب بالبيانات دي.' } }); return; }
-        await tell('صفحة المنصة مش زي المتوقع (' + location.pathname + '). افتح تبويب المنصة وشوف إيه اللي ظاهر.'); return;
+        if (ctx.stage === 'submitted' && (/GetPersonVisa|getapplicantdata/i.test(location.pathname))) { await send({ kind: 'appno-result', data: { notFound: true, message: msg || ('الصفحة رجعت من غير نتيجة: ' + snippet()) } }); return; }
+        await status('محتوى الصفحة: ' + snippet());
+        await tell('صفحة المنصة مش زي المتوقع (' + location.pathname + '). دوس «افتح تبويب المنصة» وشوف إيه اللي ظاهر.'); return;
       }
-      if (isResult()) return await runResult(ctx);
+      if (isResult()) { await status('ظهرت نتيجة البحث'); return await runResult(ctx); }
+      if (!isSearch()) { /* نتيجة بشكل مختلف: بنقرا رقم الطلب من نص الصفحة */
+        const t = (document.body && document.body.innerText) || ''; const m = /رقم\s*الطلب\s*[:：]?\s*([A-Za-z]?\d{6,12})/.exec(t); let app = m ? m[1].toUpperCase() : ''; if (/^\d+$/.test(app)) app = 'E' + app;
+        const p = /رقم\s*(?:جواز\s*السفر|الجواز)\s*[:：]?\s*([A-Za-z]{0,2}\d{6,9})/.exec(t);
+        await status('نتيجة بشكل مختلف — قريت رقم الطلب من نص الصفحة: ' + app);
+        await send({ kind: 'appno-result', data: { appNumber: app, passportNo: p ? p[1].toUpperCase() : '' } }); return;
+      }
       /* رجعنا لصفحة البحث بعد «إجراء البحث»: يا كود غلط، يا مفيش طلب بالبيانات دي */
       if (ctx.stage === 'submitted') {
-        const msg = shownError();
+        const msg = shownError(); await status('رجعنا لصفحة البحث بعد البحث' + (msg ? ': ' + msg : ' من غير رسالة ظاهرة'));
         if (/لم\s*يتم\s*العثور|لا\s*توجد|غير\s*موجود/.test(msg)) { await send({ kind: 'appno-result', data: { notFound: true, message: msg } }); return; }
       }
       await runSearch(ctx);
+      await status('اتكتبت البيانات واتبعتت صورة الكابتشا');
     } catch (e) { await tell('حصل خطأ في الإضافة: ' + String(e && e.message || e).slice(0, 120)); }
   })();
 })();
