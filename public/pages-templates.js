@@ -45,6 +45,8 @@
       <div class="card"><h2>جرّب على صورة</h2><div class="muted small" style="margin-bottom:8px">اختار صورة شخصية وشوف قبل وبعد المعالجة (من غير ما تتحفظ في أي مكان).</div>
         <input type="file" id="pmFile" accept="image/jpeg,image/png"><div id="pmOut" style="margin-top:12px"></div></div>`;
 
+    /* قراءة صورة الجواز (Gemini): مفاتيح + تبديل تلقائي */
+    const gbox = document.createElement('div'); view.appendChild(gbox); NA.geminiCard(gbox);
     /* طباعة الباركود: برنامج Masar Print Agent (نفس برنامج نظام الجوازات) */
     const box = document.createElement('div'); view.appendChild(box);
     const drawPrint = async () => {

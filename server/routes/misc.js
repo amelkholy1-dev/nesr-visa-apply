@@ -24,7 +24,7 @@ router.put('/settings/entry', P.need('users.manage'), async (req, res) => {
 router.get('/meta', async (req, res) => {
   let photo = { mode: 'off' }; try { photo = await getSetting('photo', photo); } catch (e) { /* مش مهم */ }
   let look = { skin: 'petrol', dark: false }; try { look = await getSetting('look', look); } catch (e) { /* مش مهم */ }
-  res.json({ ...F.meta(), ocr: !!config.geminiKey, stages: S.STAGES, brand: config.brand, brandTag: config.brandTag, perms: P.PERMS, payMethods: A.PAY_METHODS, photoProcess: photo.mode === 'clean' ? 'clean' : 'off', autoEntryDays: F.getAutoEntryDays(), look: { skin: SKINS.includes(look && look.skin) ? look.skin : 'petrol', dark: !!(look && look.dark) } });
+  res.json({ ...F.meta(), ocr: await require('../gemini').available(), stages: S.STAGES, brand: config.brand, brandTag: config.brandTag, perms: P.PERMS, payMethods: A.PAY_METHODS, photoProcess: photo.mode === 'clean' ? 'clean' : 'off', autoEntryDays: F.getAutoEntryDays(), look: { skin: SKINS.includes(look && look.skin) ? look.skin : 'petrol', dark: !!(look && look.dark) } });
 });
 /* ألوان النظام: petrol (بترولي + برتقالي) · olive (زيتوني + بيج) + الوضع الليلي — لكل المستخدمين */
 const SKINS = ['petrol', 'olive'];
@@ -35,6 +35,15 @@ router.put('/settings/look', P.need('users.manage'), async (req, res) => {
     res.json({ ok: true, look });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+/* مفاتيح Gemini (القراءة التلقائية لصورة الجواز): أكتر من مفتاح + تبديل تلقائي لما الكوتة تخلص. المفاتيح نفسها مبترجعش للواجهة */
+const G = require('../gemini');
+const gErr = (res, e) => res.status(e.status || 500).json({ error: e.message });
+router.get('/settings/gemini', P.need('users.manage'), async (req, res) => { try { res.json(await G.overview()); } catch (e) { gErr(res, e); } });
+router.put('/settings/gemini', P.need('users.manage'), async (req, res) => { try { await G.setOptions(req.body || {}); require('../audit').log(req, 'settings', null, '', 'Gemini: الإعدادات'); res.json(await G.overview()); } catch (e) { gErr(res, e); } });
+router.post('/settings/gemini/keys', P.need('users.manage'), async (req, res) => { try { const id = await G.addKey(req.body || {}); require('../audit').log(req, 'settings', null, '', 'Gemini: مفتاح جديد ' + String((req.body || {}).label || '').slice(0, 40)); const t = await G.test(id); res.json({ ...(await G.overview()), id, test: t }); } catch (e) { gErr(res, e); } });
+router.put('/settings/gemini/keys/:id', P.need('users.manage'), async (req, res) => { try { await G.updateKey(req.params.id, req.body || {}); res.json(await G.overview()); } catch (e) { gErr(res, e); } });
+router.delete('/settings/gemini/keys/:id', P.need('users.manage'), async (req, res) => { try { await G.removeKey(req.params.id); require('../audit').log(req, 'settings', null, '', 'Gemini: مسح مفتاح'); res.json(await G.overview()); } catch (e) { gErr(res, e); } });
+router.post('/settings/gemini/keys/:id/test', P.need('users.manage'), async (req, res) => { try { const t = await G.test(req.params.id); res.json({ ...(await G.overview()), test: t }); } catch (e) { gErr(res, e); } });
 /* معالجة الصورة الشخصية عند الرفع: off = زي ما هي (بتتصغّر بس) · clean = خلفية بيضاء + إزالة تشويش (بتتم في المتصفح) */
 router.put('/settings/photo', P.need('users.manage'), async (req, res) => {
   try { const mode = req.body && req.body.mode === 'clean' ? 'clean' : 'off'; await setSetting('photo', { mode }); require('../audit').log(req, 'settings', null, '', 'معالجة الصورة: ' + (mode === 'clean' ? 'شغّالة' : 'زي ما هي')); res.json({ ok: true, mode }); } catch (e) { res.status(500).json({ error: e.message }); }

@@ -1,7 +1,7 @@
 'use strict';
-/* قراءة صفحة بيانات الجواز بـ Gemini (اختياري: محتاج GEMINI_API_KEY). بنطلب منه سطري MRZ حرفياً وبعض البيانات المطبوعة،
+/* قراءة صفحة بيانات الجواز بـ Gemini (اختياري: مفاتيح من «الإعدادات» أو GEMINI_API_KEY، والتبديل بينهم في server/gemini.js). بنطلب منه سطري MRZ حرفياً وبعض البيانات المطبوعة،
    وبعدها السيرفر بيفحص MRZ بأرقام التحقق (server/mrz.js) فالقراءة الغلط مبتعدّيش من غير ما تتعلّم. */
-const config = require('./config');
+const gemini = require('./gemini');
 
 const PROMPT = `You are reading the data page of a passport. Return ONLY a JSON object with these keys:
 - mrz1: first MRZ line exactly as printed (44 characters, use < for fillers)
@@ -15,13 +15,9 @@ const PROMPT = `You are reading the data page of a passport. Return ONLY a JSON 
 Do not guess characters you cannot read: copy the MRZ exactly. No explanations, JSON only.`;
 
 async function readPassport(buffer, mimeType) {
-  if (!config.geminiKey) { const e = new Error('القراءة التلقائية مش متفعّلة (محتاجة GEMINI_API_KEY). الصق سطري MRZ بإيدك.'); e.status = 501; throw e; }
   if (!/^image\/(jpeg|png)$/.test(mimeType)) { const e = new Error('الصورة لازم JPG أو PNG'); e.status = 400; throw e; }
-  const url = `${process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com'}/v1beta/models/${encodeURIComponent(config.geminiModel)}:generateContent`;
   const body = { contents: [{ parts: [{ text: PROMPT }, { inline_data: { mime_type: mimeType, data: buffer.toString('base64') } }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
-  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': config.geminiKey }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
-  if (!r.ok) { const e = new Error(`فشل الاتصال بخدمة القراءة (${r.status})`); e.status = 502; throw e; }
-  const j = await r.json();
+  const { json: j } = await gemini.generate(body);
   const txt = (((j.candidates || [])[0] || {}).content || {}).parts;
   const raw = Array.isArray(txt) ? txt.map(p => p.text || '').join('') : '';
   let o = {};
