@@ -2,7 +2,7 @@
 /* بيشغّل الاختبارات: mrz/names (من غير قاعدة) · API (محتاج MySQL) · واجهة وإضافة (محتاجين Chromium + playwright) */
 const { spawnSync } = require('child_process');
 const path = require('path');
-const run = (f) => { console.log('\n▶', f); const r = spawnSync('node', [path.join(__dirname, f)], { stdio: 'inherit' }); return r.status === 0; };
+const run = (f) => { console.log('\n▶', f); const r = spawnSync('node', [path.join(__dirname, f)], { stdio: 'inherit', env: { ...process.env, LANG: process.env.LANG || 'C.UTF-8' } }); /* Chrome على Linux محتاج UTF-8 عشان أسماء الملفات العربي */ return r.status === 0; };
 let ok = run('mrz-names.test.js');
 ok = run('fields.test.js') && ok;
 ok = run('letters.test.js') && ok;

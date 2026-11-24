@@ -219,12 +219,14 @@ router.get('/:id(\\d+)/appno-lookup', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* اسم ملف الخطاب: اسم الشخص + «خطاب السويس» / «خطاب القاهرة» (من غير رموز ممنوعة في أسماء الملفات) */
+const letterFileName = (name, kind) => (String(name || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'شخص') + ' - خطاب ' + (kind === 'cairo' ? 'القاهرة' : 'السويس');
 /* خطابات الترشيح لكذا شخص مرة واحدة (ملف zip فيه Word لكل واحد): kind = suez | cairo | auto (حسب الممثلية: القاهرة 302، غير كده السويس) */
 router.get('/letters-bundle', async (req, res) => {
   try {
     const ids = String(req.query.ids || '').split(',').map((x) => parseInt(x, 10)).filter(Boolean).slice(0, 200); if (!ids.length) return res.status(400).json({ error: 'اختار أشخاص الأول' });
     const archiver = require('archiver'); const z = archiver('zip', { zlib: { level: 6 } }); const used = new Set();
-    res.setHeader('Content-Type', 'application/zip'); res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodeURIComponent('nomination-letters.zip'));
+    res.setHeader('Content-Type', 'application/zip'); res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodeURIComponent((req.query.kind === 'cairo' ? 'خطابات القاهرة' : req.query.kind === 'suez' ? 'خطابات السويس' : 'خطابات الترشيح') + '.zip'));
     z.on('error', () => { try { res.destroy(); } catch (e) { /* مش مهم */ } }); z.pipe(res);
     for (const id of ids) {
       const row = (await db.query('SELECT * FROM people WHERE id = ?', [id]))[0]; if (!row) continue;
@@ -232,7 +234,7 @@ router.get('/letters-bundle', async (req, res) => {
       const kind = ['suez', 'cairo'].includes(req.query.kind) ? req.query.kind : (String(v.embassy) === '302' ? 'cairo' : 'suez');
       let photo = null; try { if (row.personal_photo) photo = fs.readFileSync(fullPath(row.id, row.personal_photo)); } catch (e) { photo = null; }
       const buf = await letters.build(kind, letterVars(row, v), photo);
-      let name = `${kind === 'cairo' ? 'القاهرة' : 'السويس'}-${String(v.passportNo || row.id).toUpperCase()}`; while (used.has(name)) name += '-' + row.id; used.add(name);
+      let name = letterFileName(row.name_ar || v.passportNo || row.id, kind); while (used.has(name)) name += ' ' + row.id; used.add(name);
       z.append(buf, { name: name + '.docx' });
       audit.log(req, 'fill', row.id, row.name_ar, 'خطاب ترشيح ' + letters.KINDS[kind].label + ' (مجمّع)');
       try { await patchStage(row.id, 'letter', { state: 'done', note: letters.KINDS[kind].label }); } catch (e) { /* مش مهم */ }
@@ -285,7 +287,7 @@ router.get('/:id(\\d+)/letter/:kind(suez|cairo)', async (req, res) => {
     audit.log(req, 'fill', row.id, row.name_ar, 'خطاب ترشيح ' + letters.KINDS[req.params.kind].label);
     try { await patchStage(row.id, 'letter', { state: 'done', note: letters.KINDS[req.params.kind].label }); } catch (e) { /* مش مهم */ }
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodeURIComponent('nomination-' + req.params.kind + '-' + (vars.passport || row.id) + '.docx'));
+    res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(letterFileName(row.name_ar || vars.passport || row.id, req.params.kind) + '.docx'));
     res.send(buf);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

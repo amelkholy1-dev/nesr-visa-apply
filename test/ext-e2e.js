@@ -53,6 +53,7 @@ const appnoResultFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'app
 const appListFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-applist.html'), 'utf8');
 const enjazMainFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'enjaz-main.html'), 'utf8');
 const enjazPrintFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'enjaz-print.html'), 'utf8');
+const mofaLoginFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'mofa-login.html'), 'utf8');
 const wafidStatusFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'wafid-status.html'), 'utf8');
 const wafidCardFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'wafid-status-card.html'), 'utf8');
 const TINY_PDF = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF';
@@ -72,9 +73,9 @@ const LMOCK = `<script>
 </script>`;
 
 const appHtml = `<!doctype html><meta charset=utf-8><body><script>
-window.apcaps=[];window.apres=[];window.wres=[];window.wmsg=[];window.got=[];window.visa=[];window.docs=[];window.caps=[];window.nexts=[];window.ready=false;window.acks=0;
+window.apcaps=[];window.apres=[];window.wres=[];window.wmsg=[];window.netlogin=[];window.netpdf=[];window.netmsg=[];window.got=[];window.visa=[];window.docs=[];window.caps=[];window.nexts=[];window.ready=false;window.acks=0;
 window.addEventListener('message',function(e){ if(e.source!==window)return; var m=e.data; if(!m||m.source!=='nesr-visaapply-ext')return;
- if(m.type==='VA_READY')window.ready=true; if(m.type==='VA_ACK')window.acks++; if(m.type==='VA_RESULT')window.got.push(m.data); if(m.type==='VA_ERROR')window.got.push({error:m.data.message}); if(m.type==='VA_NEXT')window.nexts.push(m.data); if(m.type==='VA_VISAINFO_RESULT')window.visa.push(m.data); if(m.type==='VA_VISAINFO_CAPTCHA')window.caps.push(m.data); if(m.type==='VA_VISAINFO_DOC')window.docs.push(m.data); if(m.type==='VA_APPNO_CAPTCHA')window.apcaps.push(m.data); if(m.type==='VA_APPNO_RESULT')window.apres.push(m.data); if(m.type==='VA_WAFIDRES_RESULT')window.wres.push(m.data); if(m.type==='VA_WAFIDRES_MSG')window.wmsg.push(m.data); });
+ if(m.type==='VA_READY')window.ready=true; if(m.type==='VA_ACK')window.acks++; if(m.type==='VA_RESULT')window.got.push(m.data); if(m.type==='VA_ERROR')window.got.push({error:m.data.message}); if(m.type==='VA_NEXT')window.nexts.push(m.data); if(m.type==='VA_VISAINFO_RESULT')window.visa.push(m.data); if(m.type==='VA_VISAINFO_CAPTCHA')window.caps.push(m.data); if(m.type==='VA_VISAINFO_DOC')window.docs.push(m.data); if(m.type==='VA_APPNO_CAPTCHA')window.apcaps.push(m.data); if(m.type==='VA_APPNO_RESULT')window.apres.push(m.data); if(m.type==='VA_WAFIDRES_RESULT')window.wres.push(m.data); if(m.type==='VA_WAFIDRES_MSG')window.wmsg.push(m.data); if(m.type==='VA_NET_LOGIN')window.netlogin.push(m.data); if(m.type==='VA_NET_PDF')window.netpdf.push(m.data); if(m.type==='VA_NET_MSG')window.netmsg.push(m.data); });
 window.fill=function(d){ window.postMessage({source:'nesr-visaapply',type:'VA_FILL',data:d},location.origin); };
 window.postMessage({source:'nesr-visaapply',type:'VA_PING'},location.origin);
 </script></body>`;
@@ -113,7 +114,13 @@ const MOFA = {
       return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: appnoResultFixture.replace('PASSPORT_PLACEHOLDER', f.get('PassportNumber')) });
     }
     if (/\/Enjaz\/PrintApplication/i.test(rq.url())) { const no = (rq.url().match(/ApplicationNo=(\d+)/) || [])[1]; if (global.__netDirectFails && rq.method() === 'GET') return r.fulfill({ status: 302, headers: { Location: 'https://visa.mofa.gov.sa/Enjaz/Main' }, body: '' }); return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: enjazPrintFixture.replace('EAPPNO', 'E' + (no || '')) }); }
-    if (/\/Enjaz\/Main/i.test(rq.url()) && global.__netLoggedOut) return r.fulfill({ status: 302, headers: { Location: 'https://visa.mofa.gov.sa/Home/Index' }, body: '' });
+    if (/\/Account\/Login/i.test(rq.url()) && global.__netLoggedOut !== undefined) {
+      if (rq.method() !== 'POST') return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: mofaLoginFixture });
+      const f = new URLSearchParams(rq.postData() || ''); global.__loginPost = rq.postData() || '';
+      if (f.get('Captcha') === '123456' && f.get('UserName') === 'office1' && f.get('Password') === 'Pw#12345') { global.__netLoggedOut = false; return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h1>الرئيسية</h1><span class="logged-name-user">مرحباً</span></body>' }); }
+      return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: mofaLoginFixture.replace('<!--ERR-->', '<div class="validation-summary-errors">رمز الصورة غير صحيح</div>') });
+    }
+    if (/\/Enjaz\/Main/i.test(rq.url()) && global.__netLoggedOut) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h1>الرئيسية</h1><a>الدخول</a></body>' }); /* المنصة بترجّع الرئيسية لغير الداخلين */
     if (/\/Enjaz\/Main/i.test(rq.url())) { if (rq.method() === 'POST') { global.__netPost = rq.postData() || ''; const no = (global.__netPost.match(/AppNo=(\d+)/) || [])[1]; if (no === '828000000') return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: enjazMainFixture.replace('</body>', '<div class="alert alert-danger">لا يوجد طلب بهذا الرقم</div></body>') }); return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: enjazPrintFixture.replace('EAPPNO', 'E' + (no || '')) }); } return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: enjazMainFixture }); }
     if (/\/SmartForm\/?(\?.*)?$/i.test(rq.url()) && rq.method() === 'GET') return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: appListFixture });
     if (/\/SmartForm\/PrintApplication\//i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h2>تم تقديم الطلب</h2><div>رقم الطلب: 830068985</div><div>رقم الجواز : A12345678</div></body>' });
@@ -130,29 +137,30 @@ const MOFA = {
   global.__searchRecs = [{ ID: 829000001, FullName: 'BADR KHALIL BADR ABOUELENIN', PASSPORT_NO: 'A42014007' }, { ID: 830099999, FullName: 'SAMIR TEST HASSAN', PASSPORT_NO: 'A42014007' }];
   const app = await ctx.newPage(); await app.goto('https://visa.nisrelkhaleeg.com/'); await app.waitForTimeout(1500);
   async function netTest() {
-  /* سيناريو 17: طباعة ورقة النت برقم الطلب — بتفتح «إنجاز»، تكتب الرقم وتدوس «طباعة»، وتطبع الصفحة الأولى بس */
-  const netOpen = async (appNo) => { const [p] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_NETPRINT', data: d }, location.origin), { appNo, name: 'شخص تجربة' })]); await p.waitForTimeout(1500); await p.reload().catch(() => {}); return p; };
+  /* سيناريو 17: ورقة النت من جوه النظام — تبويب في الخلفية على «إنجاز»، بيكتب الرقم ويدوس «طباعة»، والورقة بترجع للنظام PDF (الصفحة الأولى) والتبويب بيتقفل */
+  const netOpen = async (appNo) => { const [p] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_NETPRINT', data: d }, location.origin), { appNo, name: 'شخص تجربة', personId: '7' })]); await p.waitForLoadState().catch(() => {}); if (/^chrome-error:/.test(p.url())) await p.goto('https://visa.mofa.gov.sa/Enjaz/Main').catch(() => {}); /* تبويب الخلفية بيتفتح قبل ما Playwright يمسك طلباته */ return p; };
+  const netCtl = (d) => app.evaluate((x) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_NET_CTL', data: x }, location.origin), d);
   global.__netPost = '';
-  const np1 = await netOpen('828935966'); await np1.waitForFunction(() => document.documentElement.dataset.vaNetPrinted === '1', null, { timeout: 25000 });
-  assert.ok(/AppNo=828935966/.test(global.__netPost) && /PrintApplication=PrintApplication/.test(global.__netPost), 'كتب رقم الطلب في «إنجاز» ودوس طباعة: ' + global.__netPost);
-  assert.ok((await np1.textContent('#nesr-net-bar')).includes('E828935966'), 'ورقة النت اتفتحت');
-  await np1.emulateMedia({ media: 'print' });
-  const pr = await np1.evaluate(() => { const r = document.getElementById('nesr-net-root'); const others = [...document.body.children].filter((x) => x !== r && getComputedStyle(x).display !== 'none').map((x) => x.className || x.id); return { root: !!r && getComputedStyle(r).display !== 'none', clipped: r && getComputedStyle(r).overflow === 'hidden', code: r && /E828935966/.test(r.textContent), others }; });
-  assert.ok(pr.root && pr.clipped && pr.code && !pr.others.length, 'الطباعة: الورقة بس ومقصوصة على صفحة واحدة: ' + JSON.stringify(pr));
-  await np1.close();
-  /* مش داخل المنصة: «إنجاز» بيرجّع للرئيسية ← الإضافة بتفتح دخول الشركات ← بعد الدخول بتكمّل وتطبع */
+  const np1 = await netOpen('828935966'); await app.waitForFunction(() => window.netpdf.length > 0, null, { timeout: 30000 }).catch(async (er) => { console.log('net dbg:', np1.isClosed() ? 'closed' : np1.url(), JSON.stringify(await app.evaluate(() => ({ msg: window.netmsg, login: window.netlogin.length, got: window.got.slice(-2) }))), global.__netPost); throw er; });
+  const pd1 = await app.evaluate(() => window.netpdf[0]); assert.ok(/AppNo=828935966/.test(global.__netPost) && /PrintApplication=PrintApplication/.test(global.__netPost), 'كتب رقم الطلب في «إنجاز» ودوس طباعة: ' + global.__netPost);
+  assert.ok(/^data:application\/pdf;base64,/.test(pd1.pdf) && pd1.appNo === '828935966' && pd1.personId === '7', 'الـ PDF وصل للنظام');
+  const pdfBuf = Buffer.from(pd1.pdf.split(',')[1], 'base64'); assert.strictEqual(pdfBuf.slice(0, 4).toString(), '%PDF'); assert.strictEqual((pdfBuf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length, 1, 'صفحة واحدة بس');
+  await np1.waitForEvent('close', { timeout: 15000 }).catch(() => {}); assert.ok(np1.isClosed(), 'التبويب اتقفل لوحده');
+  /* مش داخل المنصة: صفحة الدخول ← الكابتشا بتوصل للنظام ← كود غلط ← رسالة ← كود صح ← بيكمّل ويطبع */
   const inqWas = global.__inquiry; global.__inquiry = undefined; /* صفحة «الرئيسية» العادية (مش صفحة الاستعلام) */
-  global.__netLoggedOut = true;
-  const np4 = await netOpen('828935968'); await np4.waitForURL(/\/Account\/Login/, { timeout: 20000 });
-  await np4.waitForFunction(() => { const b = document.getElementById('nesr-net-bar'); return b && /سجّل دخولك/.test(b.textContent); }, null, { timeout: 15000 });
-  global.__netLoggedOut = false; global.__netPost = '';
-  await np4.goto('https://visa.mofa.gov.sa/Home/Index'); await np4.waitForFunction(() => document.documentElement.dataset.vaNetPrinted === '1', null, { timeout: 25000 });
-  assert.ok(/AppNo=828935968/.test(global.__netPost), 'بعد الدخول كمّل وطبع: ' + global.__netPost);
-  await np4.close(); global.__netLoggedOut = undefined; global.__inquiry = inqWas;
-  /* رقم غلط: المنصة بترجّع «إنجاز» برسالة ← الإضافة بتقول بوضوح وما بتطبعش */
-  const np3 = await netOpen('828000000'); await np3.waitForFunction(() => { const b = document.getElementById('nesr-net-bar'); return b && /ما فتحتش/.test(b.textContent); }, null, { timeout: 25000 });
-  assert.ok(/لا يوجد طلب/.test(await np3.textContent('#nesr-net-bar')) && !(await np3.evaluate(() => document.documentElement.dataset.vaNetPrinted)), 'رسالة المنصة ظهرت');
-  await np3.close();
+  global.__netLoggedOut = true; global.__netPost = '';
+  const np4 = await netOpen('828935968'); await app.waitForFunction(() => window.netlogin.length > 0, null, { timeout: 30000 }).catch(async (er) => { console.log('net dbg4:', np4.isClosed() ? 'closed' : np4.url(), JSON.stringify(await app.evaluate(() => ({ msg: window.netmsg, login: window.netlogin.length })))); throw er; });
+  const lg1 = await app.evaluate(() => window.netlogin[0]); assert.ok(String(lg1.image).startsWith('data:image/png') && lg1.needCaptcha && !lg1.error, 'صورة الكابتشا وصلت للنظام: ' + JSON.stringify({ ...lg1, image: String(lg1.image).slice(0, 30) }));
+  await netCtl({ op: 'login', user: 'office1', pass: 'Pw#12345', captcha: '000000' }); await app.waitForFunction(() => window.netlogin.some((x) => x.error), null, { timeout: 30000 });
+  assert.ok(/رمز الصورة غير صحيح/.test((await app.evaluate(() => window.netlogin.find((x) => x.error))).message), 'رسالة المنصة وصلت');
+  await netCtl({ op: 'login', user: 'office1', pass: 'Pw#12345', captcha: '123456' }); await app.waitForFunction(() => window.netpdf.length > 1, null, { timeout: 40000 });
+  assert.ok(/AppNo=828935968/.test(global.__netPost), 'بعد الدخول كمّل وطبع: ' + global.__netPost); assert.ok(/UserName=office1/.test(global.__loginPost), 'اليوزر اتكتب في صفحة الدخول');
+  await np4.waitForEvent('close', { timeout: 15000 }).catch(() => {}); global.__netLoggedOut = undefined; global.__inquiry = inqWas;
+  /* رقم غلط: المنصة بترجّع «إنجاز» برسالة ← الرسالة بتوصل للنظام ومفيش طباعة */
+  const nPdf = await app.evaluate(() => window.netpdf.length);
+  const np3 = await netOpen('828000000'); await app.waitForFunction(() => window.netmsg.some((x) => x.kind === 'fail'), null, { timeout: 30000 });
+  assert.ok(/لا يوجد طلب/.test((await app.evaluate(() => window.netmsg.find((x) => x.kind === 'fail'))).message), 'رسالة المنصة وصلت للنظام'); assert.strictEqual(await app.evaluate(() => window.netpdf.length), nPdf);
+  await np3.waitForEvent('close', { timeout: 15000 }).catch(() => {});
   }
   async function wresTest() {
   /* سيناريو 18: نتيجة الكشف الطبي في وافد — بيكتب الجواز والجنسية، يستنى تحقق وافد، يدوس Check، ينزّل الـ PDF ويرجّع النتيجة */

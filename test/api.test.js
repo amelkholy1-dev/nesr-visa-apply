@@ -149,7 +149,7 @@ const api = async (method, url, body, extra = {}) => {
   assert.strictEqual((await api('PUT', '/api/settings/profile-template', { auto: false })).status, 200);
   const lcheck = await api('GET', `/api/people/${spid}/letter/cairo?check=1`); assert.strictEqual(lcheck.status, 200); assert.ok(lcheck.json.issues.includes('رقم التأشيرة') && lcheck.json.issues.includes('رقم السجل (الرقم الموحد)'), 'نواقص خطاب القاهرة');
   const ldoc = await fetch(base + `/api/people/${spid}/letter/suez`, { headers: { Cookie: cookie } }); const ldb = Buffer.from(await ldoc.arrayBuffer());
-  assert.strictEqual(ldoc.status, 200); assert.strictEqual(ldb.slice(0, 2).toString(), 'PK'); assert.ok(String(ldoc.headers.get('content-disposition')).includes('nomination-suez-ST12345.docx'), 'اسم ملف الخطاب'); assert.ok(String(ldoc.headers.get('content-type')).includes('wordprocessingml'));
+  assert.strictEqual(ldoc.status, 200); assert.strictEqual(ldb.slice(0, 2).toString(), 'PK'); assert.ok(decodeURIComponent(String(ldoc.headers.get('content-disposition'))).includes('مراحل تجربة - خطاب السويس.docx'), 'اسم ملف الخطاب = اسم الشخص + خطاب السويس: ' + decodeURIComponent(String(ldoc.headers.get('content-disposition')))); assert.ok(String(ldoc.headers.get('content-type')).includes('wordprocessingml'));
   assert.strictEqual((await api('GET', `/api/people/${spid}/letter/zzz`)).status, 404, 'نوع خطاب مش معروف');
   assert.strictEqual((await api('GET', `/api/people/${spid}`)).json.person.stages.letter.state, 'done', 'تحميل الخطاب علّم مرحلة «خطاب الترشيح» لوحده'); assert.ok(lcheck.json.hints.length > 0);
   /* شخص مربوط بملف ضبط فيه بيانات التأشيرة: الخطاب لازم يطلع فيه رقم التأشيرة والباركودين */

@@ -46,8 +46,12 @@
       } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
       return;
     }
+    if (m.type === 'VA_NET_CTL' && m.data) {
+      try { chrome.runtime.sendMessage({ kind: 'net-ctl', op: String(m.data.op || ''), user: String(m.data.user || '').slice(0, 80), pass: String(m.data.pass || '').slice(0, 120), captcha: String(m.data.captcha || '').slice(0, 12) }, (r) => { if (chrome.runtime.lastError || !r || !r.ok) post('VA_NET_MSG', { kind: 'manual', message: (r && r.error) || 'الإضافة ما ردّتش. اعمل F5 للصفحة وجرّب تاني.' }); }); } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
+      return;
+    }
     if (m.type === 'VA_NETPRINT' && m.data) {
-      try { chrome.runtime.sendMessage({ kind: 'open-netprint', payload: { appNo: String(m.data.appNo || '').replace(/\D/g, '').slice(0, 12), name: String(m.data.name || '').slice(0, 120) } }, (r) => { if (chrome.runtime.lastError || !r || !r.ok) post('VA_ERROR', { message: 'الإضافة اتحدّثت أو قديمة (طباعة ورقة النت محتاجة 1.18.0). اعمل Reload للإضافة وF5 للصفحة.' }); else post('VA_ACK', {}); }); } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
+      try { chrome.runtime.sendMessage({ kind: 'open-netprint', payload: { appNo: String(m.data.appNo || '').replace(/\D/g, '').slice(0, 12), name: String(m.data.name || '').slice(0, 120), personId: String(m.data.personId || '').slice(0, 12) } }, (r) => { if (chrome.runtime.lastError || !r || !r.ok) post('VA_ERROR', { message: 'الإضافة اتحدّثت أو قديمة (طباعة ورقة النت محتاجة 1.19.0). اعمل Reload للإضافة وF5 للصفحة.' }); else post('VA_ACK', {}); }); } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
       return;
     }
     if (m.type === 'VA_WAFIDRES' && m.data) {
@@ -67,7 +71,7 @@
       } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
     }
   });
-  chrome.runtime.onMessage.addListener((msg) => { if (msg && msg.kind === 'va-result') post('VA_RESULT', msg.data); if (msg && msg.kind === 'va-next') post('VA_NEXT', msg.data); if (msg && msg.kind === 'va-visainfo') post('VA_VISAINFO_RESULT', msg.data); if (msg && msg.kind === 'va-visainfo-captcha') post('VA_VISAINFO_CAPTCHA', msg.data); if (msg && msg.kind === 'va-visainfo-doc') post('VA_VISAINFO_DOC', msg.data); if (msg && msg.kind === 'va-visainfo-status') post('VA_VISAINFO_STATUS', msg.data); if (msg && msg.kind === 'va-appno-captcha') post('VA_APPNO_CAPTCHA', msg.data); if (msg && msg.kind === 'va-appno-result') post('VA_APPNO_RESULT', msg.data); if (msg && msg.kind === 'va-appno-status') post('VA_APPNO_STATUS', msg.data); if (msg && msg.kind === 'va-wafidres') post('VA_WAFIDRES_RESULT', msg.data); if (msg && msg.kind === 'va-wafidres-msg') post('VA_WAFIDRES_MSG', msg.data); });
+  chrome.runtime.onMessage.addListener((msg) => { if (msg && msg.kind === 'va-result') post('VA_RESULT', msg.data); if (msg && msg.kind === 'va-next') post('VA_NEXT', msg.data); if (msg && msg.kind === 'va-visainfo') post('VA_VISAINFO_RESULT', msg.data); if (msg && msg.kind === 'va-visainfo-captcha') post('VA_VISAINFO_CAPTCHA', msg.data); if (msg && msg.kind === 'va-visainfo-doc') post('VA_VISAINFO_DOC', msg.data); if (msg && msg.kind === 'va-visainfo-status') post('VA_VISAINFO_STATUS', msg.data); if (msg && msg.kind === 'va-appno-captcha') post('VA_APPNO_CAPTCHA', msg.data); if (msg && msg.kind === 'va-appno-result') post('VA_APPNO_RESULT', msg.data); if (msg && msg.kind === 'va-appno-status') post('VA_APPNO_STATUS', msg.data); if (msg && msg.kind === 'va-wafidres') post('VA_WAFIDRES_RESULT', msg.data); if (msg && msg.kind === 'va-wafidres-msg') post('VA_WAFIDRES_MSG', msg.data); if (msg && msg.kind === 'va-net-login') post('VA_NET_LOGIN', msg.data); if (msg && msg.kind === 'va-net-msg') post('VA_NET_MSG', msg.data); if (msg && msg.kind === 'va-net-status') post('VA_NET_STATUS', msg.data); if (msg && msg.kind === 'va-net-pdf') post('VA_NET_PDF', msg.data); });
   const ready = () => { post('VA_READY'); chrome.runtime.sendMessage({ kind: 'app-ready' }, (r) => { if (r && r.pending) setTimeout(() => post('VA_RESULT', r.pending), 800); }); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready); else ready();
   setTimeout(() => post('VA_READY'), 1500); setTimeout(() => post('VA_READY'), 4000);

@@ -117,17 +117,57 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       }
       catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ. اعمل F5 فيها وجرّب تاني' }); }
     } else if (msg.kind === 'open-netprint') {
-      /* طباعة ورقة النت: تبويب ظاهر على «إنجاز» برقم الطلب (من غير E) */
+      /* طباعة ورقة النت من جوه النظام: تبويب في الخلفية على «إنجاز»، والورقة بترجع للنظام PDF (الصفحة الأولى بس) */
       const appNo = String((msg.payload && msg.payload.appNo) || '').replace(/\D/g, '').slice(0, 12);
       if (!appNo) { reply({ ok: false }); return; }
-      /* صفحة «إنجاز»: الإضافة بتكتب رقم الطلب وتدوس «طباعة» (فتح رابط الطباعة مباشرة مش بيشتغل في المنصة) */
-      const tab = await chrome.tabs.create({ url: ENJAZ_MAIN_URL, active: true });
-      await store.set({ ['nctx_' + tab.id]: { appNo, name: String((msg.payload && msg.payload.name) || '').slice(0, 120), stage: '', at: Date.now() } });
+      const old = await store.get('netTab'); if (old.netTab) { try { await chrome.tabs.remove(old.netTab); } catch (e) { /* اتقفل */ } }
+      const tab = await chrome.tabs.create({ url: ENJAZ_MAIN_URL, active: false });
+      await store.set({ ['nctx_' + tab.id]: { appNo, name: String((msg.payload && msg.payload.name) || '').slice(0, 120), personId: String((msg.payload && msg.payload.personId) || '').slice(0, 12), originTabId: sender.tab && sender.tab.id, stage: '', at: Date.now() }, netTab: tab.id });
       reply({ ok: true });
     } else if (msg.kind === 'get-net-ctx') {
       const key = 'nctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); reply({ ctx: o[key] || null });
     } else if (msg.kind === 'net-stage') {
       const key = 'nctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); if (o[key]) await store.set({ [key]: { ...o[key], stage: String(msg.stage || '') } }); reply({ ok: true });
+    } else if (['net-login', 'net-msg', 'net-status'].includes(msg.kind)) {
+      /* صفحة الدخول (صورة الكابتشا) / رسالة / خطوة ← صفحة النظام */
+      const key = 'nctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
+      const t = await findAppTab(ctx.originTabId);
+      const data = msg.kind === 'net-status' ? { text: String(msg.text || '').slice(0, 200) } : { ...(msg.data || {}) };
+      if (t) { try { await chrome.tabs.sendMessage(t.id, { kind: 'va-' + msg.kind, data: { ...data, appNo: ctx.appNo, personId: ctx.personId } }); } catch (e) { /* مش مهم */ } }
+      if (msg.kind === 'net-msg' && data.kind === 'fail') { try { await chrome.tabs.remove(sender.tab.id); await store.remove('netTab'); } catch (e) { /* اتقفل */ } }
+      reply({ ok: true });
+    } else if (msg.kind === 'net-ready') {
+      /* الورقة جاهزة ← PDF للصفحة الأولى بنفس شكل المنصة (عن طريق طباعة Chrome نفسها)، وبعدين التبويب بيتقفل */
+      const key = 'nctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); const ctx = o[key] || {};
+      const target = { tabId: sender.tab.id };
+      let pdf = '';
+      try {
+        await chrome.debugger.attach(target, '1.3');
+        try { const r = await chrome.debugger.sendCommand(target, 'Page.printToPDF', { printBackground: true, preferCSSPageSize: true, pageRanges: '1' }); pdf = r && r.data ? 'data:application/pdf;base64,' + r.data : ''; }
+        finally { try { await chrome.debugger.detach(target); } catch (e) { /* مش مهم */ } }
+      } catch (e) { reply({ ok: false, error: String(e && e.message || e).slice(0, 160) }); return; }
+      if (!pdf) { reply({ ok: false, error: 'الـ PDF طلع فاضي' }); return; }
+      const t = await findAppTab(ctx.originTabId);
+      if (!t) { reply({ ok: false, error: 'صفحة النظام مقفولة' }); return; }
+      try { await chrome.tabs.sendMessage(t.id, { kind: 'va-net-pdf', data: { appNo: ctx.appNo, name: ctx.name, personId: ctx.personId, pdf } }); } catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ' }); return; }
+      reply({ ok: true });
+      try { await chrome.tabs.remove(sender.tab.id); await store.remove('netTab'); } catch (e) { /* اتقفل */ }
+    } else if (msg.kind === 'net-ctl') {
+      /* أوامر من النظام: login (اليوزر والباسورد والكابتشا — بتتبعت لصفحة الدخول على طول ومبتتخزّنش) · refresh · open · cancel */
+      const o = await store.get('netTab'); const tid = o.netTab;
+      if (!tid) { reply({ ok: false, error: 'مفيش طباعة شغّالة: دوس «طباعة ورقة النت» تاني' }); return; }
+      try {
+        if (msg.op === 'cancel') { await chrome.tabs.remove(tid); await store.remove('netTab'); }
+        else if (msg.op === 'open') { await chrome.tabs.update(tid, { active: true }); const tb = await chrome.tabs.get(tid); if (tb.windowId) await chrome.windows.update(tb.windowId, { focused: true }); }
+        else if (msg.op === 'refresh') await chrome.tabs.sendMessage(tid, { kind: 'net-login-refresh' });
+        else if (msg.op === 'login') {
+          const user = String(msg.user || '').slice(0, 80), pass = String(msg.pass || '').slice(0, 120), cap = String(msg.captcha || '').trim().slice(0, 12);
+          if (!user || !pass) { reply({ ok: false, error: 'اكتب اليوزر والباسورد' }); return; }
+          const r = await chrome.tabs.sendMessage(tid, { kind: 'net-login-submit', user, pass, captcha: cap });
+          if (!r || !r.ok) { reply({ ok: false, error: 'صفحة الدخول مش جاهزة: دوس «افتح التبويب»' }); return; }
+        } else { reply({ ok: false, error: 'أمر مش معروف' }); return; }
+        reply({ ok: true });
+      } catch (e) { await store.remove('netTab'); reply({ ok: false, error: 'تبويب المنصة اتقفل: دوس «طباعة ورقة النت» تاني' }); }
     } else if (msg.kind === 'open-wafidres') {
       /* نتيجة الكشف الطبي في وافد: تبويب ظاهر على «Medical Examination Result» بالجواز والجنسية */
       const p = msg.payload || {};
