@@ -114,6 +114,17 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
         }
       }
       catch (e) { reply({ ok: false, error: 'صفحة النظام مش بتردّ. اعمل F5 فيها وجرّب تاني' }); }
+    } else if (msg.kind === 'open-netprint') {
+      /* طباعة ورقة النت: تبويب ظاهر على طباعة الطلب برقم الطلب (من غير E) */
+      const appNo = String((msg.payload && msg.payload.appNo) || '').replace(/\D/g, '').slice(0, 12);
+      if (!appNo) { reply({ ok: false }); return; }
+      const tab = await chrome.tabs.create({ url: 'https://visa.mofa.gov.sa/Enjaz/PrintApplication?ApplicationNo=' + appNo, active: true });
+      await store.set({ ['nctx_' + tab.id]: { appNo, name: String((msg.payload && msg.payload.name) || '').slice(0, 120), stage: '', at: Date.now() } });
+      reply({ ok: true });
+    } else if (msg.kind === 'get-net-ctx') {
+      const key = 'nctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); reply({ ctx: o[key] || null });
+    } else if (msg.kind === 'net-stage') {
+      const key = 'nctx_' + (sender.tab && sender.tab.id); const o = await store.get(key); if (o[key]) await store.set({ [key]: { ...o[key], stage: String(msg.stage || '') } }); reply({ ok: true });
     } else if (msg.kind === 'open-appno') {
       /* رقم الطلب (إنجاز): تبويب مخفي بيفتح «البحث عن طلب مقدم»، والكابتشا بتتكتب في صفحة النظام */
       const ctx = { ...msg.payload, originTabId: sender.tab && sender.tab.id, at: Date.now(), stage: '' };
@@ -235,4 +246,4 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
     if (next !== ctx.stage) await store.set({ [key]: { ...ctx, stage: next } });
   } catch (e) { /* مش مهم */ }
 });
-chrome.tabs.onRemoved.addListener((id) => { store.remove(['ctx_' + id, 'wctx_' + id, 'lctx_' + id, 'vctx_' + id, 'actx_' + id]).catch(() => {}); });
+chrome.tabs.onRemoved.addListener((id) => { store.remove(['ctx_' + id, 'wctx_' + id, 'lctx_' + id, 'vctx_' + id, 'actx_' + id, 'nctx_' + id]).catch(() => {}); });

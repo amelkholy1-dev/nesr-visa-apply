@@ -186,6 +186,14 @@
       window.location.href = `/api/people/${id}/letter/${kind}`; toast('بيتحمّل خطاب الترشيح (Word)…', 'ok');
     } catch (er) { fail(er); }
   }
+  /* ورقة النت (طباعة الطلب من إنجاز) برقم الطلب: الإضافة بتفتحها وبتطبعها على ورقة واحدة */
+  async function netPrint(appNumber, name) {
+    const digits = String(appNumber || '').replace(/\D/g, ''); if (!digits) return toast('الشخص ده لسه مالوش رقم طلب (إنجاز): سجّله أو دوس «هات رقم إنجاز» الأول', 'err');
+    if (!extReady) { ping(); await new Promise((r) => setTimeout(r, 700)); }
+    if (!extReady) return toast('إضافة Chrome مش متركّبة. من «إضافة Chrome» نزّلها وركّبها الأول.', 'err');
+    const ok = await new Promise((res) => { bridge.pending.push(res); window.postMessage({ source: 'nesr-visaapply', type: 'VA_NETPRINT', data: { appNo: digits, name } }, location.origin); setTimeout(() => res(false), 4000); });
+    if (ok) toast('بيفتح ورقة النت للطلب E' + digits + ' في المنصة ويطبعها…', 'ok'); else toast('الإضافة ما ردّتش: اعمل Reload للإضافة (لازم 1.16.0) وF5 للصفحة.', 'err');
+  }
   /* ===== أدوات ===== */
   const opt = (name) => (meta.options[name] || []);
   const optText = (name, v) => { const o = opt(name).find((x) => String(x.v) === String(v)); return o ? o.t : v || ''; };
@@ -321,7 +329,7 @@
       const x = (meta.stages || []).find((z) => z.k === k); if (!x || isNew) return '';
       const c = ((person.stages || {})[k]) || { state: '', date: '', note: '' };
       return `<div class="stg" data-stage="${x.k}"><b>حالة الإجراء</b><select class="stS">${['', ...(x.booking ? ['booked'] : []), 'done'].map((v) => `<option value="${v}"${c.state === v ? ' selected' : ''}>${STATE_AR[v]}</option>`).join('')}</select><input type="date" class="stD" value="${e(c.date || '')}"><input class="stN" placeholder="ملاحظة (مكان / رقم / …)" value="${e(c.note || '')}">
-        ${x.k === 'sent' ? `<div class="stX small">رقم الطلب (إنجاز): <b dir="ltr">${e(person.appNumber || '—')}</b>${person.stages && person.stages.sent && person.stages.sent.appDate ? ` <span class="muted">(تاريخ الطلب ${e(person.stages.sent.appDate)})</span>` : ''} <input id="appNo" placeholder="E123456789" dir="ltr"> <button class="btn small" id="appNoBtn">سجّل الرقم</button> ${can('people.fill') ? '<button class="btn small pri" id="appNoFetch" type="button" title="يفتح «البحث عن طلب مقدم» في المنصة بنوع تأشيرة الشخص ويجيب أحدث رقم طلب بعد ما تكتب الكابتشا">هات رقم إنجاز من المنصة</button>' : ''}${(c.history || []).length ? `<div class="muted">أرقام سابقة (قبل إعادة الإرسال): ${c.history.map((h) => `<span dir="ltr">${e(h.app)}</span>`).join('، ')}</div>` : ''}</div>` : ''}</div>`;
+        ${x.k === 'sent' ? `<div class="stX small">رقم الطلب (إنجاز): <b dir="ltr">${e(person.appNumber || '—')}</b>${person.stages && person.stages.sent && person.stages.sent.appDate ? ` <span class="muted">(تاريخ الطلب ${e(person.stages.sent.appDate)})</span>` : ''} <input id="appNo" placeholder="E123456789" dir="ltr"> <button class="btn small" id="appNoBtn">سجّل الرقم</button> ${can('people.fill') ? '<button class="btn small" id="netPrint" type="button" title="يفتح طباعة الطلب من إنجاز برقم الطلب ويطبعها على ورقة واحدة">طباعة ورقة النت</button> ' : ''}${can('people.fill') ? '<button class="btn small pri" id="appNoFetch" type="button" title="يفتح «البحث عن طلب مقدم» في المنصة بنوع تأشيرة الشخص ويجيب أحدث رقم طلب بعد ما تكتب الكابتشا">هات رقم إنجاز من المنصة</button>' : ''}${(c.history || []).length ? `<div class="muted">أرقام سابقة (قبل إعادة الإرسال): ${c.history.map((h) => `<span dir="ltr">${e(h.app)}</span>`).join('، ')}</div>` : ''}</div>` : ''}</div>`;
     };
     /* رأس تبويب الخدمة: الجاهزية + الناقص + الأزرار + مرحلة الإجراء */
     const svcHead = (tab, title, actions, note) => {
@@ -490,6 +498,7 @@
         ['.stS', '.stD', '.stN'].forEach((c) => { row.querySelector(c).onchange = send; });
       });
       const an = $('#appNoBtn'); if (an) an.onclick = async () => { const v = $('#appNo').value.trim().toUpperCase(); if (!/^[A-Z]?\d{6,12}$/.test(v)) return toast('رقم الطلب شكله غلط (أرقام، أو E وبعدها أرقام، زي E123456789)', 'err'); try { await api('POST', `/people/${id}/result`, { status: 'submitted', appNumber: v }); toast('اتسجّل رقم الطلب', 'ok'); pagePerson(id); } catch (er) { fail(er); } };
+      const np = $('#netPrint'); if (np) np.onclick = () => netPrint(person.appNumber, data.nameAr);
       const af = $('#appNoFetch'); if (af) af.onclick = () => NA.appno.start([String(id)], { onDone: (n) => { if (n) pagePerson(id); } });
 
       $('#mrzBtn').onclick = async () => {
@@ -767,7 +776,7 @@
     } catch (er) { if (er.status !== 401) view.innerHTML = `<div class="card issues">${e(er.message)}</div>`; }
   }
   /* بنشارك الأدوات مع ملفات الصفحات (pages-*.js) */
-  Object.assign(NA, { api, e, $, view, toast, fail, STATUS, can, ping, fillRequest, wafidRequest, labRequest, letterDownload, stageDots, fmtDate });
+  Object.assign(NA, { api, e, $, view, toast, fail, STATUS, can, ping, fillRequest, wafidRequest, labRequest, letterDownload, netPrint, stageDots, fmtDate });
   Object.defineProperties(NA, { me: { get: () => me, configurable: true }, meta: { get: () => meta, configurable: true }, extReady: { get: () => extReady, configurable: true }, extVersion: { get: () => extVersion, configurable: true } });
   $('#logoutBtn').onclick = async () => { await api('POST', '/logout').catch(() => {}); me = null; location.hash = '#/login'; render(); };
   window.addEventListener('hashchange', render);

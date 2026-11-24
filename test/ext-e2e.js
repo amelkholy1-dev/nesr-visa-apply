@@ -51,6 +51,8 @@ const visaResultFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa
 const appnoSearchFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'appno-search.html'), 'utf8');
 const appnoResultFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'appno-result.html'), 'utf8');
 const appListFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'visa-applist.html'), 'utf8');
+const enjazMainFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'enjaz-main.html'), 'utf8');
+const enjazPrintFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'enjaz-print.html'), 'utf8');
 const labFixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'lab-booking.html'), 'utf8');
 /* بيحاكي سلوك APEX في صفحة المعمل: الأقسام مخفية لحد اختيار نوع الجنسية، والرقم القومي بيحسب تاريخ الميلاد والجنس */
 const LMOCK = `<script>
@@ -106,6 +108,8 @@ const MOFA = {
       if (f.get('PassportNumber') === 'Z9999999') return page('لم يتم العثور على اي نتائج، يرجى التاكد من البيانات المدخلة');
       return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: appnoResultFixture.replace('PASSPORT_PLACEHOLDER', f.get('PassportNumber')) });
     }
+    if (/\/Enjaz\/PrintApplication/i.test(rq.url())) { const no = (rq.url().match(/ApplicationNo=(\d+)/) || [])[1]; if (global.__netDirectFails && rq.method() === 'GET') return r.fulfill({ status: 302, headers: { Location: 'https://visa.mofa.gov.sa/Enjaz/Main' }, body: '' }); return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: enjazPrintFixture.replace('EAPPNO', 'E' + (no || '')) }); }
+    if (/\/Enjaz\/Main/i.test(rq.url())) { if (rq.method() === 'POST') { global.__netPost = rq.postData() || ''; const no = (global.__netPost.match(/AppNo=(\d+)/) || [])[1]; return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: enjazPrintFixture.replace('EAPPNO', 'E' + (no || '')) }); } return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: enjazMainFixture }); }
     if (/\/SmartForm\/?(\?.*)?$/i.test(rq.url()) && rq.method() === 'GET') return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: appListFixture });
     if (/\/SmartForm\/PrintApplication\//i.test(rq.url())) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h2>تم تقديم الطلب</h2><div>رقم الطلب: 830068985</div><div>رقم الجواز : A12345678</div></body>' });
     if (/\/Home\/PrintVisa/i.test(rq.url())) { global.__printUrl = rq.url(); return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: global.__printEmpty ? printEmptyFixture : visaPrintFixture }); }
@@ -339,6 +343,15 @@ const MOFA = {
   const sp = await ctx.newPage(); await sp.goto('https://visa.mofa.gov.sa/SmartForm/PrintApplication/830068985');
   await app.waitForFunction((n) => window.got.length > n, gotBefore, { timeout: 30000 });
   const gr = await app.evaluate(() => window.got[window.got.length - 1]); assert.strictEqual(gr.appNumber, 'E830068985', 'اتحط E: ' + JSON.stringify(gr)); assert.strictEqual(gr.passportNo, 'A12345678'); assert.strictEqual(gr.status, 'submitted');
+  /* سيناريو 17: طباعة ورقة النت برقم الطلب — مباشرة، ولو المنصة رجّعت «إنجاز» بيكتب الرقم ويدوس «طباعة» */
+  const netOpen = async (appNo) => { const [p] = await Promise.all([ctx.waitForEvent('page'), app.evaluate((d) => window.postMessage({ source: 'nesr-visaapply', type: 'VA_NETPRINT', data: d }, location.origin), { appNo, name: 'شخص تجربة' })]); await p.waitForTimeout(1500); await p.reload().catch(() => {}); return p; };
+  const np1 = await netOpen('828935966'); await np1.waitForFunction(() => document.documentElement.dataset.vaNetPrinted === '1', null, { timeout: 20000 });
+  assert.ok((await np1.textContent('#nesr-net-bar')).includes('E828935966') && (await np1.evaluate(() => !!document.getElementById('nesr-net-style'))), 'ورقة النت اتفتحت واتجهّزت للطباعة');
+  await np1.close();
+  global.__netDirectFails = true; global.__netPost = '';
+  const np2 = await netOpen('828935967'); await np2.waitForFunction(() => document.documentElement.dataset.vaNetPrinted === '1', null, { timeout: 25000 });
+  assert.ok(/AppNo=828935967/.test(global.__netPost) && /PrintApplication=PrintApplication/.test(global.__netPost), 'كتب رقم الطلب في «إنجاز» ودوس طباعة: ' + global.__netPost);
+  await np2.close(); global.__netDirectFails = false;
   console.log('EXT E2E OK');
   await ctx.close(); process.exit(0);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

@@ -46,6 +46,10 @@
       } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
       return;
     }
+    if (m.type === 'VA_NETPRINT' && m.data) {
+      try { chrome.runtime.sendMessage({ kind: 'open-netprint', payload: { appNo: String(m.data.appNo || '').replace(/\D/g, '').slice(0, 12), name: String(m.data.name || '').slice(0, 120) } }, (r) => { if (chrome.runtime.lastError || !r || !r.ok) post('VA_ERROR', { message: 'الإضافة اتحدّثت أو قديمة (طباعة ورقة النت محتاجة 1.16.0). اعمل Reload للإضافة وF5 للصفحة.' }); else post('VA_ACK', {}); }); } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
+      return;
+    }
     if (m.type === 'VA_APPNO_CTL' && m.data) {
       try { chrome.runtime.sendMessage({ kind: 'appno-ctl', op: String(m.data.op || ''), captcha: String(m.data.captcha || '').slice(0, 12) }, (r) => { if (chrome.runtime.lastError || !r || !r.ok) post('VA_APPNO_CAPTCHA', { error: true, message: (r && r.error) || 'الإضافة ما ردّتش. اعمل F5 للصفحة وجرّب تاني.' }); }); } catch (err) { post('VA_ERROR', { message: 'الإضافة اتحدّثت. اعمل تحديث للصفحة (F5) وجرّب تاني.' }); }
       return;

@@ -46,8 +46,24 @@
     return last;
   }
 
+  /* باركود واحد بسرعة (رقم الطلب أو التأشيرة) مع رسالة واضحة بالنتيجة */
+  async function quickLabel(personId, which) {
+    const { api, toast } = NA;
+    try {
+      const [p, inf] = await Promise.all([api('GET', `/print/pack/${personId}`), info()]);
+      const code = which === 'visa' ? p.visaNumber : p.appNumber; const label = which === 'visa' ? 'باركود التأشيرة' : 'باركود رقم الطلب';
+      if (!code) return toast(which === 'visa' ? 'رقم التأشيرة ناقص في الدفعة' : 'الشخص ده لسه مالوش رقم طلب (إنجاز): سجّله أو دوس «هات رقم إنجاز» الأول', 'err');
+      if (!inf.agents.some((a) => a.isOnline)) return toast(inf.configured ? 'برنامج الطباعة مش متصل: شغّله على جهاز الطابعة واضغط «حفظ وتشغيل» (وشوف الإعدادات ← طباعة الباركود)' : 'برنامج الطباعة لسه مش متظبط (الإعدادات ← طباعة الباركود)', 'err');
+      const r = await sendLabel(code, inf.settings, { person: p, copies: inf.settings.printCopies || 1, label: label + ' ' + p.name });
+      toast(`اتبعت ${label} (${code}) للطابعة ${r.printerName || ''}… بيستنى التأكيد`, 'ok');
+      const j = await waitJob(r.jobId, 90000);
+      if (j.status === 'printed') toast(`اتطبع ${label} ${code} ✔`, 'ok');
+      else if (j.status === 'failed') toast(`الطباعة فشلت: ${j.error || 'من غير سبب'} — افحص الطابعة والورق`, 'err');
+      else toast('الأمر لسه في الطابور: برنامج الطباعة مش بيسحب. افتحه واضغط «حفظ وتشغيل».', 'err');
+    } catch (er) { NA.fail(er); }
+  }
   /* ===== تجهيز الطباعة: باركود رقم الطلب + باركود التأشيرة + خطاب الترشيح ===== */
-  NA.print = { labelPayload, nativeJson, sendLabel, info, waitJob, clean };
+  NA.print = { labelPayload, nativeJson, sendLabel, info, waitJob, clean, quickLabel };
   NA.print.prepare = async function (ids) {
     const { e, api, toast, fail } = NA; ids = (ids || []).map(String); if (!ids.length) return;
     let packs, inf;
