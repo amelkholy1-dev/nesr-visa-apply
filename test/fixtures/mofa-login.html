@@ -1,11 +1,25 @@
 <!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>منصة التأشيرات (نسخة اختبار)</title></head><body>
-<!-- نسخة مبسّطة (تخمين لشكل صفحة دخول الشركات، مش محفوظة من المنصة) للاختبار بس -->
-<div class="page-header"><div class="dropdown header-login"><a>الدخول</a></div></div>
-<form action="/Account/Login/enjazcompany" method="post">
+<!-- نسخة مبسّطة من صفحة «دخول الجهات الحكومية وقطاع الأعمال ← شركات خارج المملكة» (visa.mofa.gov.sa/Account/Login/enjazcompany) بنفس الخانات:
+     UserName / Password / Captcha / imgCaptcha / btnRefreshCaptcha، وزرار الدخول input type=button id=btnSubmit والصفحة بتشفّر اليوزر والباسورد في
+     UserName_AES / Password_AES وتفضّي الخانات الأصلية قبل ما تبعت (هنا "تشفير" وهمي للاختبار). مفيش بيانات حقيقية. -->
+<div class="page-header"><div class="dropdown rtl header-login"><a class="btn btn-blue-line">الدخول</a></div></div>
+<form action="/Account/Login/enjazcompany" id="myform" method="post">
+<input id="UserName_AES" name="UserName_AES" type="hidden" value=""><input id="Password_AES" name="Password_AES" type="hidden" value="">
 <!--ERR-->
-<label>اسم المستخدم</label><input type="text" id="UserName" name="UserName">
-<label>كلمة المرور</label><input type="password" id="Password" name="Password">
-<label>رمز الصورة</label><img id="imgCaptcha" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAYAAAB/qH1jAAAAEElEQVR42mNk+M9QzwAEAAyJAf9JlwVPAAAAAElFTkSuQmCC" width="120" height="40"><a id="btnRefreshCaptcha" href="javascript:void(0)" onclick="document.getElementById('imgCaptcha').src=document.getElementById('imgCaptcha').src.split('#')[0]+'#'+Date.now()">تحديث</a>
-<input type="text" id="Captcha" name="Captcha">
-<button type="submit">دخول</button>
-</form></body></html>
+<label><strong>اسم المستخدم</strong></label><input type="hidden" id="LoginType" name="LoginType" value="EnjazCompany"><input type="text" class="required form-control" maxlength="50" name="UserName" id="UserName">
+<label><strong>كلمة المرور</strong></label><input type="password" class="required form-control password" maxlength="50" name="Password" id="Password" autocomplete="new-password">
+<label><strong>رمز الصورة</strong></label>
+<input type="text" class="form-control required hasCaptcha fake" id="Captcha" name="Captcha" maxlength="6" autocomplete="off">
+<img id="imgCaptcha" class="image-capcha" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAYAAAB/qH1jAAAAEElEQVR42mNk+M9QzwAEAAyJAf9JlwVPAAAAAElFTkSuQmCC" width="120" height="40">
+<span class="input-group-addon" id="btnRefreshCaptcha" style="cursor:pointer;">↻</span>
+<input type="button" value="تسجيل الدخول" name="login" id="btnSubmit" class="btn green">
+</form>
+<script>
+document.getElementById('btnRefreshCaptcha').addEventListener('click', function () { document.getElementById('Captcha').value = ''; var i = document.getElementById('imgCaptcha'); i.src = i.src.split('#')[0] + '#' + Math.random(); });
+document.getElementById('btnSubmit').addEventListener('click', function () {
+  var u = document.getElementById('UserName'), p = document.getElementById('Password');
+  if (!u.value || !p.value || !document.getElementById('Captcha').value) return;
+  document.getElementById('UserName_AES').value = 'enc:' + u.value; document.getElementById('Password_AES').value = 'enc:' + p.value;
+  u.value = ''; p.value = ''; document.getElementById('myform').submit();
+});
+</script></body></html>

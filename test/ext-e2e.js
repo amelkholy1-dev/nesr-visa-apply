@@ -117,7 +117,7 @@ const MOFA = {
     if (/\/Account\/Login/i.test(rq.url()) && global.__netLoggedOut !== undefined) {
       if (rq.method() !== 'POST') return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: mofaLoginFixture });
       const f = new URLSearchParams(rq.postData() || ''); global.__loginPost = rq.postData() || '';
-      if (f.get('Captcha') === '123456' && f.get('UserName') === 'office1' && f.get('Password') === 'Pw#12345') { global.__netLoggedOut = false; return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h1>الرئيسية</h1><span class="logged-name-user">مرحباً</span></body>' }); }
+      if (f.get('Captcha') === '123456' && f.get('UserName_AES') === 'enc:office1' && f.get('Password_AES') === 'enc:Pw#12345' && !f.get('Password')) { global.__netLoggedOut = false; return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h1>الرئيسية</h1><span class="logged-name-user">مرحباً</span></body>' }); }
       return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: mofaLoginFixture.replace('<!--ERR-->', '<div class="validation-summary-errors">رمز الصورة غير صحيح</div>') });
     }
     if (/\/Enjaz\/Main/i.test(rq.url()) && global.__netLoggedOut) return r.fulfill({ status: 200, contentType: 'text/html;charset=utf-8', body: '<!doctype html><meta charset=utf-8><body><h1>الرئيسية</h1><a>الدخول</a></body>' }); /* المنصة بترجّع الرئيسية لغير الداخلين */
@@ -154,7 +154,7 @@ const MOFA = {
   await netCtl({ op: 'login', user: 'office1', pass: 'Pw#12345', captcha: '000000' }); await app.waitForFunction(() => window.netlogin.some((x) => x.error), null, { timeout: 30000 });
   assert.ok(/رمز الصورة غير صحيح/.test((await app.evaluate(() => window.netlogin.find((x) => x.error))).message), 'رسالة المنصة وصلت');
   await netCtl({ op: 'login', user: 'office1', pass: 'Pw#12345', captcha: '123456' }); await app.waitForFunction(() => window.netpdf.length > 1, null, { timeout: 40000 });
-  assert.ok(/AppNo=828935968/.test(global.__netPost), 'بعد الدخول كمّل وطبع: ' + global.__netPost); assert.ok(/UserName=office1/.test(global.__loginPost), 'اليوزر اتكتب في صفحة الدخول');
+  assert.ok(/AppNo=828935968/.test(global.__netPost), 'بعد الدخول كمّل وطبع: ' + global.__netPost); assert.ok(/UserName_AES=enc%3Aoffice1/.test(global.__loginPost), 'اليوزر اتكتب ودوسنا «تسجيل الدخول» بتاع الصفحة (هي اللي شفّرت): ' + global.__loginPost);
   await np4.waitForEvent('close', { timeout: 15000 }).catch(() => {}); global.__netLoggedOut = undefined; global.__inquiry = inqWas;
   /* رقم غلط: المنصة بترجّع «إنجاز» برسالة ← الرسالة بتوصل للنظام ومفيش طباعة */
   const nPdf = await app.evaluate(() => window.netpdf.length);

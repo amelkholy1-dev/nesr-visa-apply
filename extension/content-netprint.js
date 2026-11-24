@@ -27,7 +27,8 @@
   };
   const capImg = () => document.getElementById('imgCaptcha') || [...document.images].find((i) => /captcha/i.test((i.id || '') + ' ' + (i.className || '') + ' ' + (i.getAttribute('src') || '')));
   const capRefresh = () => document.getElementById('btnRefreshCaptcha') || [...document.querySelectorAll('a, button, i, span')].find((x) => /refresh/i.test((x.id || '') + ' ' + (typeof x.className === 'string' ? x.className : '')));
-  const submitBtn = () => { const p = pwd(); const f = p && p.form; return f && (f.querySelector('button[type="submit"], input[type="submit"]') || f.querySelector('button')); };
+  /* زرار الدخول في المنصة: <input type="button" id="btnSubmit"> والصفحة نفسها بتشفّر اليوزر والباسورد (UserName_AES/Password_AES) وتبعت الفورم */
+  const submitBtn = () => { const p = pwd(); const f = (p && p.form) || document; return document.getElementById('btnSubmit') || f.querySelector('input[name="login"], button[type="submit"], input[type="submit"]') || f.querySelector('button') || [...f.querySelectorAll('input[type="button"]')].find((x) => /دخول|login/i.test(x.value || '')); };
   const captchaImage = async () => {
     const img = capImg(); if (!img) return '';
     if (!(await waitFor(() => img.complete && img.naturalWidth > 0, 10000))) return '';
@@ -39,6 +40,7 @@
     if (failed) await send({ kind: 'net-stage', stage: 'login' });
     const problems = []; if (!userInput()) problems.push('خانة اليوزر'); if (!pwd()) problems.push('خانة الباسورد'); if (!submitBtn()) problems.push('زرار الدخول');
     if (problems.length) { await msg('manual', 'صفحة الدخول في المنصة شكلها مختلف (مش لاقي: ' + problems.join('، ') + '). دوس «افتح التبويب» وادخل بنفسك، وأنا هكمّل بعدها.'); return; }
+    await sleep(600); /* الصفحة بتجيب صورة كابتشا جديدة أول ما تفتح: نستنى الجديدة */
     const image = capInput() ? await captchaImage() : '';
     await send({ kind: 'net-login', data: { image, needCaptcha: !!capInput(), error: failed, message: failed ? (m || 'الدخول ما نجحش: راجع اليوزر والباسورد والكود') : '' } });
     await status('صفحة الدخول جاهزة' + (failed ? ' (بعد محاولة فاشلة)' : ''));
